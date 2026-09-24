@@ -1,0 +1,46 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum OtpType {
+  REGISTER
+  LOGIN
+  RESET_PASSWORD
+}
+
+model User {
+  id        String     @id @default(uuid())
+  phone     String     @unique
+  fullName  String?
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("users")
+}
+
+model OtpCode {
+  id           String   @id @default(uuid())
+  phone        String
+  codeHash     String
+  type         OtpType  @default(REGISTER)
+  expiresAt    DateTime
+  isUsed       Boolean  @default(false)
+  attemptCount Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([phone, isUsed, expiresAt])
+  @@index([phone, createdAt])
+  @@map("otp_codes")
+}

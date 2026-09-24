@@ -1,0 +1,225 @@
+@import './styles/tokens.css';
+
+:root {
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-size: var(--text-body-md);
+  line-height: var(--line-body-md);
+  color: var(--color-on-surface);
+  background: var(--color-background);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.page-container {
+  width: min(100% - 2 * var(--space-margin-mobile), var(--content-max-width));
+  margin-inline: auto;
+}
+
+.page-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--grid-columns-mobile), minmax(0, 1fr));
+  gap: var(--space-gutter);
+}
+
+.surface-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-container-lowest);
+}
+
+.form-control {
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-on-surface);
+  background: var(--color-surface-container-lowest);
+}
+
+.form-control::placeholder {
+  color: var(--color-placeholder);
+}
+
+.form-control:focus-visible {
+  border-color: var(--color-primary-container);
+}
+
+.button-primary,
+.button-secondary {
+  min-height: 48px;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font-size: var(--text-button);
+  font-weight: var(--weight-button);
+  line-height: var(--line-button);
+  cursor: pointer;
+}
+
+.button-primary {
+  color: var(--color-on-primary);
+  background: var(--color-primary-container);
+}
+
+.button-secondary {
+  border-color: var(--color-outline-variant);
+  color: var(--color-primary);
+  background: transparent;
+}
+
+.service-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding-inline: var(--space-sm);
+  border-radius: var(--radius-full);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary-container) 10%, white);
+}
+
+h1,
+h2 {
+  color: var(--color-heading);
+  font-family: var(--font-sans);
+}
+
+h1 {
+  margin: 0;
+  font-size: var(--text-headline-xl);
+  font-weight: 700;
+  line-height: var(--line-headline-xl);
+  letter-spacing: var(--tracking-headline-xl);
+}
+
+h2 {
+  margin: 0;
+  font-size: var(--text-headline-md);
+  font-weight: 600;
+  line-height: var(--line-headline-md);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary-container);
+  outline-offset: 2px;
+}
+
+@media (min-width: 768px) {
+  .page-container {
+    width: min(100% - 2 * var(--space-lg), var(--content-max-width));
+  }
+
+  .page-grid {
+    grid-template-columns: repeat(var(--grid-columns-desktop), minmax(0, 1fr));
+  }
+}
+
+/* Tab Placeholder Styles */
+.tab-placeholder-main {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px 96px;
+  background-color: var(--color-surface);
+}
+
+.tab-placeholder-card {
+  width: 100%;
+  max-width: 440px;
+  background-color: var(--color-surface-container-lowest);
+  border-radius: 24px;
+  padding: 36px 24px;
+  text-align: center;
+  border: 1px solid var(--color-surface-container);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tab-placeholder-icon {
+  font-size: 48px;
+  color: var(--color-primary);
+  margin-bottom: 12px;
+}
+
+.tab-placeholder-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-on-surface);
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.tab-placeholder-sub {
+  font-size: 14px;
+  color: var(--color-secondary);
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+.tab-placeholder-btn {
+  height: 48px;
+  padding: 0 24px;
+  border-radius: 16px;
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 92, 85, 0.2);
+  transition: transform 0.1s ease;
+}
+
+.tab-placeholder-btn:active {
+  transform: scale(0.96);
+}
+

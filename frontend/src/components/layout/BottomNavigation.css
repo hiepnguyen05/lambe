@@ -1,0 +1,98 @@
+/* Bottom Navigation Bar CSS */
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background-color: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid var(--color-surface-container);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.bottom-nav__container {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: 64px;
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.bottom-nav__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-secondary);
+  transition: all 0.2s ease;
+  flex: 1;
+}
+
+.bottom-nav__item:hover {
+  color: var(--color-primary);
+}
+
+.bottom-nav__item:active {
+  transform: scale(0.95);
+}
+
+.bottom-nav__item--active {
+  color: var(--color-primary);
+  background-color: rgba(15, 118, 110, 0.08);
+  font-weight: 700;
+}
+
+.bottom-nav__icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bottom-nav__icon {
+  font-size: 22px;
+  transition: transform 0.2s ease;
+}
+
+.bottom-nav__item--active .bottom-nav__icon {
+  transform: scale(1.05);
+}
+
+.bottom-nav__badge-dot {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background-color: var(--color-error);
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+.bottom-nav__label {
+  font-size: 11px;
+  line-height: 14px;
+  margin-top: 2px;
+  letter-spacing: -0.01em;
+}
+
+/* Hide Bottom Navigation on Tablet & Desktop Web Screens */
+@media (min-width: 768px) {
+  .bottom-nav {
+    display: none !important;
+  }
+}
