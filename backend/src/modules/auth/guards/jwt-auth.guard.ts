@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
-import { PrismaService } from '../../database/prisma.service';
+import { PrismaService } from '../../../infrastructure/persistence/postgres/prisma.service';
 import { AuthenticatedUser } from '../types/authenticated-user.type';
 
 interface AccessTokenPayload {

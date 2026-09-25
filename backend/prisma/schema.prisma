@@ -19,6 +19,24 @@ enum OtpType {
   RESET_PASSWORD
 }
 
+enum InternalAccountStatus {
+  INVITED
+  ACTIVE
+  LOCKED
+  DISABLED
+}
+
+enum InternalRole {
+  ADMIN
+  MODERATOR
+}
+
+enum ServiceCategoryStatus {
+  INACTIVE
+  ACTIVE
+  ARCHIVED
+}
+
 model User {
   id        String     @id @default(uuid())
   phone     String     @unique
@@ -42,5 +60,126 @@ model OtpCode {
 
   @@index([phone, isUsed, expiresAt])
   @@index([phone, createdAt])
+  @@index([expiresAt])
+  @@index([isUsed, createdAt])
   @@map("otp_codes")
+}
+
+model InternalAccount {
+  id                 String                   @id @default(uuid())
+  username           String
+  normalizedUsername String                   @unique
+  fullName           String
+  email              String?                  @unique
+  status             InternalAccountStatus    @default(INVITED)
+  mustChangePassword Boolean                  @default(true)
+  failedLoginCount   Int                      @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  passwordChangedAt  DateTime?
+  tokenVersion       Int                      @default(0)
+  createdById        String?
+  disabledById       String?
+  disabledAt         DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  credential         InternalCredential?
+  roles              InternalRoleAssignment[]
+  sessions           InternalSession[]
+  categoriesCreated  ServiceCategory[]        @relation("ServiceCategoryCreatedBy")
+  categoriesUpdated  ServiceCategory[]        @relation("ServiceCategoryUpdatedBy")
+
+  @@index([status])
+  @@map("internal_accounts")
+}
+
+model InternalCredential {
+  id            String          @id @default(uuid())
+  accountId     String          @unique
+  passwordHash  String
+  hashAlgorithm String          @default("argon2id")
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  account       InternalAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("internal_credentials")
+}
+
+model InternalRoleAssignment {
+  id           String          @id @default(uuid())
+  accountId    String
+  role         InternalRole
+  assignedById String?
+  assignedAt   DateTime        @default(now())
+  revokedById  String?
+  revokedAt    DateTime?
+  revokeReason String?
+  account      InternalAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, role])
+  @@index([role, revokedAt])
+  @@map("internal_role_assignments")
+}
+
+model InternalSession {
+  id               String          @id @default(uuid())
+  accountId        String
+  refreshTokenHash String          @unique
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  lastUsedAt       DateTime?
+  revokedAt        DateTime?
+  revokeReason     String?
+  rotationCount    Int             @default(0)
+  createdAt        DateTime        @default(now())
+  account          InternalAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, revokedAt, expiresAt])
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@map("internal_sessions")
+}
+
+model AuditLog {
+  id                     String   @id @default(uuid())
+  actorInternalAccountId String?
+  action                 String
+  resourceType           String
+  resourceId             String?
+  result                 String
+  metadata               Json?
+  ipAddress              String?
+  userAgent              String?
+  requestId              String?
+  createdAt              DateTime @default(now())
+
+  @@index([actorInternalAccountId, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([requestId])
+  @@map("audit_logs")
+}
+
+model ServiceCategory {
+  id             String                @id @default(uuid())
+  code           String                @unique
+  name           String
+  normalizedName String                @unique
+  slug           String                @unique
+  description    String?
+  iconUrl        String?
+  coverImageUrl  String?
+  sortOrder      Int                   @default(0)
+  status         ServiceCategoryStatus @default(INACTIVE)
+  createdById    String?
+  updatedById    String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  createdBy      InternalAccount?      @relation("ServiceCategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy      InternalAccount?      @relation("ServiceCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([status, sortOrder])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("service_categories")
 }

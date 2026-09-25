@@ -37,6 +37,9 @@ export function validateEnvironment(
 ): Record<string, unknown> {
   const nodeEnv = toStringValue(config.NODE_ENV, 'development');
   const port = Number(config.PORT ?? 5000);
+  const redisEnabled = toStringValue(config.REDIS_ENABLED, 'false');
+  const cloudinaryEnabled = toStringValue(config.CLOUDINARY_ENABLED, 'false');
+  const trustProxy = toStringValue(config.TRUST_PROXY, 'false').trim();
 
   if (!['development', 'test', 'production'].includes(nodeEnv)) {
     throw new Error('NODE_ENV must be development, test, or production');
@@ -46,9 +49,45 @@ export function validateEnvironment(
     throw new Error('PORT must be a valid TCP port');
   }
 
+  if (!['true', 'false'].includes(redisEnabled)) {
+    throw new Error('REDIS_ENABLED must be true or false');
+  }
+
+  if (!['true', 'false'].includes(cloudinaryEnabled)) {
+    throw new Error('CLOUDINARY_ENABLED must be true or false');
+  }
+
+  if (
+    !['false', 'loopback', 'linklocal', 'uniquelocal'].includes(trustProxy) &&
+    !/^\d+$/.test(trustProxy)
+  ) {
+    throw new Error(
+      'TRUST_PROXY must be false, a trusted subnet name, or a hop count',
+    );
+  }
+
+  if (cloudinaryEnabled === 'true') {
+    requireValue(config, 'CLOUDINARY_CLOUD_NAME');
+    requireValue(config, 'CLOUDINARY_UPLOAD_PRESET');
+    requireValue(config, 'CLOUDINARY_API_KEY');
+    requireValue(config, 'CLOUDINARY_API_SECRET');
+  }
+
+  if (redisEnabled === 'true') {
+    const redisUrl = requireValue(config, 'REDIS_URL');
+    if (!redisUrl.startsWith('redis://') && !redisUrl.startsWith('rediss://')) {
+      throw new Error('REDIS_URL must use redis:// or rediss://');
+    }
+  }
+
   requireValue(config, 'DATABASE_URL');
   requireSecret(config, 'JWT_SECRET');
   requireSecret(config, 'OTP_HASH_SECRET');
+  requireSecret(config, 'INTERNAL_JWT_SECRET');
+
+  if (config.INTERNAL_JWT_SECRET === config.JWT_SECRET) {
+    throw new Error('INTERNAL_JWT_SECRET must be different from JWT_SECRET');
+  }
 
   if (nodeEnv === 'production') {
     requireValue(config, 'CORS_ORIGIN');
@@ -68,5 +107,8 @@ export function validateEnvironment(
     ...config,
     NODE_ENV: nodeEnv,
     PORT: port,
+    REDIS_ENABLED: redisEnabled,
+    CLOUDINARY_ENABLED: cloudinaryEnabled,
+    TRUST_PROXY: trustProxy,
   };
 }

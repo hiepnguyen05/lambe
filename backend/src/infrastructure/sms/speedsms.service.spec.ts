@@ -102,6 +102,78 @@ describe('SpeedSmsService', () => {
     ).rejects.toBeInstanceOf(InternalServerErrorException);
   });
 
+  it('maps a non-successful HTTP response to a safe server error', async () => {
+    const service = createService({
+      'speedsms.accessToken': 'speed-token',
+    });
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(
+        new Response(null, { status: 503, statusText: 'Down' }),
+      );
+
+    await expect(
+      service.sendOtp('0363668951', '123456'),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+  });
+
+  it('rejects a successful provider response that lists the phone as invalid', async () => {
+    const service = createService({
+      'speedsms.accessToken': 'speed-token',
+    });
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: 'success',
+          code: '00',
+          data: {
+            tranId: 123,
+            totalSMS: 0,
+            totalPrice: 0,
+            invalidPhone: ['+84363668951'],
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await expect(
+      service.sendOtp('0363668951', '123456'),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+  });
+
+  it('rejects a provider response without a transaction id', async () => {
+    const service = createService({
+      'speedsms.accessToken': 'speed-token',
+    });
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: 'success',
+          code: '00',
+          data: { tranId: '', totalSMS: 1, totalPrice: 500 },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await expect(
+      service.sendOtp('0363668951', '123456'),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+  });
+
+  it('preserves an HttpException raised by the HTTP layer', async () => {
+    const service = createService({
+      'speedsms.accessToken': 'speed-token',
+    });
+    const providerException = new InternalServerErrorException('upstream');
+    jest.spyOn(global, 'fetch').mockRejectedValue(providerException);
+
+    await expect(service.sendOtp('0363668951', '123456')).rejects.toBe(
+      providerException,
+    );
+  });
+
   it('aborts a request that exceeds the configured timeout', async () => {
     jest.useFakeTimers();
     const service = createService({

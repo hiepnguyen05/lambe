@@ -63,4 +63,38 @@ describe('JwtAuthGuard', () => {
       UnauthorizedException,
     );
   });
+
+  it.each([undefined, '', 'Basic access-token', 'Bearer'])(
+    'rejects a missing or malformed authorization header: %s',
+    async (authorization) => {
+      const { guard, context, request, jwtService } = createGuard();
+      request.headers.authorization = authorization;
+
+      await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      expect(jwtService.verifyAsync).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects an expired or invalid JWT', async () => {
+    const { guard, context, jwtService } = createGuard();
+    jwtService.verifyAsync.mockRejectedValue(new Error('jwt expired'));
+
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it.each([
+    ['missing user', null],
+    ['mismatched phone', { phone: '0987654321', status: 'ACTIVE' }],
+  ])('rejects a valid token for a %s', async (_caseName, databaseUser) => {
+    const { guard, context, prisma } = createGuard();
+    prisma.user.findUnique.mockResolvedValue(databaseUser);
+
+    await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
 });

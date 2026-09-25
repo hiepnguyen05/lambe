@@ -3,14 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import type { JwtSignOptions } from '@nestjs/jwt';
 import { SmsModule } from '../../infrastructure/sms/sms.module';
-import { DatabaseModule } from '../database/database.module';
+import { PostgresModule } from '../../infrastructure/persistence/postgres/postgres.module';
+import { OtpAuthenticationService } from './application/otp-authentication.service';
+import { UserProfileService } from './application/user-profile.service';
+import { UserRegistrationService } from './application/user-registration.service';
+import { UserTokenService } from './application/user-token.service';
 import { AuthController } from './controllers/auth.controller';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { AuthService } from './services/auth.service';
 
 @Module({
   imports: [
-    DatabaseModule,
+    PostgresModule,
     SmsModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
@@ -28,7 +31,12 @@ import { AuthService } from './services/auth.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard],
-  exports: [AuthService, JwtModule],
+  providers: [
+    OtpAuthenticationService,
+    UserRegistrationService,
+    UserProfileService,
+    UserTokenService,
+    JwtAuthGuard,
+  ],
 })
 export class AuthModule {}

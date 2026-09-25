@@ -7,17 +7,26 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { OtpAuthenticationService } from '../application/otp-authentication.service';
+import { UserProfileService } from '../application/user-profile.service';
+import { UserRegistrationService } from '../application/user-registration.service';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { CompleteRegistrationDto } from '../dto/complete-registration.dto';
 import { SendOtpDto } from '../dto/send-otp.dto';
 import { VerifyOtpDto } from '../dto/verify-otp.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
-import { AuthService } from '../services/auth.service';
 import type { AuthenticatedUser } from '../types/authenticated-user.type';
 
+@ApiTags('User Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly otpAuthentication: OtpAuthenticationService,
+    private readonly registration: UserRegistrationService,
+    private readonly userProfile: UserProfileService,
+  ) {}
 
   /**
    * Endpoint 1: Gửi mã OTP xác thực qua SMS (SpeedSMS)
@@ -25,8 +34,13 @@ export class AuthController {
    */
   @Post('send-otp')
   @HttpCode(HttpStatus.OK)
+  @Throttle({
+    short: { limit: 1, ttl: 1000 },
+    medium: { limit: 5, ttl: 60_000 },
+  })
+  @ApiOperation({ summary: 'Send a phone verification OTP' })
   async sendOtp(@Body() dto: SendOtpDto) {
-    return this.authService.sendOtp(dto);
+    return this.otpAuthentication.sendOtp(dto);
   }
 
   /**
@@ -37,8 +51,13 @@ export class AuthController {
    */
   @Post('verify-otp')
   @HttpCode(HttpStatus.OK)
+  @Throttle({
+    short: { limit: 3, ttl: 1000 },
+    medium: { limit: 10, ttl: 60_000 },
+  })
+  @ApiOperation({ summary: 'Verify an OTP and continue sign-in' })
   async verifyOtp(@Body() dto: VerifyOtpDto) {
-    return this.authService.verifyOtp(dto);
+    return this.otpAuthentication.verifyOtp(dto);
   }
 
   /**
@@ -47,13 +66,16 @@ export class AuthController {
    */
   @Post('complete-registration')
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Complete a new user registration' })
   async completeRegistration(@Body() dto: CompleteRegistrationDto) {
-    return this.authService.completeRegistration(dto);
+    return this.registration.completeRegistration(dto);
   }
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('user-token')
+  @ApiOperation({ summary: 'Get the current user profile' })
   async getCurrentUser(@CurrentUser() user: AuthenticatedUser) {
-    return this.authService.getCurrentUser(user.userId);
+    return this.userProfile.getCurrentUser(user.userId);
   }
 }
