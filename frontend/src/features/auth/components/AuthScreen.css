@@ -1,5 +1,14 @@
 /* Auth Screen CSS matching Lambe Design System */
 
+.auth-root-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px var(--space-margin-mobile) 96px;
+  background-color: var(--color-surface);
+}
+
 .auth-screen-wrapper {
   min-height: 100vh;
   display: flex;
@@ -252,102 +261,26 @@
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
 }
 
-.country-selector-wrapper {
-  position: relative;
-}
-
-.country-selector-btn {
+.country-code {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
-  border-radius: 12px;
   color: var(--color-on-surface);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.1s ease;
 }
 
-.country-selector-btn:hover {
-  background-color: var(--color-surface-container);
-}
-
-.country-selector-btn:active {
-  transform: scale(0.96);
-}
-
-.country-flag {
-  font-size: 20px;
-  line-height: 1;
-  user-select: none;
+.country-code__label {
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  color: var(--color-on-primary-fixed-variant);
+  background: var(--color-primary-fixed);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .country-dial {
   font-size: 15px;
   font-weight: 600;
-  color: var(--color-on-surface);
-}
-
-.country-arrow {
-  color: var(--color-secondary);
-  font-size: 18px;
-}
-
-.country-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 50;
-  background-color: var(--color-surface-container-lowest);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
-  border-radius: 16px;
-  border: 1px solid var(--color-surface-container-high);
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 180px;
-  animation: dropdownFadeIn 0.15s ease-out;
-}
-
-@keyframes dropdownFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.country-option {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-  transition: background-color 0.15s ease;
-}
-
-.country-option:hover {
-  background-color: var(--color-surface-container-low);
-}
-
-.country-option--active {
-  background-color: var(--color-surface-container);
-  font-weight: 600;
-}
-
-.country-name {
-  flex: 1;
-  font-size: 14px;
   color: var(--color-on-surface);
 }
 
@@ -369,7 +302,7 @@
   font-weight: 600;
   line-height: 24px;
   color: var(--color-on-surface);
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
 }
 
 .phone-input-field::placeholder {
@@ -416,6 +349,10 @@
 .auth-feedback--success {
   color: var(--color-primary);
   background-color: var(--color-primary-fixed);
+}
+
+.auth-feedback__icon {
+  font-size: 16px;
 }
 
 /* Primary Action Button */
@@ -470,6 +407,14 @@
   height: 20px;
 }
 
+.spinner-track {
+  opacity: 0.25;
+}
+
+.spinner-indicator {
+  opacity: 0.75;
+}
+
 @keyframes spin {
   from {
     transform: rotate(0deg);
@@ -477,71 +422,6 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-/* Separator */
-.social-separator {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 4px;
-  margin-bottom: 4px;
-}
-
-.social-separator-line {
-  width: 100%;
-  height: 1px;
-  background-color: var(--color-surface-container);
-}
-
-.social-separator-text {
-  position: absolute;
-  padding-left: 12px;
-  padding-right: 12px;
-  background-color: var(--color-surface-container-lowest);
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--color-secondary);
-}
-
-/* Social Login Buttons */
-.social-buttons-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-.social-auth-btn {
-  width: 100%;
-  height: 52px;
-  padding: 12px 16px;
-  border-radius: 16px;
-  background-color: var(--color-surface-container-low);
-  color: var(--color-on-surface);
-  font-size: 14px;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  transition: all 0.2s ease;
-}
-
-.social-auth-btn:hover {
-  background-color: var(--color-surface-container);
-}
-
-.social-auth-btn:active {
-  transform: scale(0.98);
-}
-
-.social-icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
 }
 
 /* Legal Footer Microcopy */
@@ -669,6 +549,10 @@
   margin: auto;
 }
 
+.logged-in-logo {
+  margin-bottom: 16px;
+}
+
 .logged-in-badge {
   width: 56px;
   height: 56px;
@@ -678,6 +562,11 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
+}
+
+.logged-in-badge__icon {
+  color: var(--color-primary-container);
+  font-size: 28px;
 }
 
 .eyebrow-text {
@@ -727,6 +616,10 @@
 
 .logout-btn:active {
   transform: scale(0.96);
+}
+
+.logout-btn__icon {
+  font-size: 20px;
 }
 
 /* Loading Box */

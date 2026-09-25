@@ -1,4 +1,4 @@
-export type TabKey = 'trang-chu' | 'lich-hen' | 'uu-dai' | 'tin-nhan' | 'tai-khoan'
+import type { TabKey } from '../../types/navigation.types'
 
 interface BottomNavigationProps {
   activeTab: TabKey
@@ -21,13 +21,14 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'tai-khoan', label: 'Tài khoản', icon: 'person' },
 ]
 
+
 export function BottomNavigation({
   activeTab,
   onTabChange,
-  unreadMessagesCount = 1,
+  unreadMessagesCount = 0,
 }: BottomNavigationProps) {
   return (
-    <nav className="bottom-nav">
+    <nav className="bottom-nav" aria-label="Điều hướng chính">
       <div className="bottom-nav__container">
         {NAV_ITEMS.map((item) => {
           const isActive = activeTab === item.key
@@ -38,6 +39,7 @@ export function BottomNavigation({
               type="button"
               className={`bottom-nav__item ${isActive ? 'bottom-nav__item--active' : ''}`}
               onClick={() => onTabChange(item.key)}
+              aria-current={isActive ? 'page' : undefined}
             >
               <div className="bottom-nav__icon-wrapper">
                 <span
@@ -50,7 +52,7 @@ export function BottomNavigation({
                 </span>
 
                 {item.hasBadge && unreadMessagesCount > 0 && !isActive && (
-                  <span className="bottom-nav__badge-dot" />
+                  <span className="bottom-nav__badge-dot" aria-label="Có tin nhắn mới" />
                 )}
               </div>
 

@@ -3,6 +3,11 @@ import lambeLogo from '../../../assets/lambe-logo.svg'
 import { authApi } from '../api/auth.api'
 import { authSession } from '../services/auth-session'
 import type { User } from '../types/auth.types'
+import {
+  formatInternationalPhone,
+  toVietnamesePhone,
+  VIETNAMESE_PHONE_PATTERN,
+} from '../utils/phone'
 import { BrandShowcase } from './BrandShowcase'
 import { PhoneStep } from './PhoneStep'
 import { OtpStep } from './OtpStep'
@@ -13,8 +18,6 @@ import './AuthScreen.css'
 type AuthStep = 'phone' | 'otp' | 'profile'
 type PendingAction = 'send' | 'verify' | 'register' | 'resend' | null
 
-const PHONE_PATTERN = /^(?:\+84|84|0)[35789][0-9]{8}$/
-
 function getErrorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
@@ -24,6 +27,7 @@ function getErrorMessage(error: unknown): string {
 export function AuthScreen() {
   const [step, setStep] = useState<AuthStep>('phone')
   const [phone, setPhone] = useState('')
+  const [submittedPhone, setSubmittedPhone] = useState('')
   const [otpCode, setOtpCode] = useState('')
   const [fullName, setFullName] = useState('')
   const [registrationToken, setRegistrationToken] = useState('')
@@ -84,10 +88,10 @@ export function AuthScreen() {
 
   const sendOtp = async (isResend = false) => {
     clearFeedback()
-    const normalizedPhone = phone.replace(/[\s()-]/g, '')
+    const normalizedPhone = toVietnamesePhone(phone)
 
-    if (!PHONE_PATTERN.test(normalizedPhone)) {
-      setError('Vui lòng nhập số điện thoại hợp lệ (9-10 chữ số).')
+    if (!VIETNAMESE_PHONE_PATTERN.test(normalizedPhone)) {
+      setError('Vui lòng nhập đúng 9 chữ số sau mã quốc gia +84.')
       return
     }
 
@@ -95,7 +99,7 @@ export function AuthScreen() {
 
     try {
       const response = await authApi.sendOtp(normalizedPhone)
-      setPhone(normalizedPhone)
+      setSubmittedPhone(normalizedPhone)
       setOtpCode('')
       setStep('otp')
       setCooldown(60)
@@ -124,7 +128,7 @@ export function AuthScreen() {
     setPendingAction('verify')
 
     try {
-      const response = await authApi.verifyOtp(phone, otpCode)
+      const response = await authApi.verifyOtp(submittedPhone, otpCode)
 
       if (response.isNewUser) {
         setRegistrationToken(response.data.registrationToken)
@@ -173,6 +177,7 @@ export function AuthScreen() {
     setUser(null)
     setStep('phone')
     setPhone('')
+    setSubmittedPhone('')
     setOtpCode('')
     setFullName('')
     setRegistrationToken('')
@@ -184,6 +189,7 @@ export function AuthScreen() {
     setStep('phone')
     setOtpCode('')
     setRegistrationToken('')
+    setSubmittedPhone('')
     setCooldown(0)
     clearFeedback()
   }
@@ -226,7 +232,9 @@ export function AuthScreen() {
     },
     otp: {
       title: 'Nhập mã xác thực OTP',
-      subtitle: `Mã gồm 6 chữ số đã được gửi đến +84 ${phone}`,
+      subtitle: `Mã gồm 6 chữ số đã được gửi đến ${formatInternationalPhone(
+        submittedPhone,
+      )}`,
     },
     profile: {
       title: 'Tạo tài khoản mới',
@@ -274,7 +282,7 @@ export function AuthScreen() {
 
             {step === 'otp' && (
               <OtpStep
-                phone={phone}
+                phone={formatInternationalPhone(submittedPhone)}
                 otpCode={otpCode}
                 onOtpCodeChange={setOtpCode}
                 onSubmit={handleOtpSubmit}

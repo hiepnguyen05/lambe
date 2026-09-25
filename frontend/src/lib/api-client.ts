@@ -27,14 +27,16 @@ export async function apiRequest<T>(
   options: RequestInit = {},
 ): Promise<T> {
   let response: Response
+  const headers = new Headers(options.headers)
+
+  if (options.body && !headers.has('Content-Type') && !(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json')
+  }
 
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     })
   } catch {
     throw new ApiError(
@@ -43,7 +45,18 @@ export async function apiRequest<T>(
     )
   }
 
-  const body = (await response.json().catch(() => null)) as T | ApiErrorBody | null
+  const responseText = await response.text()
+  let body: T | ApiErrorBody | null = null
+
+  if (responseText) {
+    try {
+      body = JSON.parse(responseText) as T | ApiErrorBody
+    } catch {
+      if (response.ok) {
+        throw new ApiError('Máy chủ trả về dữ liệu không hợp lệ.', response.status)
+      }
+    }
+  }
 
   if (!response.ok) {
     throw new ApiError(getErrorMessage(body as ApiErrorBody | null), response.status)

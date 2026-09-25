@@ -34,7 +34,7 @@ export function HeroBanner({
             </button>
 
             <div className="hero-banner__trust-mini">
-              <span className="material-symbols-outlined text-emerald-300">
+              <span className="material-symbols-outlined hero-banner__verified-icon">
                 verified
               </span>
               <span>100% Dụng cụ vô trùng y tế</span>
@@ -51,7 +51,7 @@ export function HeroBanner({
             </div>
 
             <div className="hero-card-preview__item">
-              <span className="material-symbols-outlined text-teal-600">spa</span>
+              <span className="material-symbols-outlined hero-card-preview__icon">spa</span>
               <div>
                 <strong>Gội Dưỡng Sinh & Cổ Vai Gáy</strong>
                 <p>Thư giãn sâu với thảo dược tự nhiên</p>
@@ -60,7 +60,7 @@ export function HeroBanner({
             </div>
 
             <div className="hero-card-preview__item">
-              <span className="material-symbols-outlined text-teal-600">brush</span>
+              <span className="material-symbols-outlined hero-card-preview__icon">brush</span>
               <div>
                 <strong>Combo Nail Nàng Thơ</strong>
                 <p>Cắt da + Sơn Gel Hàn Quốc</p>

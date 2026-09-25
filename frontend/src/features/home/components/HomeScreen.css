@@ -376,6 +376,10 @@
   color: rgba(255, 255, 255, 0.9);
 }
 
+.hero-banner__verified-icon {
+  color: #6ee7b7;
+}
+
 .hero-banner__right {
   display: none;
 }
@@ -619,6 +623,10 @@
 
 .category-icon-box--all {
   background-color: var(--color-surface-container);
+}
+
+.category-icon {
+  font-size: 24px;
 }
 
 .category-label {
@@ -1066,6 +1074,50 @@
   cursor: pointer;
 }
 
+.home-notice {
+  position: fixed;
+  right: 20px;
+  bottom: 92px;
+  z-index: 110;
+  display: flex;
+  width: min(380px, calc(100% - 40px));
+  min-height: 48px;
+  padding: 10px 12px;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--radius);
+  color: var(--color-inverse-on-surface);
+  background: var(--color-inverse-surface);
+  box-shadow: var(--shadow-raised);
+}
+
+.home-notice > .material-symbols-outlined {
+  color: var(--color-primary-fixed-dim);
+  font-size: 20px;
+}
+
+.home-notice > span:nth-child(2) {
+  flex: 1;
+  font-size: 13px;
+}
+
+.home-notice button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.home-notice button .material-symbols-outlined {
+  font-size: 18px;
+}
+
 /* ==========================================================================
    DESKTOP WEB ADAPTIVE DESIGN (TABLET & DESKTOP SCREENS >= 768px & >= 1024px)
    ========================================================================== */
@@ -1123,6 +1175,10 @@
   .home-main-content {
     padding-top: 84px;
     padding-bottom: 48px;
+  }
+
+  .home-notice {
+    bottom: 24px;
   }
 
   .home-container {
@@ -1206,7 +1262,7 @@
     color: var(--color-on-surface);
   }
 
-  .hero-card-preview__item p {
+.hero-card-preview__item p {
     font-size: 11px;
     color: var(--color-secondary);
     margin: 0;
@@ -1231,4 +1287,8 @@
     position: sticky;
     top: 92px;
   }
+}
+
+.hero-card-preview__icon {
+  color: var(--color-primary-container);
 }

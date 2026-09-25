@@ -7,7 +7,7 @@ export function AuthFeedback({ error, message }: AuthFeedbackProps) {
   if (error) {
     return (
       <div className="auth-feedback auth-feedback--error" role="alert">
-        <span className="material-symbols-outlined text-[16px]">info</span>
+        <span className="material-symbols-outlined auth-feedback__icon">info</span>
         <span>{error}</span>
       </div>
     )
@@ -16,7 +16,7 @@ export function AuthFeedback({ error, message }: AuthFeedbackProps) {
   if (message) {
     return (
       <div className="auth-feedback auth-feedback--success" role="status">
-        <span className="material-symbols-outlined text-[16px]">check_circle</span>
+        <span className="material-symbols-outlined auth-feedback__icon">check_circle</span>
         <span>{message}</span>
       </div>
     )

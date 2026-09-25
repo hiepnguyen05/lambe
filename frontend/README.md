@@ -1,56 +1,59 @@
 # Lambe Frontend
 
-React 19, TypeScript, and Vite frontend. Source code is organized by feature so
-each business area owns its API calls, components, hooks, and types.
+Frontend React 19, TypeScript và Vite cho ứng dụng đặt dịch vụ LAMBE và cổng
+quản trị nội bộ.
 
-## Source structure
+## Cấu trúc mã nguồn
 
 ```text
 src/
-  app/                     Application setup, providers, and routing
-  assets/                  Imported images, fonts, and static assets
+  app/                     Composition của ứng dụng khách hàng
+  assets/                  Hình ảnh và tài nguyên được import
   components/
-    layout/                Shared page shells and navigation
-    ui/                    Reusable interface primitives
+    layout/                Điều hướng và layout dùng chung
   features/
+    admin/
+      api/                 API và vòng đời phiên quản trị
+      components/          Giao diện quản trị
+      types/               Contract dữ liệu quản trị
     auth/
-      api/                 Authentication requests
-      components/          Auth-specific components
-      hooks/               Auth-specific state and behavior
-      types/               Auth request/response types
-    booking/
-      api/                 Booking and service requests
-      components/          Booking-specific components
-      hooks/               Booking-specific state and behavior
-      types/               Booking request/response types
-  hooks/                   Hooks shared across features
-  lib/                     Configured third-party clients
-  services/                Shared integrations and infrastructure
-  styles/                  Global styles and design tokens
-  types/                   Shared application types
-  utils/                   Small, reusable pure functions
+      api/                 API xác thực khách hàng
+      components/          Các bước đăng nhập và đăng ký
+      services/            Quản lý phiên phía trình duyệt
+      types/               Contract dữ liệu xác thực
+    home/
+      components/          Trang chủ và các khối nội dung
+  lib/                     Hạ tầng dùng chung như HTTP client
+  styles/                  Design token toàn cục
+  types/                   Type dùng chung giữa nhiều feature
 ```
 
-Keep code used by one business feature inside that feature. Promote it to the
-shared folders only when multiple features use it. Keep route composition and
-application-wide providers in `app/`.
+Mã chỉ dùng trong một nghiệp vụ nên nằm trong feature tương ứng. Chỉ chuyển mã
+ra thư mục dùng chung khi có từ hai feature thực sự sử dụng.
 
-## Brand system
+## Điều hướng
 
-Global color, typography, spacing, grid, radius, and elevation tokens live in
-`src/styles/tokens.css` and are loaded by `src/index.css`. The official logo is
-available as `src/assets/lambe-logo.svg` for components and
-`public/lambe-logo.svg` for browser metadata and static usage.
+- `/`: ứng dụng dành cho khách hàng.
+- `/admin`: cổng quản trị nội bộ. Server production cần fallback các URL SPA về
+  `index.html`.
 
-Use the semantic CSS variables such as `--color-primary-container`,
-`--color-surface-container-low`, and `--color-on-surface` instead of adding
-one-off color values. Shared layout and common form/button primitives are
-defined in `src/index.css`.
+## Phiên đăng nhập
 
-## Commands
+- Phiên khách hàng dùng `sessionStorage` theo contract access token hiện tại.
+- Access token quản trị chỉ được giữ trong bộ nhớ. Việc khôi phục phiên sử dụng
+  refresh cookie `HttpOnly` do backend quản lý.
+
+## Design system
+
+Color, typography, spacing, grid, radius và elevation token nằm tại
+`src/styles/tokens.css`, được nạp bởi `src/index.css`. Dùng semantic CSS variable
+thay vì thêm màu tùy ý trong component.
+
+## Lệnh phát triển
 
 ```bash
 npm run dev
 npm run build
 npm run lint
+npm test
 ```

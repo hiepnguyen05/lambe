@@ -1,11 +1,12 @@
 import lambeLogo from '../../../assets/lambe-logo.svg'
+import type { TabKey } from '../../../types/navigation.types'
 
 interface HomeHeaderProps {
   currentLocation: string
   onOpenLocationModal: () => void
   onOpenNotifications: () => void
   onOpenAccount: () => void
-  onNavigateTab?: (tab: 'trang-chu' | 'lich-hen' | 'uu-dai' | 'tin-nhan' | 'tai-khoan') => void
+  onNavigateTab?: (tab: TabKey) => void
   activeTab?: string
   hasUnreadNotifications?: boolean
 }
@@ -17,7 +18,7 @@ export function HomeHeader({
   onOpenAccount,
   onNavigateTab,
   activeTab = 'trang-chu',
-  hasUnreadNotifications = true,
+  hasUnreadNotifications = false,
 }: HomeHeaderProps) {
   return (
     <header className="home-header">

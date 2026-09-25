@@ -50,7 +50,7 @@ export function CategoriesGrid({ onSelectCategory }: CategoriesGridProps) {
                 cat.id === 'xem-tat-ca' ? 'category-icon-box--all' : ''
               }`}
             >
-              <span className="material-symbols-outlined text-[24px]">
+              <span className="material-symbols-outlined category-icon">
                 {cat.icon}
               </span>
             </div>
