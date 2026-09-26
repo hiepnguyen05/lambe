@@ -1,0 +1,93 @@
+/* Admin Services Tab Styles */
+
+.admin-svc-cover-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--color-surface-variant, #f1f3f4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid var(--color-outline-variant, #e0e0e0);
+  margin: 0 auto;
+  transition: all 0.2s ease;
+}
+
+.admin-svc-cover-box:hover {
+  border-color: var(--color-primary);
+  transform: scale(1.05);
+}
+
+.admin-svc-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-svc-cover-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.admin-svc-cover-box:hover .admin-svc-cover-overlay {
+  opacity: 1;
+}
+
+.admin-svc-cat-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(var(--color-primary-rgb, 103, 80, 164), 0.08);
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-svc-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-outline-variant, #e0e0e0);
+  border-top: none;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+/* Cover Image Preview Box inside Modal */
+.admin-cover-preview-box {
+  width: 100%;
+  height: 200px;
+  border-radius: 12px;
+  background: var(--color-surface-variant, #f4f6f8);
+  border: 2px dashed var(--color-outline-variant, #ccc);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.admin-cover-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-cover-preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}

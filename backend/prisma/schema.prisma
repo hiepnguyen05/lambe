@@ -37,6 +37,12 @@ enum ServiceCategoryStatus {
   ARCHIVED
 }
 
+enum ServiceStatus {
+  INACTIVE
+  ACTIVE
+  ARCHIVED
+}
+
 model User {
   id        String     @id @default(uuid())
   phone     String     @unique
@@ -88,6 +94,8 @@ model InternalAccount {
   sessions           InternalSession[]
   categoriesCreated  ServiceCategory[]        @relation("ServiceCategoryCreatedBy")
   categoriesUpdated  ServiceCategory[]        @relation("ServiceCategoryUpdatedBy")
+  servicesCreated    Service[]                @relation("ServiceCreatedBy")
+  servicesUpdated    Service[]                @relation("ServiceUpdatedBy")
 
   @@index([status])
   @@map("internal_accounts")
@@ -161,25 +169,60 @@ model AuditLog {
 }
 
 model ServiceCategory {
-  id             String                @id @default(uuid())
-  code           String                @unique
-  name           String
-  normalizedName String                @unique
-  slug           String                @unique
-  description    String?
-  iconUrl        String?
-  coverImageUrl  String?
-  sortOrder      Int                   @default(0)
-  status         ServiceCategoryStatus @default(INACTIVE)
-  createdById    String?
-  updatedById    String?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
-  createdBy      InternalAccount?      @relation("ServiceCategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy      InternalAccount?      @relation("ServiceCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  id                 String                @id @default(uuid())
+  code               String                @unique
+  name               String
+  normalizedName     String                @unique
+  slug               String                @unique
+  description        String?
+  iconUrl            String?
+  coverImageUrl      String?
+  coverImagePublicId String?
+  sortOrder          Int                   @default(0)
+  status             ServiceCategoryStatus @default(INACTIVE)
+  createdById        String?
+  updatedById        String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  createdBy          InternalAccount?      @relation("ServiceCategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy          InternalAccount?      @relation("ServiceCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  services           Service[]
 
   @@index([status, sortOrder])
   @@index([createdById])
   @@index([updatedById])
   @@map("service_categories")
+}
+
+model Service {
+  id                     String           @id @default(uuid())
+  categoryId             String
+  code                   String           @unique
+  name                   String
+  normalizedName         String
+  slug                   String           @unique
+  description            String?
+  iconUrl                String?
+  coverImageUrl          String?
+  coverImagePublicId     String?
+  minPriceAmount         Int
+  maxPriceAmount         Int
+  currencyCode           String           @default("VND")
+  defaultDurationMinutes Int?
+  sortOrder              Int              @default(0)
+  status                 ServiceStatus    @default(INACTIVE)
+  createdById            String?
+  updatedById            String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  category               ServiceCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  createdBy              InternalAccount? @relation("ServiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy              InternalAccount? @relation("ServiceUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([categoryId, normalizedName])
+  @@index([categoryId, status, sortOrder])
+  @@index([status, sortOrder])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("services")
 }

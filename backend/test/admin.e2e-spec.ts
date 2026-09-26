@@ -194,6 +194,17 @@ describe('Admin authentication and categories (e2e)', () => {
         .send({ code: categoryCode, name: 'E2E Tóc', slug: 'e2e-hair' })
         .expect(403);
 
+      await request(context.app.getHttpServer())
+        .post('/api/admin/categories')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          code: categoryCode,
+          name: 'E2E Tóc',
+          slug: 'e2e-hair',
+          coverImageUrl: 'https://example.test/unmanaged.webp',
+        })
+        .expect(400);
+
       const createResponse = await request(context.app.getHttpServer())
         .post('/api/admin/categories')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -216,6 +227,12 @@ describe('Admin authentication and categories (e2e)', () => {
       await request(context.app.getHttpServer())
         .patch(`/api/admin/categories/${categoryId}`)
         .set('Authorization', `Bearer ${adminToken}`)
+        .send({ coverImageUrl: 'https://example.test/unmanaged.webp' })
+        .expect(400);
+
+      await request(context.app.getHttpServer())
+        .patch(`/api/admin/categories/${categoryId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ code: 'CHANGED_CODE' })
         .expect(400);
 
@@ -224,6 +241,28 @@ describe('Admin authentication and categories (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ status: 'ACTIVE' })
         .expect(200);
+
+      const coverImage = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        'base64',
+      );
+      const coverUploadResponse = await request(context.app.getHttpServer())
+        .post(`/api/admin/categories/${categoryId}/cover-image`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('file', coverImage, {
+          filename: 'category-cover.png',
+          contentType: 'image/png',
+        });
+      expect({
+        status: coverUploadResponse.status,
+        body: coverUploadResponse.body as unknown,
+      }).toMatchObject({
+        status: 201,
+        body: {
+          success: true,
+          data: { coverImageUrl: 'https://example.test/category.webp' },
+        },
+      });
 
       await request(context.app.getHttpServer())
         .get('/api/categories')
@@ -235,16 +274,51 @@ describe('Admin authentication and categories (e2e)', () => {
           expect(category).toMatchObject({
             code: categoryCode,
             name: 'E2E Tóc',
+            coverImageUrl: 'https://example.test/category.webp',
           });
           expect(category).not.toHaveProperty('status');
           expect(category).not.toHaveProperty('normalizedName');
         });
 
       await request(context.app.getHttpServer())
+        .get('/api/categories/e2e-hair')
+        .expect(200)
+        .expect(({ body }) => {
+          const responseBody = body as {
+            success: boolean;
+            data: Record<string, unknown>;
+          };
+          expect(responseBody).toMatchObject({
+            success: true,
+            data: {
+              id: categoryId,
+              slug: 'e2e-hair',
+              coverImageUrl: 'https://example.test/category.webp',
+            },
+          });
+          expect(responseBody.data).not.toHaveProperty('status');
+        });
+
+      await request(context.app.getHttpServer())
+        .get('/api/categories/INVALID_SLUG')
+        .expect(400);
+
+      await request(context.app.getHttpServer())
         .patch('/api/admin/categories/reorder')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ items: [{ id: categoryId, sortOrder: 1 }] })
         .expect(200);
+
+      await request(context.app.getHttpServer())
+        .delete(`/api/admin/categories/${categoryId}/cover-image`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200)
+        .expect(({ body }) => {
+          expect(body).toMatchObject({
+            success: true,
+            data: { coverImageUrl: null },
+          });
+        });
 
       await request(context.app.getHttpServer())
         .patch(`/api/admin/categories/${categoryId}/status`)
@@ -261,6 +335,10 @@ describe('Admin authentication and categories (e2e)', () => {
           expect(categories.some((item) => item.id === categoryId)).toBe(false);
         });
 
+      await request(context.app.getHttpServer())
+        .get('/api/categories/e2e-hair')
+        .expect(404);
+
       await expect(
         context.prisma.auditLog.count({
           where: {
@@ -268,7 +346,7 @@ describe('Admin authentication and categories (e2e)', () => {
             resourceType: 'ServiceCategory',
           },
         }),
-      ).resolves.toBe(4);
+      ).resolves.toBe(6);
     } finally {
       if (categoryId) {
         await context.prisma.auditLog.deleteMany({
@@ -285,6 +363,180 @@ describe('Admin authentication and categories (e2e)', () => {
       });
       await context.prisma.internalAccount.deleteMany({
         where: { id: { in: [admin.id, moderator.id] } },
+      });
+    }
+  });
+
+  it('secures and completes the standard service lifecycle', async () => {
+    const username = 'e2e.service.admin';
+    const password = 'E2E-strong-service-password-2026';
+    const categoryCode = 'E2E_SERVICE_CATEGORY';
+    const serviceCode = 'E2E_MEN_HAIRCUT';
+
+    const staleService = await context.prisma.service.findUnique({
+      where: { code: serviceCode },
+    });
+    if (staleService) {
+      await context.prisma.auditLog.deleteMany({
+        where: { resourceId: staleService.id },
+      });
+      await context.prisma.service.delete({ where: { id: staleService.id } });
+    }
+    await context.prisma.serviceCategory.deleteMany({
+      where: { code: categoryCode },
+    });
+    await context.prisma.internalAccount.deleteMany({
+      where: { normalizedUsername: username },
+    });
+
+    const passwordHash = await argon2.hash(password, ARGON2_OPTIONS);
+    const admin = await context.prisma.internalAccount.create({
+      data: {
+        username,
+        normalizedUsername: username,
+        fullName: 'Service Admin',
+        status: 'ACTIVE',
+        mustChangePassword: false,
+        passwordChangedAt: new Date(),
+        credential: { create: { passwordHash } },
+        roles: { create: { role: 'ADMIN' } },
+      },
+    });
+    const category = await context.prisma.serviceCategory.create({
+      data: {
+        code: categoryCode,
+        name: 'E2E Service Category',
+        normalizedName: 'e2e service category',
+        slug: 'e2e-service-category',
+        status: 'ACTIVE',
+        createdById: admin.id,
+        updatedById: admin.id,
+      },
+    });
+    let serviceId: string | undefined;
+
+    try {
+      const login = await request(context.app.getHttpServer())
+        .post('/api/admin/auth/login')
+        .send({ username, password })
+        .expect(200);
+      const token = (login.body as { data: { accessToken: string } }).data
+        .accessToken;
+
+      await request(context.app.getHttpServer())
+        .post('/api/admin/services')
+        .send({})
+        .expect(401);
+
+      await request(context.app.getHttpServer())
+        .post('/api/admin/services')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          categoryId: category.id,
+          code: serviceCode,
+          name: 'Cắt tóc nam E2E',
+          slug: 'cat-toc-nam-e2e',
+          minPriceAmount: 300000,
+          maxPriceAmount: 50000,
+        })
+        .expect(400);
+
+      const createResponse = await request(context.app.getHttpServer())
+        .post('/api/admin/services')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          categoryId: category.id,
+          code: serviceCode,
+          name: 'Cắt tóc nam E2E',
+          slug: 'cat-toc-nam-e2e',
+          minPriceAmount: 50000,
+          maxPriceAmount: 300000,
+          defaultDurationMinutes: 45,
+          sortOrder: 10,
+        })
+        .expect(201);
+      const created = createResponse.body as {
+        data: { id: string; status: string; currencyCode: string };
+      };
+      serviceId = created.data.id;
+      expect(created.data).toMatchObject({
+        status: 'INACTIVE',
+        currencyCode: 'VND',
+      });
+
+      await request(context.app.getHttpServer())
+        .patch(`/api/admin/services/${serviceId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ minPriceAmount: 400000 })
+        .expect(400);
+
+      await request(context.app.getHttpServer())
+        .patch(`/api/admin/services/${serviceId}/status`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ status: 'ACTIVE' })
+        .expect(200);
+
+      await request(context.app.getHttpServer())
+        .get('/api/services?categorySlug=e2e-service-category')
+        .expect(200)
+        .expect(({ body }) => {
+          const services = (body as { data: Array<Record<string, unknown>> })
+            .data;
+          expect(services).toContainEqual(
+            expect.objectContaining({
+              id: serviceId,
+              minPriceAmount: 50000,
+              maxPriceAmount: 300000,
+              currencyCode: 'VND',
+            }),
+          );
+        });
+
+      await request(context.app.getHttpServer())
+        .get('/api/services/cat-toc-nam-e2e')
+        .expect(200)
+        .expect(({ body }) => {
+          const responseBody = body as {
+            success: boolean;
+            data: Record<string, unknown>;
+          };
+          expect(responseBody).toMatchObject({
+            success: true,
+            data: { id: serviceId },
+          });
+          expect(responseBody.data).not.toHaveProperty('status');
+        });
+
+      await request(context.app.getHttpServer())
+        .patch(`/api/admin/categories/${category.id}/services/reorder`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ items: [{ id: serviceId, sortOrder: 1 }] })
+        .expect(200);
+
+      await request(context.app.getHttpServer())
+        .patch(`/api/admin/services/${serviceId}/status`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ status: 'ARCHIVED' })
+        .expect(200);
+
+      await request(context.app.getHttpServer())
+        .get('/api/services/cat-toc-nam-e2e')
+        .expect(404);
+    } finally {
+      if (serviceId) {
+        await context.prisma.auditLog.deleteMany({
+          where: { resourceId: serviceId },
+        });
+        await context.prisma.service.deleteMany({ where: { id: serviceId } });
+      }
+      await context.prisma.auditLog.deleteMany({
+        where: { actorInternalAccountId: admin.id },
+      });
+      await context.prisma.serviceCategory.deleteMany({
+        where: { id: category.id },
+      });
+      await context.prisma.internalAccount.deleteMany({
+        where: { id: admin.id },
       });
     }
   });

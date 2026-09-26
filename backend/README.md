@@ -196,6 +196,7 @@ khi danh mục xuất hiện trong API công khai.
 
 ```text
 GET   /api/categories
+GET   /api/categories/:slug
 
 GET   /api/admin/categories?page=1&limit=20&status=ACTIVE&search=toc
 GET   /api/admin/categories/:id
@@ -203,6 +204,8 @@ POST  /api/admin/categories
 PATCH /api/admin/categories/reorder
 PATCH /api/admin/categories/:id/status
 PATCH /api/admin/categories/:id
+POST  /api/admin/categories/:id/cover-image
+DELETE /api/admin/categories/:id/cover-image
 ```
 
 Tất cả API dưới `/api/admin/categories` yêu cầu access token nội bộ có role
@@ -219,7 +222,6 @@ Body tạo danh mục:
   "slug": "toc",
   "description": "Các dịch vụ chăm sóc và tạo kiểu tóc",
   "iconUrl": "content_cut",
-  "coverImageUrl": "https://example.com/categories/hair-cover.jpg",
   "sortOrder": 1
 }
 ```
@@ -236,12 +238,17 @@ Các luồng trạng thái hợp lệ là `INACTIVE -> ACTIVE|ARCHIVED`,
 `ACTIVE -> INACTIVE|ARCHIVED` và `ARCHIVED -> INACTIVE`.
 `iconUrl` hiện chấp nhận mã Material Symbol hoặc URL HTTPS để tương thích với
 bộ chọn icon của giao diện quản trị.
+Ảnh bìa không nhận URL trong body tạo/cập nhật. Hãy tải file từ máy qua
+`POST /api/admin/categories/:id/cover-image` để hệ thống kiểm tra nội dung file,
+lưu Cloudinary và quản lý vòng đời ảnh.
 
 ## Media Upload
 
 Swagger is available at `http://localhost:5000/docs` outside production and test.
 The protected endpoint `POST /api/admin/upload/image` accepts JPEG, PNG, WEBP, and
-GIF files up to 5 MB. It is available to `ADMIN` and `MODERATOR` accounts.
+GIF files up to 5 MB. It is available to `ADMIN` and `MODERATOR` accounts. For a
+category cover, prefer `POST /api/admin/categories/:id/cover-image`; that endpoint
+updates the category and removes a previously managed Cloudinary image.
 
 Cloudinary is disabled until all required values are configured:
 
@@ -255,6 +262,48 @@ CLOUDINARY_API_SECRET="your-api-secret"
 
 Do not commit the real API key or API secret. Upload folders are selected from a
 server-controlled allowlist; arbitrary folder paths and SVG uploads are rejected.
+
+## Standard Services
+
+Standard services are child records of a service category, for example
+`Tóc -> Cắt tóc nam`. The platform owns these records; provider offerings and
+provider-proposed prices will reference them in a later module.
+
+```text
+GET    /api/services?categorySlug=toc
+GET    /api/services/:slug
+
+GET    /api/admin/services?page=1&limit=20&categoryId=:id&status=ACTIVE&search=toc
+GET    /api/admin/services/:id
+POST   /api/admin/services
+PATCH  /api/admin/services/:id
+PATCH  /api/admin/services/:id/status
+PATCH  /api/admin/categories/:categoryId/services/reorder
+POST   /api/admin/services/:id/cover-image
+DELETE /api/admin/services/:id/cover-image
+```
+
+Create body example:
+
+```json
+{
+  "categoryId": "6f0fb120-f590-4b63-8782-15ae57eeaba0",
+  "code": "MEN_HAIRCUT",
+  "name": "Cắt tóc nam",
+  "slug": "cat-toc-nam",
+  "description": "Cắt và tạo kiểu tóc nam tại nhà",
+  "iconUrl": "content_cut",
+  "minPriceAmount": 50000,
+  "maxPriceAmount": 300000,
+  "defaultDurationMinutes": 45,
+  "sortOrder": 0
+}
+```
+
+Prices are integer VND amounts. Both limits must be positive and
+`minPriceAmount <= maxPriceAmount`. New services are `INACTIVE`, and they can
+only be activated while their parent category is `ACTIVE`. Cover images must be
+uploaded through the dedicated multipart endpoint rather than supplied as URLs.
 
 ## Scripts
 

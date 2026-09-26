@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { AdminAccount } from '../../types/admin-auth.types'
-import { AdminCategoriesTab } from '../categories/AdminCategoriesTab'
+import { AdminServicesManagementView } from '../services/AdminServicesManagementView'
 import { AdminHeaderBar } from './AdminHeaderBar'
 import { AdminSidebar } from './AdminSidebar'
 import './AdminDashboardLayout.css'
@@ -65,7 +65,7 @@ export function AdminDashboardLayout({
 
         <main className="admin-dashboard-layout__content">
           {activeTab === 'services' && (
-            <AdminCategoriesTab onShowToast={onShowToast} />
+            <AdminServicesManagementView onShowToast={onShowToast} />
           )}
 
           {activeTab === 'dashboard' && (
