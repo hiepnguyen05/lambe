@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import type {
   CreateCategoryPayload,
   ServiceCategory,
   ServiceCategoryStatus,
+  UpdateCategoryPayload,
 } from '../../types/admin-categories.types'
 import { AdminIconPickerModal, EXPANDED_BEAUTY_ICONS } from './AdminIconPickerModal'
 
@@ -11,7 +12,10 @@ interface AdminCategoryModalProps {
   isOpen: boolean
   isSubmitting: boolean
   onClose: () => void
-  onSubmit: (payload: CreateCategoryPayload) => Promise<void>
+  onSubmit: (
+    payload: CreateCategoryPayload | UpdateCategoryPayload,
+    coverFile?: File | null,
+  ) => Promise<void>
 }
 
 function nameToUnaccented(str: string): string {
@@ -52,12 +56,14 @@ export function AdminCategoryModal({
   const [description, setDescription] = useState('')
   const [iconUrl, setIconUrl] = useState('content_cut')
   const [sortOrder, setSortOrder] = useState(0)
-  const [status, setStatus] = useState<ServiceCategoryStatus>('ACTIVE')
+  const [status, setStatus] = useState<ServiceCategoryStatus>('INACTIVE')
+
+  const [coverFile, setCoverFile] = useState<File | null>(null)
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [isCodeTouched, setIsCodeTouched] = useState(false)
   const [isSlugTouched, setIsSlugTouched] = useState(false)
-
-  // Icon Picker Modal State
   const [isIconPickerOpen, setIsIconPickerOpen] = useState(false)
 
   useEffect(() => {
@@ -69,6 +75,8 @@ export function AdminCategoryModal({
       setIconUrl(category.iconUrl || 'category')
       setSortOrder(category.sortOrder)
       setStatus(category.status)
+      setCoverFile(null)
+      setCoverPreviewUrl(category.coverImageUrl || null)
       setIsCodeTouched(true)
       setIsSlugTouched(true)
     } else {
@@ -78,7 +86,9 @@ export function AdminCategoryModal({
       setDescription('')
       setIconUrl('content_cut')
       setSortOrder(0)
-      setStatus('ACTIVE')
+      setStatus('INACTIVE')
+      setCoverFile(null)
+      setCoverPreviewUrl(null)
       setIsCodeTouched(false)
       setIsSlugTouched(false)
     }
@@ -106,20 +116,35 @@ export function AdminCategoryModal({
     setIsSlugTouched(true)
   }
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Tệp ảnh quá lớn. Vui lòng chọn tệp nhỏ hơn 5MB.')
+        return
+      }
+      setCoverFile(file)
+      setCoverPreviewUrl(URL.createObjectURL(file))
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    const payload: CreateCategoryPayload = {
+    const payload: CreateCategoryPayload & UpdateCategoryPayload = {
       code: code.trim().toUpperCase(),
       name: name.trim(),
       slug: slug.trim().toLowerCase(),
       description: description.trim() || undefined,
       iconUrl: iconUrl.trim() || undefined,
       sortOrder: Number(sortOrder) || 0,
-      status,
     }
 
-    void onSubmit(payload)
+    if (category) {
+      payload.status = status
+    }
+
+    void onSubmit(payload, coverFile)
   }
 
   const selectedIconObj = EXPANDED_BEAUTY_ICONS.find((item) => item.icon === iconUrl)
@@ -129,7 +154,7 @@ export function AdminCategoryModal({
   return (
     <>
       <div className="admin-modal-backdrop" onClick={onClose}>
-        <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="admin-modal" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
           <div className="admin-modal__header">
             <h3 className="admin-modal__title">
               {category ? 'Chỉnh sửa Danh mục' : 'Thêm Danh mục Dịch vụ Mới'}
@@ -146,6 +171,65 @@ export function AdminCategoryModal({
 
           <form onSubmit={handleSubmit}>
             <div className="admin-modal__body">
+              {/* Field: Cover Image Direct Upload */}
+              <div className="admin-modal__field">
+                <label>Ảnh bìa danh mục (Tùy chọn - JPG/PNG/WEBP $\le$ 5MB)</label>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <div
+                    style={{
+                      width: 90,
+                      height: 60,
+                      borderRadius: 8,
+                      border: '1px dashed var(--color-outline-variant, #ccc)',
+                      background: 'var(--color-surface-variant, #f5f5f5)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {coverPreviewUrl ? (
+                      <img
+                        src={coverPreviewUrl}
+                        alt="Preview"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <span className="material-symbols-outlined" style={{ color: 'var(--color-outline)' }}>
+                        image
+                      </span>
+                    )}
+                  </div>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    style={{ display: 'none' }}
+                    onChange={handleFileChange}
+                    disabled={isSubmitting}
+                  />
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <button
+                      type="button"
+                      className="admin-cat-btn admin-cat-btn--ghost"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isSubmitting}
+                    >
+                      <span className="material-symbols-outlined">cloud_upload</span>
+                      {coverFile ? 'Đổi ảnh khác' : coverPreviewUrl ? 'Thay ảnh bìa mới' : 'Tải ảnh bìa lên'}
+                    </button>
+                    {coverFile && (
+                      <span style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 600 }}>
+                        Đã chọn: {coverFile.name}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Field: Name */}
               <div className="admin-modal__field">
                 <label htmlFor="cat-name">Tên danh mục dịch vụ *</label>
@@ -177,16 +261,18 @@ export function AdminCategoryModal({
                 </div>
 
                 <div className="admin-modal__field">
-                  <label htmlFor="cat-status">Trạng thái *</label>
+                  <label htmlFor="cat-status">
+                    Trạng thái {category ? '*' : '(Mặc định: Tạm ẩn)'}
+                  </label>
                   <select
                     id="cat-status"
-                    value={status}
+                    value={category ? status : 'INACTIVE'}
                     onChange={(e) => setStatus(e.target.value as ServiceCategoryStatus)}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !category}
                   >
-                    <option value="ACTIVE">Hoạt động (Active)</option>
                     <option value="INACTIVE">Tạm ẩn (Inactive)</option>
-                    <option value="ARCHIVED">Đã lưu trữ (Archived)</option>
+                    <option value="ACTIVE">Hoạt động (Active)</option>
+                    <option value="ARCHIVED">Lưu trữ (Archived)</option>
                   </select>
                 </div>
               </div>

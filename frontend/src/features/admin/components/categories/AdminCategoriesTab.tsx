@@ -4,8 +4,11 @@ import type {
   CreateCategoryPayload,
   ServiceCategory,
   ServiceCategoryStatus,
+  UpdateCategoryPayload,
 } from '../../types/admin-categories.types'
+import { AdminCategoryCoverModal } from './AdminCategoryCoverModal'
 import { AdminCategoryModal } from './AdminCategoryModal'
+import { AdminReorderCategoriesModal } from './AdminReorderCategoriesModal'
 import './AdminCategoriesTab.css'
 
 interface AdminCategoriesTabProps {
@@ -18,9 +21,15 @@ export function AdminCategoriesTab({ onShowToast }: AdminCategoriesTabProps) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
 
-  // Modal State
+  // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<ServiceCategory | null>(null)
+
+  const [isCoverModalOpen, setIsCoverModalOpen] = useState(false)
+  const [coverCategory, setCoverCategory] = useState<ServiceCategory | null>(null)
+
+  const [isReorderModalOpen, setIsReorderModalOpen] = useState(false)
+
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const loadCategories = async () => {
@@ -55,16 +64,38 @@ export function AdminCategoriesTab({ onShowToast }: AdminCategoriesTabProps) {
     setIsModalOpen(true)
   }
 
-  const handleModalSubmit = async (payload: CreateCategoryPayload) => {
+  const handleOpenCoverModal = (category: ServiceCategory) => {
+    setCoverCategory(category)
+    setIsCoverModalOpen(true)
+  }
+
+  const handleModalSubmit = async (
+    payload: CreateCategoryPayload | UpdateCategoryPayload,
+    coverFile?: File | null,
+  ) => {
     setIsSubmitting(true)
     try {
+      let savedCategory: ServiceCategory
       if (editingCategory) {
-        await adminCategoriesApi.update(editingCategory.id, payload)
-        onShowToast('Cập nhật thành công', `Đã cập nhật danh mục "${payload.name}".`, 'check_circle')
+        savedCategory = await adminCategoriesApi.update(
+          editingCategory.id,
+          payload as UpdateCategoryPayload,
+        )
+        onShowToast(
+          'Cập nhật thành công',
+          `Đã cập nhật danh mục "${payload.name || editingCategory.name}".`,
+          'check_circle',
+        )
       } else {
-        await adminCategoriesApi.create(payload)
+        savedCategory = await adminCategoriesApi.create(payload as CreateCategoryPayload)
         onShowToast('Tạo thành công', `Đã tạo danh mục mới "${payload.name}".`, 'add_circle')
       }
+
+      // Upload cover file if selected in modal
+      if (coverFile) {
+        await adminCategoriesApi.uploadCoverImage(savedCategory.id, coverFile)
+      }
+
       setIsModalOpen(false)
       void loadCategories()
     } catch (err: any) {
@@ -79,13 +110,13 @@ export function AdminCategoriesTab({ onShowToast }: AdminCategoriesTabProps) {
       category.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
 
     try {
-      await adminCategoriesApi.update(category.id, { status: nextStatus })
+      await adminCategoriesApi.updateStatus(category.id, nextStatus)
       onShowToast(
         'Đổi trạng thái',
         `Danh mục "${category.name}" đã chuyển sang ${
           nextStatus === 'ACTIVE' ? 'Đang hoạt động' : 'Tạm ẩn'
         }.`,
-        'swap_horiz'
+        'swap_horiz',
       )
       void loadCategories()
     } catch (err: any) {
@@ -104,6 +135,50 @@ export function AdminCategoriesTab({ onShowToast }: AdminCategoriesTabProps) {
       void loadCategories()
     } catch (err: any) {
       onShowToast('Thao tác thất bại', err.message || 'Không thể lưu trữ danh mục.', 'error', true)
+    }
+  }
+
+  const handleCoverUpload = async (file: File) => {
+    if (!coverCategory) return
+    setIsSubmitting(true)
+    try {
+      await adminCategoriesApi.uploadCoverImage(coverCategory.id, file)
+      onShowToast('Tải ảnh bìa thành công', `Đã tải ảnh bìa cho danh mục "${coverCategory.name}".`, 'image')
+      setIsCoverModalOpen(false)
+      void loadCategories()
+    } catch (err: any) {
+      onShowToast('Tải ảnh thất bại', err.message || 'Không thể tải ảnh bìa.', 'error', true)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleCoverRemove = async () => {
+    if (!coverCategory) return
+    setIsSubmitting(true)
+    try {
+      await adminCategoriesApi.removeCoverImage(coverCategory.id)
+      onShowToast('Xóa ảnh bìa thành công', `Đã xóa ảnh bìa của danh mục "${coverCategory.name}".`, 'delete')
+      setIsCoverModalOpen(false)
+      void loadCategories()
+    } catch (err: any) {
+      onShowToast('Xóa ảnh thất bại', err.message || 'Không thể xóa ảnh bìa.', 'error', true)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleSaveReorder = async (items: Array<{ id: string; sortOrder: number }>) => {
+    setIsSubmitting(true)
+    try {
+      await adminCategoriesApi.reorder({ items })
+      onShowToast('Sắp xếp thành công', 'Đã cập nhật thứ tự các danh mục dịch vụ.', 'reorder')
+      setIsReorderModalOpen(false)
+      void loadCategories()
+    } catch (err: any) {
+      onShowToast('Thao tác thất bại', err.message || 'Không thể lưu thứ tự danh mục.', 'error', true)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -138,6 +213,16 @@ export function AdminCategoriesTab({ onShowToast }: AdminCategoriesTabProps) {
           <button
             type="button"
             className="admin-cat-btn admin-cat-btn--ghost"
+            onClick={() => setIsReorderModalOpen(true)}
+            title="Sắp xếp thứ tự danh mục"
+          >
+            <span className="material-symbols-outlined">reorder</span>
+            Sắp xếp thứ tự
+          </button>
+
+          <button
+            type="button"
+            className="admin-cat-btn admin-cat-btn--ghost"
             onClick={() => void loadCategories()}
             title="Tải lại dữ liệu"
           >
@@ -161,7 +246,7 @@ export function AdminCategoriesTab({ onShowToast }: AdminCategoriesTabProps) {
         <table className="admin-cat-table">
           <thead>
             <tr>
-              <th style={{ width: 48, textAlign: 'center' }}>Icon</th>
+              <th style={{ width: 56, textAlign: 'center' }}>Bìa/Icon</th>
               <th>Mã Code</th>
               <th>Tên Danh Mục & Slug</th>
               <th>Mô tả</th>
@@ -204,10 +289,21 @@ export function AdminCategoriesTab({ onShowToast }: AdminCategoriesTabProps) {
               categories.map((cat) => (
                 <tr key={cat.id}>
                   <td style={{ textAlign: 'center' }}>
-                    <div className="admin-cat-table-icon">
-                      <span className="material-symbols-outlined">
-                        {cat.iconUrl || 'category'}
-                      </span>
+                    <div
+                      className="admin-svc-cover-box"
+                      onClick={() => handleOpenCoverModal(cat)}
+                      title="Quản lý ảnh bìa danh mục"
+                    >
+                      {cat.coverImageUrl ? (
+                        <img src={cat.coverImageUrl} alt={cat.name} className="admin-svc-thumb" />
+                      ) : (
+                        <span className="material-symbols-outlined">
+                          {cat.iconUrl || 'category'}
+                        </span>
+                      )}
+                      <div className="admin-svc-cover-overlay">
+                        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>photo_camera</span>
+                      </div>
                     </div>
                   </td>
                   <td>
@@ -255,6 +351,15 @@ export function AdminCategoriesTab({ onShowToast }: AdminCategoriesTabProps) {
                       <button
                         type="button"
                         className="admin-cat-icon-btn"
+                        title="Quản lý ảnh bìa danh mục"
+                        onClick={() => handleOpenCoverModal(cat)}
+                      >
+                        <span className="material-symbols-outlined">image</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="admin-cat-icon-btn"
                         title="Đổi trạng thái Ẩn/Hiện"
                         onClick={() => void handleToggleStatus(cat)}
                       >
@@ -266,7 +371,7 @@ export function AdminCategoriesTab({ onShowToast }: AdminCategoriesTabProps) {
                       <button
                         type="button"
                         className="admin-cat-icon-btn"
-                        title="Chỉnh sửa"
+                        title="Chỉnh sửa danh mục"
                         onClick={() => handleOpenEditModal(cat)}
                       >
                         <span className="material-symbols-outlined">edit</span>
@@ -286,18 +391,34 @@ export function AdminCategoriesTab({ onShowToast }: AdminCategoriesTabProps) {
                   </td>
                 </tr>
               ))}
-
           </tbody>
         </table>
       </div>
 
-      {/* Modal */}
+      {/* Modals */}
       <AdminCategoryModal
         isOpen={isModalOpen}
         category={editingCategory}
         isSubmitting={isSubmitting}
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleModalSubmit}
+      />
+
+      <AdminCategoryCoverModal
+        category={coverCategory}
+        isOpen={isCoverModalOpen}
+        isSubmitting={isSubmitting}
+        onClose={() => setIsCoverModalOpen(false)}
+        onUpload={handleCoverUpload}
+        onRemove={handleCoverRemove}
+      />
+
+      <AdminReorderCategoriesModal
+        categories={categories}
+        isOpen={isReorderModalOpen}
+        isSubmitting={isSubmitting}
+        onClose={() => setIsReorderModalOpen(false)}
+        onSaveReorder={handleSaveReorder}
       />
     </div>
   )

@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CategoryQueryDto } from './category-query.dto';
+import { CategorySlugParamDto } from './category-slug-param.dto';
 import { CreateCategoryDto } from './create-category.dto';
 import { ReorderCategoriesDto } from './reorder-categories.dto';
 import { UpdateCategoryDto } from './update-category.dto';
@@ -45,6 +46,7 @@ describe('Category DTOs', () => {
       name: ' Nail ',
       code: 'NAIL',
       status: 'ACTIVE',
+      coverImageUrl: 'https://example.test/unmanaged.webp',
     });
     const errors = await validate(dto, { whitelist: true });
 
@@ -52,6 +54,18 @@ describe('Category DTOs', () => {
     expect(dto.name).toBe('Nail');
     expect(dto).not.toHaveProperty('code');
     expect(dto).not.toHaveProperty('status');
+    expect(dto).not.toHaveProperty('coverImageUrl');
+  });
+
+  it('normalizes and validates a public category slug parameter', async () => {
+    const valid = plainToInstance(CategorySlugParamDto, { slug: ' TOC-NAM ' });
+    const invalid = plainToInstance(CategorySlugParamDto, {
+      slug: 'invalid_slug',
+    });
+
+    await expect(validate(valid)).resolves.toHaveLength(0);
+    await expect(validate(invalid)).resolves.not.toHaveLength(0);
+    expect(valid.slug).toBe('toc-nam');
   });
 
   it('converts and validates query pagination', async () => {

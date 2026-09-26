@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import 'multer';
 import { InternalRole, ServiceCategoryStatus } from '@prisma/client';
 import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 import { INTERNAL_ROLES_KEY } from '../../internal-auth/decorators/internal-roles.decorator';
@@ -23,6 +24,7 @@ describe('Categories controllers', () => {
       findAllForAdmin: jest.fn().mockResolvedValue({ success: true }),
       findOneForAdmin: jest.fn().mockResolvedValue({ success: true }),
       findActive: jest.fn().mockResolvedValue({ success: true }),
+      findActiveBySlug: jest.fn().mockResolvedValue({ success: true }),
     };
     const commandService = {
       create: jest.fn().mockResolvedValue({ success: true }),
@@ -30,13 +32,18 @@ describe('Categories controllers', () => {
       updateStatus: jest.fn().mockResolvedValue({ success: true }),
       reorder: jest.fn().mockResolvedValue({ success: true }),
     };
-    const service = { ...queryService, ...commandService };
+    const imageService = {
+      uploadCover: jest.fn().mockResolvedValue({ success: true }),
+      removeCover: jest.fn().mockResolvedValue({ success: true }),
+    };
+    const service = { ...queryService, ...commandService, ...imageService };
 
     return {
       service,
       adminController: new AdminCategoriesController(
         queryService as never,
         commandService as never,
+        imageService as never,
       ),
       publicController: new PublicCategoriesController(queryService as never),
     };
@@ -48,6 +55,35 @@ describe('Categories controllers', () => {
     expect(
       Reflect.getMetadata(INTERNAL_ROLES_KEY, AdminCategoriesController),
     ).toEqual([InternalRole.ADMIN]);
+  });
+
+  it('delegates cover upload and removal with actor metadata', async () => {
+    const { adminController, service } = createControllers();
+    const file = { buffer: Buffer.from('image') } as Express.Multer.File;
+
+    await adminController.uploadCoverImage(
+      'category-id',
+      file,
+      account,
+      requestMetadata,
+    );
+    await adminController.removeCoverImage(
+      'category-id',
+      account,
+      requestMetadata,
+    );
+
+    expect(service.uploadCover).toHaveBeenCalledWith(
+      'category-id',
+      file.buffer,
+      account.accountId,
+      requestMetadata,
+    );
+    expect(service.removeCover).toHaveBeenCalledWith(
+      'category-id',
+      account.accountId,
+      requestMetadata,
+    );
   });
 
   it('delegates admin reads to the service', async () => {
@@ -120,5 +156,13 @@ describe('Categories controllers', () => {
     await publicController.findActive();
 
     expect(service.findActive).toHaveBeenCalledTimes(1);
+  });
+
+  it('delegates public category detail lookup by slug', async () => {
+    const { publicController, service } = createControllers();
+
+    await publicController.findActiveBySlug({ slug: 'toc' });
+
+    expect(service.findActiveBySlug).toHaveBeenCalledWith('toc');
   });
 });

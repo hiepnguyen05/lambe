@@ -71,9 +71,6 @@ export class UpdateCategoryService {
         if (dto.iconUrl !== undefined) {
           updates.iconUrl = trimOptionalCategoryField(dto.iconUrl);
         }
-        if (dto.coverImageUrl !== undefined) {
-          updates.coverImageUrl = trimOptionalCategoryField(dto.coverImageUrl);
-        }
         if (dto.sortOrder !== undefined) updates.sortOrder = dto.sortOrder;
 
         await this.uniqueness.assertAvailable(transaction, uniqueInput, id);

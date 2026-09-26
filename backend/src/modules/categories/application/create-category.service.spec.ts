@@ -54,6 +54,7 @@ describe('CreateCategoryService', () => {
       }) as object,
     });
     expect(cache.delete).toHaveBeenCalledWith('service-categories:active:v1');
+    expect(cache.delete).toHaveBeenCalledWith('services:active:v1');
   });
 
   it.each([

@@ -39,7 +39,6 @@ describe('UpdateCategoryService', () => {
       slug: 'cham-soc-toc',
       description: 'M\u1edbi',
       iconUrl: 'https://example.com/icon.png',
-      coverImageUrl: null,
       sortOrder: 3,
     };
     serviceCategory.update.mockResolvedValue(updated);
@@ -52,7 +51,6 @@ describe('UpdateCategoryService', () => {
           slug: ' CHAM-SOC-TOC ',
           description: ' M\u1edbi ',
           iconUrl: ' https://example.com/icon.png ',
-          coverImageUrl: null,
           sortOrder: 3,
         },
         CATEGORY_ACTOR.id,
@@ -70,7 +68,6 @@ describe('UpdateCategoryService', () => {
         data: expect.objectContaining({
           name: 'Ch\u0103m s\u00f3c t\u00f3c',
           normalizedName: 'cham soc toc',
-          coverImageUrl: null,
           updatedById: CATEGORY_ACTOR.id,
         }) as object,
       }),

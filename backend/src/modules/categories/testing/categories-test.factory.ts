@@ -2,6 +2,7 @@ import { ServiceCategoryStatus } from '@prisma/client';
 import { CategoriesCommandService } from '../application/categories-command.service';
 import { CategoriesQueryService } from '../application/categories-query.service';
 import { CategoryCacheService } from '../application/category-cache.service';
+import { CategoryImageService } from '../application/category-image.service';
 import { CategoryUniquenessService } from '../application/category-uniqueness.service';
 import { ChangeCategoryStatusService } from '../application/change-category-status.service';
 import { CreateCategoryService } from '../application/create-category.service';
@@ -23,6 +24,7 @@ export const BASE_CATEGORY = {
   description: null,
   iconUrl: null,
   coverImageUrl: null,
+  coverImagePublicId: null,
   sortOrder: 0,
   status: ServiceCategoryStatus.INACTIVE,
   createdById: CATEGORY_ACTOR.id,
@@ -61,7 +63,9 @@ export function createCategoriesTestContext() {
     findFirst: jest.fn().mockResolvedValue(null),
     findMany: jest.fn().mockResolvedValue([ADMIN_CATEGORY]),
     findUnique: jest.fn().mockResolvedValue(BASE_CATEGORY),
+    findUniqueOrThrow: jest.fn().mockResolvedValue(ADMIN_CATEGORY),
     update: jest.fn().mockResolvedValue(ADMIN_CATEGORY),
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
   };
   const auditLog = {
     create: jest.fn().mockResolvedValue({ id: 'audit-id' }),
@@ -78,6 +82,16 @@ export function createCategoriesTestContext() {
     delete: jest.fn().mockResolvedValue(undefined),
   };
   const transaction = { serviceCategory, auditLog };
+  const mediaStorage = {
+    uploadImage: jest.fn().mockResolvedValue({
+      url: 'http://example.test/category.webp',
+      secureUrl: 'https://example.test/category.webp',
+      publicId: 'lambe/categories/category-id/image',
+      format: 'webp',
+      resourceType: 'image',
+    }),
+    deleteImage: jest.fn().mockResolvedValue(true),
+  };
   const prisma = {
     serviceCategory,
     auditLog,
@@ -123,6 +137,12 @@ export function createCategoriesTestContext() {
       categoryCache,
     ),
   );
+  const categoryImageService = new CategoryImageService(
+    prisma as never,
+    auditService as never,
+    categoryCache,
+    mediaStorage,
+  );
 
   return {
     queryService,
@@ -130,5 +150,7 @@ export function createCategoriesTestContext() {
     serviceCategory,
     auditLog,
     cache,
+    mediaStorage,
+    categoryImageService,
   };
 }

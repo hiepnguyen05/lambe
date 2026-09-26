@@ -52,7 +52,6 @@ export class CreateCategoryService {
             slug,
             description: trimOptionalCategoryField(dto.description),
             iconUrl: trimOptionalCategoryField(dto.iconUrl),
-            coverImageUrl: trimOptionalCategoryField(dto.coverImageUrl),
             sortOrder: dto.sortOrder ?? 0,
             status: ServiceCategoryStatus.INACTIVE,
             createdById: actorId,

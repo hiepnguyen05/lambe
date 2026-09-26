@@ -1,17 +1,33 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { InternalRole } from '@prisma/client';
+import 'multer';
 import { CurrentRequestMetadata } from '../../../common/http/decorators/current-request-metadata.decorator';
+import {
+  createImageUploadPipe,
+  MAX_IMAGE_SIZE_BYTES,
+} from '../../../common/http/files/image-upload.validation';
 import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 import { CurrentInternalAccount } from '../../internal-auth/decorators/current-internal-account.decorator';
 import { InternalRoles } from '../../internal-auth/decorators/internal-roles.decorator';
@@ -19,6 +35,7 @@ import { InternalJwtAuthGuard } from '../../internal-auth/guards/internal-jwt-au
 import { InternalRolesGuard } from '../../internal-auth/guards/internal-roles.guard';
 import type { AuthenticatedInternalAccount } from '../../internal-auth/types/authenticated-internal-account.type';
 import { CategoriesCommandService } from '../application/categories-command.service';
+import { CategoryImageService } from '../application/category-image.service';
 import { CategoriesQueryService } from '../application/categories-query.service';
 import { CategoryQueryDto } from '../dto/category-query.dto';
 import { CreateCategoryDto } from '../dto/create-category.dto';
@@ -35,6 +52,7 @@ export class AdminCategoriesController {
   constructor(
     private readonly categoriesQuery: CategoriesQueryService,
     private readonly categoriesCommand: CategoriesCommandService,
+    private readonly categoryImage: CategoryImageService,
   ) {}
 
   @Get()
@@ -106,6 +124,57 @@ export class AdminCategoriesController {
     return this.categoriesCommand.update(
       id,
       dto,
+      account.accountId,
+      requestMetadata,
+    );
+  }
+
+  @Post(':id/cover-image')
+  @Throttle({
+    short: { limit: 2, ttl: 1000 },
+    medium: { limit: 20, ttl: 60_000 },
+  })
+  @ApiOperation({ summary: 'Tải ảnh bìa danh mục từ máy tính' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'JPEG, PNG, WEBP hoặc GIF; tối đa 5 MB',
+        },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_IMAGE_SIZE_BYTES } }),
+  )
+  uploadCoverImage(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @UploadedFile(createImageUploadPipe()) file: Express.Multer.File,
+    @CurrentInternalAccount() account: AuthenticatedInternalAccount,
+    @CurrentRequestMetadata() requestMetadata: RequestMetadata,
+  ) {
+    return this.categoryImage.uploadCover(
+      id,
+      file.buffer,
+      account.accountId,
+      requestMetadata,
+    );
+  }
+
+  @Delete(':id/cover-image')
+  @ApiOperation({ summary: 'Xóa ảnh bìa của danh mục' })
+  removeCoverImage(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentInternalAccount() account: AuthenticatedInternalAccount,
+    @CurrentRequestMetadata() requestMetadata: RequestMetadata,
+  ) {
+    return this.categoryImage.removeCover(
+      id,
       account.accountId,
       requestMetadata,
     );

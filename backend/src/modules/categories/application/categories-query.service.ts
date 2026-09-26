@@ -83,4 +83,20 @@ export class CategoriesQueryService {
 
     return { success: true, data: categories };
   }
+
+  async findActiveBySlug(slug: string) {
+    const category = await this.prisma.serviceCategory.findFirst({
+      where: {
+        slug,
+        status: ServiceCategoryStatus.ACTIVE,
+      },
+      select: publicCategorySelect,
+    });
+
+    if (!category) {
+      throw new NotFoundException('Không tìm thấy danh mục dịch vụ.');
+    }
+
+    return { success: true, data: category };
+  }
 }

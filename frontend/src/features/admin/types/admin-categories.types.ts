@@ -27,22 +27,27 @@ export interface CreateCategoryPayload {
   code: string
   name: string
   slug: string
-  description?: string
-  iconUrl?: string
-  coverImageUrl?: string
+  description?: string | null
+  iconUrl?: string | null
+  sortOrder?: number
+}
+
+export interface UpdateCategoryPayload {
+  name?: string
+  slug?: string
+  description?: string | null
+  iconUrl?: string | null
   sortOrder?: number
   status?: ServiceCategoryStatus
 }
 
-export interface UpdateCategoryPayload {
-  code?: string
-  name?: string
-  slug?: string
-  description?: string
-  iconUrl?: string
-  coverImageUrl?: string
-  sortOrder?: number
-  status?: ServiceCategoryStatus
+export interface ReorderCategoryItem {
+  id: string
+  sortOrder: number
+}
+
+export interface ReorderCategoriesPayload {
+  items: ReorderCategoryItem[]
 }
 
 export interface CategoriesApiResponse {

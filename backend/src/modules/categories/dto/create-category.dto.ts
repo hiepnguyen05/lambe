@@ -5,7 +5,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   MaxLength,
   Min,
@@ -70,15 +69,6 @@ export class CreateCategoryDto {
   @IsOptional()
   @MaxLength(2048)
   iconUrl?: string | null;
-
-  @ApiPropertyOptional({
-    example: 'https://res.cloudinary.com/dvy0jonby/image/upload/v1/hair.jpg',
-  })
-  @Transform(trimString)
-  @IsUrl({ protocols: ['https'], require_protocol: true })
-  @IsOptional()
-  @MaxLength(2048)
-  coverImageUrl?: string | null;
 
   @ApiPropertyOptional({ example: 1, default: 0 })
   @Type(() => Number)

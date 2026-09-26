@@ -1,6 +1,5 @@
 import {
   Controller,
-  ParseFilePipeBuilder,
   Post,
   Query,
   UploadedFile,
@@ -19,6 +18,10 @@ import { Throttle } from '@nestjs/throttler';
 import { InternalRole } from '@prisma/client';
 import 'multer';
 import { CurrentRequestMetadata } from '../../../common/http/decorators/current-request-metadata.decorator';
+import {
+  createImageUploadPipe,
+  MAX_IMAGE_SIZE_BYTES,
+} from '../../../common/http/files/image-upload.validation';
 import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 import { CurrentInternalAccount } from '../../internal-auth/decorators/current-internal-account.decorator';
 import { InternalRoles } from '../../internal-auth/decorators/internal-roles.decorator';
@@ -27,8 +30,6 @@ import { InternalRolesGuard } from '../../internal-auth/guards/internal-roles.gu
 import type { AuthenticatedInternalAccount } from '../../internal-auth/types/authenticated-internal-account.type';
 import { UploadImageService } from '../application/upload-image.service';
 import { UploadImageQueryDto } from '../dto/upload-image-query.dto';
-
-const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
 @ApiTags('Admin Upload')
 @ApiBearerAuth('internal-token')
@@ -62,12 +63,7 @@ export class UploadController {
     FileInterceptor('file', { limits: { fileSize: MAX_IMAGE_SIZE_BYTES } }),
   )
   uploadImage(
-    @UploadedFile(
-      new ParseFilePipeBuilder()
-        .addMaxSizeValidator({ maxSize: MAX_IMAGE_SIZE_BYTES })
-        .addFileTypeValidator({ fileType: /(jpeg|png|gif|webp)$/ })
-        .build({ fileIsRequired: true }),
-    )
+    @UploadedFile(createImageUploadPipe())
     file: Express.Multer.File,
     @Query() query: UploadImageQueryDto,
     @CurrentInternalAccount() account: AuthenticatedInternalAccount,

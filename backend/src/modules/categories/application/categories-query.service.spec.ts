@@ -90,4 +90,27 @@ describe('CategoriesQueryService', () => {
     });
     expect(serviceCategory.findMany).not.toHaveBeenCalled();
   });
+
+  it('returns an active category by slug', async () => {
+    const { queryService, serviceCategory } = createCategoriesTestContext();
+    serviceCategory.findFirst.mockResolvedValue(PUBLIC_CATEGORY);
+
+    await expect(queryService.findActiveBySlug('toc')).resolves.toEqual({
+      success: true,
+      data: PUBLIC_CATEGORY,
+    });
+    expect(serviceCategory.findFirst).toHaveBeenCalledWith({
+      where: { slug: 'toc', status: ServiceCategoryStatus.ACTIVE },
+      select: expect.any(Object) as object,
+    });
+  });
+
+  it('does not expose a missing or inactive category by slug', async () => {
+    const { queryService, serviceCategory } = createCategoriesTestContext();
+    serviceCategory.findFirst.mockResolvedValue(null);
+
+    await expect(
+      queryService.findActiveBySlug('hidden-category'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
 });

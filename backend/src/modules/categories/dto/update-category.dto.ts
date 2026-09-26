@@ -4,7 +4,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUrl,
   Matches,
   MaxLength,
   Min,
@@ -43,12 +42,6 @@ export class UpdateCategoryDto {
   @IsOptional()
   @MaxLength(2048)
   iconUrl?: string | null;
-
-  @Transform(trimString)
-  @IsUrl({ protocols: ['https'], require_protocol: true })
-  @IsOptional()
-  @MaxLength(2048)
-  coverImageUrl?: string | null;
 
   @Type(() => Number)
   @IsInt()
