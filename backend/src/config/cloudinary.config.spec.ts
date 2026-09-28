@@ -11,6 +11,8 @@ describe('cloudinaryConfig', () => {
     delete process.env.CLOUDINARY_ENABLED;
     delete process.env.CLOUDINARY_CLOUD_NAME;
     delete process.env.CLOUDINARY_UPLOAD_PRESET;
+    delete process.env.CLOUDINARY_KYC_UPLOAD_PRESET;
+    delete process.env.CLOUDINARY_PRIVATE_URL_TTL_SECONDS;
     delete process.env.CLOUDINARY_API_KEY;
     delete process.env.CLOUDINARY_API_SECRET;
 
@@ -18,6 +20,8 @@ describe('cloudinaryConfig', () => {
       enabled: false,
       cloudName: '',
       uploadPreset: '',
+      kycUploadPreset: '',
+      privateUrlTtlSeconds: 300,
       apiKey: '',
       apiSecret: '',
     });

@@ -1,12 +1,12 @@
 import { validateEnvironment } from './env.validation';
 
 describe('validateEnvironment', () => {
+  const kycEncryptionKey = Buffer.alloc(32, 7).toString('base64');
   const validEnvironment = {
     NODE_ENV: 'development',
     PORT: '5000',
     DATABASE_URL: 'postgresql://localhost:5432/lambe_test',
     JWT_SECRET: 'user-jwt-secret-that-is-at-least-32-characters',
-    OTP_HASH_SECRET: 'otp-hash-secret-that-is-at-least-32-characters',
     INTERNAL_JWT_SECRET: 'internal-jwt-secret-that-is-at-least-32-characters',
   };
 
@@ -16,6 +16,8 @@ describe('validateEnvironment', () => {
       PORT: 5000,
       REDIS_ENABLED: 'false',
       CLOUDINARY_ENABLED: 'false',
+      MAIL_ENABLED: 'false',
+      FIREBASE_ENABLED: 'false',
       TRUST_PROXY: 'false',
     });
   });
@@ -74,6 +76,63 @@ describe('validateEnvironment', () => {
     ).toMatchObject({ REDIS_ENABLED: 'true' });
   });
 
+  it('requires valid SMTP credentials only when email is enabled', () => {
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, MAIL_ENABLED: 'true' }),
+    ).toThrow('Missing required environment variable: SMTP_HOST');
+
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        MAIL_ENABLED: 'true',
+        SMTP_HOST: 'smtp.gmail.com',
+        SMTP_USER: 'invalid-email',
+        SMTP_APP_PASSWORD: '1234567890123456',
+      }),
+    ).toThrow('SMTP_USER must be a valid email address');
+
+    expect(
+      validateEnvironment({
+        ...validEnvironment,
+        MAIL_ENABLED: 'true',
+        SMTP_HOST: 'smtp.gmail.com',
+        SMTP_PORT: '465',
+        SMTP_SECURE: 'true',
+        SMTP_USER: 'sender@example.com',
+        SMTP_APP_PASSWORD: 'abcd efgh ijkl mnop',
+      }),
+    ).toMatchObject({
+      MAIL_ENABLED: 'true',
+      SMTP_PORT: 465,
+      SMTP_SECURE: 'true',
+    });
+  });
+
+  it('requires Firebase project credentials when phone auth is enabled', () => {
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, FIREBASE_ENABLED: 'true' }),
+    ).toThrow('Missing required environment variable: FIREBASE_PROJECT_ID');
+
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        FIREBASE_ENABLED: 'true',
+        FIREBASE_PROJECT_ID: 'lambe-test',
+      }),
+    ).toThrow(
+      'Missing required environment variable: GOOGLE_APPLICATION_CREDENTIALS',
+    );
+
+    expect(
+      validateEnvironment({
+        ...validEnvironment,
+        FIREBASE_ENABLED: 'true',
+        FIREBASE_PROJECT_ID: 'lambe-test',
+        FIREBASE_AUTH_EMULATOR_HOST: 'localhost:9099',
+      }),
+    ).toMatchObject({ FIREBASE_ENABLED: 'true' });
+  });
+
   it('requires the internal JWT secret outside production too', () => {
     const environmentWithoutInternalSecret = { ...validEnvironment };
     delete (
@@ -112,7 +171,7 @@ describe('validateEnvironment', () => {
     },
   );
 
-  it.each(['DATABASE_URL', 'JWT_SECRET', 'OTP_HASH_SECRET'] as const)(
+  it.each(['DATABASE_URL', 'JWT_SECRET'] as const)(
     'rejects a missing required value: %s',
     (key) => {
       expect(() =>
@@ -121,7 +180,7 @@ describe('validateEnvironment', () => {
     },
   );
 
-  it.each(['JWT_SECRET', 'OTP_HASH_SECRET', 'INTERNAL_JWT_SECRET'] as const)(
+  it.each(['JWT_SECRET', 'INTERNAL_JWT_SECRET'] as const)(
     'rejects a short or placeholder secret: %s',
     (key) => {
       expect(() =>
@@ -130,10 +189,11 @@ describe('validateEnvironment', () => {
     },
   );
 
-  it('requires production-only CORS and SpeedSMS configuration', () => {
+  it('requires production-only CORS and Firebase configuration', () => {
     const productionEnvironment = {
       ...validEnvironment,
       NODE_ENV: 'production',
+      KYC_ENCRYPTION_KEY: kycEncryptionKey,
     };
 
     expect(() => validateEnvironment(productionEnvironment)).toThrow(
@@ -141,14 +201,7 @@ describe('validateEnvironment', () => {
     );
     expect(() =>
       validateEnvironment({ ...productionEnvironment, CORS_ORIGIN: '*' }),
-    ).toThrow('Missing required environment variable: SPEEDSMS_ACCESS_TOKEN');
-    expect(() =>
-      validateEnvironment({
-        ...productionEnvironment,
-        CORS_ORIGIN: 'https://admin.lambe.vn',
-        SPEEDSMS_ACCESS_TOKEN: 'YOUR_SPEEDSMS_ACCESS_TOKEN',
-      }),
-    ).toThrow('Production SpeedSMS access token cannot use a placeholder');
+    ).toThrow('FIREBASE_ENABLED must be true in production');
   });
 
   it('accepts a complete production environment', () => {
@@ -157,8 +210,21 @@ describe('validateEnvironment', () => {
         ...validEnvironment,
         NODE_ENV: 'production',
         CORS_ORIGIN: 'https://admin.lambe.vn',
-        SPEEDSMS_ACCESS_TOKEN: 'real-token',
+        FIREBASE_ENABLED: 'true',
+        FIREBASE_PROJECT_ID: 'lambe-f7213',
+        GOOGLE_APPLICATION_CREDENTIALS: '/run/secrets/firebase.json',
+        KYC_ENCRYPTION_KEY: kycEncryptionKey,
       }),
     ).toMatchObject({ NODE_ENV: 'production', PORT: 5000 });
+  });
+
+  it('requires a 32-byte base64 KYC encryption key in production', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        KYC_ENCRYPTION_KEY: 'not-a-valid-key',
+      }),
+    ).toThrow('KYC_ENCRYPTION_KEY must be a valid base64-encoded 32-byte key');
   });
 });

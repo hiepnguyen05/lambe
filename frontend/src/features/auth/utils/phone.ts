@@ -13,6 +13,10 @@ export function toVietnamesePhone(value: string): string {
   return `0${normalizeNationalPhoneInput(value)}`
 }
 
+export function toE164VietnamesePhone(value: string): string {
+  return `+84${normalizeNationalPhoneInput(value)}`
+}
+
 export function formatNationalPhone(value: string): string {
   return normalizeNationalPhoneInput(value)
     .replace(/(\d{3})(?=\d)/g, '$1 ')

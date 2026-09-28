@@ -12,15 +12,20 @@ import {
 import appConfig from './config/app.config';
 import cacheConfig from './config/cache.config';
 import cloudinaryConfig from './config/cloudinary.config';
+import firebaseConfig from './config/firebase.config';
 import internalAuthConfig from './config/internal-auth.config';
+import kycConfig from './config/kyc.config';
+import mailConfig from './config/mail.config';
 import securityConfig from './config/security.config';
-import speedSmsConfig from './config/speedsms.config';
 import { validateEnvironment } from './config/env.validation';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { CategoriesModule } from './modules/categories/categories.module';
+import { CustomerOnboardingModule } from './modules/customer-onboarding/customer-onboarding.module';
 import { HealthModule } from './modules/health/health.module';
 import { InternalAuthModule } from './modules/internal-auth/internal-auth.module';
+import { ProviderApplicationsModule } from './modules/provider-applications/provider-applications.module';
+import { ProvidersModule } from './modules/providers/providers.module';
 import { ServicesModule } from './modules/services/services.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { MaintenanceModule } from './infrastructure/maintenance/maintenance.module';
@@ -33,9 +38,11 @@ import { MaintenanceModule } from './infrastructure/maintenance/maintenance.modu
         appConfig,
         cacheConfig,
         cloudinaryConfig,
+        firebaseConfig,
         internalAuthConfig,
+        kycConfig,
+        mailConfig,
         securityConfig,
-        speedSmsConfig,
       ],
       validate: validateEnvironment,
     }),
@@ -58,6 +65,9 @@ import { MaintenanceModule } from './infrastructure/maintenance/maintenance.modu
     InternalAuthModule,
     CategoriesModule,
     ServicesModule,
+    CustomerOnboardingModule,
+    ProviderApplicationsModule,
+    ProvidersModule,
     HealthModule,
     MaintenanceModule,
     UploadModule,

@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { ServiceTargetAudience } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateServiceDto } from './create-service.dto';
@@ -24,6 +25,7 @@ describe('Service DTOs', () => {
       minPriceAmount: '50000',
       maxPriceAmount: '300000',
       defaultDurationMinutes: '45',
+      targetAudience: ServiceTargetAudience.MEN,
     });
 
     await expect(validate(dto)).resolves.toHaveLength(0);
@@ -34,6 +36,7 @@ describe('Service DTOs', () => {
       minPriceAmount: 50000,
       maxPriceAmount: 300000,
       defaultDurationMinutes: 45,
+      targetAudience: ServiceTargetAudience.MEN,
     });
   });
 
@@ -93,6 +96,9 @@ describe('Service DTOs', () => {
   it('normalizes and validates public query and slug parameters', async () => {
     const query = plainToInstance(PublicServiceQueryDto, {
       categorySlug: ' TOC ',
+      targetAudience: ServiceTargetAudience.MEN,
+      search: ' cắt tóc ',
+      maxPriceAmount: '300000',
     });
     const slug = plainToInstance(ServiceSlugParamDto, {
       slug: ' CAT-TOC-NAM ',
@@ -104,6 +110,8 @@ describe('Service DTOs', () => {
     await expect(validate(slug)).resolves.toHaveLength(0);
     await expect(validate(invalid)).resolves.not.toHaveLength(0);
     expect(query.categorySlug).toBe('toc');
+    expect(query.search).toBe('cắt tóc');
+    expect(query.maxPriceAmount).toBe(300000);
     expect(slug.slug).toBe('cat-toc-nam');
   });
 

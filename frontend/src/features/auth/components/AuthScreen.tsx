@@ -1,10 +1,25 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import type { ConfirmationResult } from 'firebase/auth'
 import lambeLogo from '../../../assets/lambe-logo.svg'
+import { firebaseAuth } from '../../../config/firebase'
 import { authApi } from '../api/auth.api'
 import { authSession } from '../services/auth-session'
-import type { User } from '../types/auth.types'
+import {
+  clearFirebaseRecaptcha,
+  getFirebasePhoneAuthErrorMessage,
+  linkFirebaseUserWithPhone,
+  sendFirebasePhoneOtp,
+  signOutFirebaseUser,
+} from '../services/firebase-phone-auth'
+import {
+  getFirebaseSocialAuthErrorMessage,
+  signInWithSocialProvider,
+  type SocialAuthProvider,
+} from '../services/firebase-social-auth'
+import type { FirebaseTokenExchangeResponse, User } from '../types/auth.types'
 import {
   formatInternationalPhone,
+  toE164VietnamesePhone,
   toVietnamesePhone,
   VIETNAMESE_PHONE_PATTERN,
 } from '../utils/phone'
@@ -16,7 +31,14 @@ import { LoggedInView } from './LoggedInView'
 import './AuthScreen.css'
 
 type AuthStep = 'phone' | 'otp' | 'profile'
-type PendingAction = 'send' | 'verify' | 'register' | 'resend' | null
+type PendingAction =
+  | 'send'
+  | 'verify'
+  | 'register'
+  | 'resend'
+  | 'google'
+  | 'facebook'
+  | null
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error
@@ -25,12 +47,14 @@ function getErrorMessage(error: unknown): string {
 }
 
 export function AuthScreen() {
+  const confirmationResultRef = useRef<ConfirmationResult | null>(null)
   const [step, setStep] = useState<AuthStep>('phone')
   const [phone, setPhone] = useState('')
   const [submittedPhone, setSubmittedPhone] = useState('')
   const [otpCode, setOtpCode] = useState('')
   const [fullName, setFullName] = useState('')
   const [registrationToken, setRegistrationToken] = useState('')
+  const [isLinkingSocialAccount, setIsLinkingSocialAccount] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [isRestoringSession, setIsRestoringSession] = useState(() =>
@@ -71,6 +95,8 @@ export function AuthScreen() {
     }
   }, [])
 
+  useEffect(() => () => clearFirebaseRecaptcha(), [])
+
   useEffect(() => {
     if (cooldown <= 0) return
 
@@ -98,14 +124,35 @@ export function AuthScreen() {
     setPendingAction(isResend ? 'resend' : 'send')
 
     try {
-      const response = await authApi.sendOtp(normalizedPhone)
+      const internationalPhone = toE164VietnamesePhone(normalizedPhone)
+
+      if (isLinkingSocialAccount) {
+        const currentFirebaseUser = firebaseAuth.currentUser
+
+        if (!currentFirebaseUser) {
+          throw new Error(
+            'Phiên đăng nhập mạng xã hội đã hết hạn. Vui lòng đăng nhập lại.',
+          )
+        }
+
+        const idToken = await currentFirebaseUser.getIdToken()
+        await authApi.checkFirebasePhoneLink(idToken, normalizedPhone)
+      }
+
+      confirmationResultRef.current = isLinkingSocialAccount
+        ? await linkFirebaseUserWithPhone(internationalPhone)
+        : await sendFirebasePhoneOtp(internationalPhone)
       setSubmittedPhone(normalizedPhone)
       setOtpCode('')
       setStep('otp')
       setCooldown(60)
-      setMessage(response.message)
+      setMessage(
+        isLinkingSocialAccount
+          ? 'Mã OTP đã được gửi để liên kết số điện thoại với tài khoản.'
+          : 'Mã OTP đã được gửi đến số điện thoại của bạn.',
+      )
     } catch (requestError) {
-      setError(getErrorMessage(requestError))
+      setError(getFirebasePhoneAuthErrorMessage(requestError))
     } finally {
       setPendingAction(null)
     }
@@ -114,6 +161,47 @@ export function AuthScreen() {
   const handlePhoneSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     void sendOtp()
+  }
+
+  const applyFirebaseExchange = (
+    response: FirebaseTokenExchangeResponse,
+  ) => {
+    const result = response.data
+
+    if (result.requiresPhoneVerification) {
+      setIsLinkingSocialAccount(true)
+      if (result.suggestedFullName) {
+        setFullName(result.suggestedFullName)
+      }
+      setMessage(response.message)
+      return
+    }
+
+    setIsLinkingSocialAccount(false)
+    if (result.isNewUser) {
+      setRegistrationToken(result.registrationToken)
+      setStep('profile')
+      setMessage(response.message)
+      return
+    }
+
+    authSession.saveAccessToken(result.accessToken)
+    setUser(result.user)
+  }
+
+  const handleSocialSignIn = async (provider: SocialAuthProvider) => {
+    clearFeedback()
+    setPendingAction(provider)
+
+    try {
+      const idToken = await signInWithSocialProvider(provider)
+      const response = await authApi.exchangeFirebaseToken(idToken)
+      applyFirebaseExchange(response)
+    } catch (requestError) {
+      setError(getFirebaseSocialAuthErrorMessage(requestError))
+    } finally {
+      setPendingAction(null)
+    }
   }
 
   const handleOtpSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -128,19 +216,19 @@ export function AuthScreen() {
     setPendingAction('verify')
 
     try {
-      const response = await authApi.verifyOtp(submittedPhone, otpCode)
+      const confirmationResult = confirmationResultRef.current
 
-      if (response.isNewUser) {
-        setRegistrationToken(response.data.registrationToken)
-        setStep('profile')
-        setMessage(response.message)
+      if (!confirmationResult) {
+        setError('Phiên gửi OTP đã hết hạn. Vui lòng gửi lại mã.')
         return
       }
 
-      authSession.saveAccessToken(response.data.accessToken)
-      setUser(response.data.user)
+      const credential = await confirmationResult.confirm(otpCode)
+      const idToken = await credential.user.getIdToken(true)
+      const response = await authApi.exchangeFirebaseToken(idToken)
+      applyFirebaseExchange(response)
     } catch (requestError) {
-      setError(getErrorMessage(requestError))
+      setError(getFirebasePhoneAuthErrorMessage(requestError))
     } finally {
       setPendingAction(null)
     }
@@ -173,6 +261,7 @@ export function AuthScreen() {
   }
 
   const handleLogout = () => {
+    void signOutFirebaseUser().catch(() => undefined)
     authSession.clear()
     setUser(null)
     setStep('phone')
@@ -181,16 +270,21 @@ export function AuthScreen() {
     setOtpCode('')
     setFullName('')
     setRegistrationToken('')
+    setIsLinkingSocialAccount(false)
     setCooldown(0)
+    confirmationResultRef.current = null
     clearFeedback()
   }
 
   const goBackToPhone = () => {
+    void signOutFirebaseUser().catch(() => undefined)
     setStep('phone')
     setOtpCode('')
     setRegistrationToken('')
+    setIsLinkingSocialAccount(false)
     setSubmittedPhone('')
     setCooldown(0)
+    confirmationResultRef.current = null
     clearFeedback()
   }
 
@@ -226,10 +320,15 @@ export function AuthScreen() {
 
   // Step heading texts
   const stepHeadings = {
-    phone: {
-      title: 'Đăng nhập hoặc Đăng ký',
-      subtitle: 'Nhập số điện thoại để tiếp tục',
-    },
+    phone: isLinkingSocialAccount
+      ? {
+          title: 'Liên kết số điện thoại',
+          subtitle: 'Xác minh số điện thoại để hoàn tất tài khoản Lambe',
+        }
+      : {
+          title: 'Đăng nhập hoặc Đăng ký',
+          subtitle: 'Chọn phương thức phù hợp để tiếp tục',
+        },
     otp: {
       title: 'Nhập mã xác thực OTP',
       subtitle: `Mã gồm 6 chữ số đã được gửi đến ${formatInternationalPhone(
@@ -269,12 +368,19 @@ export function AuthScreen() {
 
           {/* Main Interaction Card */}
           <div className="auth-interaction-card">
+            <div id="firebase-recaptcha-container" />
             {step === 'phone' && (
               <PhoneStep
                 phone={phone}
                 onPhoneChange={setPhone}
                 onSubmit={handlePhoneSubmit}
                 isPending={pendingAction === 'send'}
+                isSocialPending={
+                  pendingAction === 'google' || pendingAction === 'facebook'
+                }
+                isLinkingSocialAccount={isLinkingSocialAccount}
+                onGoogleSignIn={() => void handleSocialSignIn('google')}
+                onFacebookSignIn={() => void handleSocialSignIn('facebook')}
                 error={error}
                 message={message}
               />

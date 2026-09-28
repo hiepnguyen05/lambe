@@ -1,5 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/persistence/postgres/prisma.service';
 import type { CompleteRegistrationDto } from '../dto/complete-registration.dto';
 import { toPublicUser } from './user.model';
@@ -13,13 +13,20 @@ export class UserRegistrationService {
   ) {}
 
   async completeRegistration(dto: CompleteRegistrationDto) {
-    const phone = await this.tokenService.verifyRegistrationToken(
+    const identity = await this.tokenService.verifyRegistrationToken(
       dto.registrationToken,
     );
 
     try {
       const newUser = await this.prisma.user.create({
-        data: { phone, fullName: dto.fullName },
+        data: {
+          phone: identity.phone,
+          firebaseUid: identity.firebaseUid,
+          fullName: dto.fullName,
+          roles: { create: { role: UserRole.CUSTOMER } },
+          customerProfile: { create: {} },
+        },
+        include: { roles: true, customerProfile: true },
       });
 
       return {
@@ -39,7 +46,7 @@ export class UserRegistrationService {
         error.code === 'P2002'
       ) {
         throw new ConflictException(
-          'Số điện thoại này đã có tài khoản trên hệ thống.',
+          'Số điện thoại hoặc danh tính xác thực đã có tài khoản trên hệ thống.',
         );
       }
 

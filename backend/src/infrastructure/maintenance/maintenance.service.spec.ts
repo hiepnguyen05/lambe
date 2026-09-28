@@ -5,17 +5,14 @@ describe('MaintenanceService', () => {
   let service: MaintenanceService;
   let prisma: jest.Mocked<PrismaService>;
   let queryLock: jest.Mock;
-  let deleteOtps: jest.Mock;
   let deleteSessions: jest.Mock;
 
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date('2026-09-25T03:00:00.000Z'));
     queryLock = jest.fn().mockResolvedValue([{ acquired: true }]);
-    deleteOtps = jest.fn().mockResolvedValue({ count: 5 });
     deleteSessions = jest.fn().mockResolvedValue({ count: 2 });
     const transaction = {
       $queryRaw: queryLock,
-      otpCode: { deleteMany: deleteOtps },
       internalSession: { deleteMany: deleteSessions },
     };
     prisma = {
@@ -32,17 +29,6 @@ describe('MaintenanceService', () => {
     await service.cleanupExpiredRecords();
 
     expect(queryLock).toHaveBeenCalledTimes(1);
-    expect(deleteOtps).toHaveBeenCalledWith({
-      where: {
-        OR: [
-          { expiresAt: { lt: new Date('2026-09-25T03:00:00.000Z') } },
-          {
-            isUsed: true,
-            createdAt: { lt: new Date('2026-09-24T03:00:00.000Z') },
-          },
-        ],
-      },
-    });
     expect(deleteSessions).toHaveBeenCalledWith({
       where: {
         OR: [
@@ -58,16 +44,15 @@ describe('MaintenanceService', () => {
 
     await service.cleanupExpiredRecords();
 
-    expect(deleteOtps).not.toHaveBeenCalled();
     expect(deleteSessions).not.toHaveBeenCalled();
   });
 
   it('rethrows database failures so monitoring can detect the failed job', async () => {
-    deleteOtps.mockRejectedValue(new Error('database offline'));
+    deleteSessions.mockRejectedValue(new Error('database offline'));
 
     await expect(service.cleanupExpiredRecords()).rejects.toThrow(
       'database offline',
     );
-    expect(deleteSessions).not.toHaveBeenCalled();
+    expect(deleteSessions).toHaveBeenCalledTimes(1);
   });
 });

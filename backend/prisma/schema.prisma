@@ -13,10 +13,67 @@ enum UserStatus {
   BLOCKED
 }
 
-enum OtpType {
-  REGISTER
-  LOGIN
-  RESET_PASSWORD
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum ProviderType {
+  INDIVIDUAL
+  ORGANIZATION
+}
+
+enum ProviderApplicationStatus {
+  DRAFT
+  PENDING_REVIEW
+  NEEDS_CHANGES
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ProviderApplicationSection {
+  IDENTITY
+  PORTRAIT
+  EXPERTISE
+  SERVICES
+  TERMS
+}
+
+enum ReviewStatus {
+  PENDING
+  VERIFIED
+  NEEDS_CHANGES
+  REJECTED
+}
+
+enum ProviderDocumentType {
+  PORTRAIT
+  ID_CARD_FRONT
+  ID_CARD_BACK
+  IDENTITY_SELFIE
+  PROFESSIONAL_CERTIFICATE
+  BUSINESS_LICENSE
+  PORTFOLIO
+  OTHER
+}
+
+enum ProviderProfileStatus {
+  SETUP_REQUIRED
+  ACTIVE
+  SUSPENDED
+}
+
+enum ProviderServiceStatus {
+  INACTIVE
+  ACTIVE
+  SUSPENDED
 }
 
 enum InternalAccountStatus {
@@ -29,6 +86,9 @@ enum InternalAccountStatus {
 enum InternalRole {
   ADMIN
   MODERATOR
+  SUPPORT
+  KYC_REVIEWER
+  SERVICE_REVIEWER
 }
 
 enum ServiceCategoryStatus {
@@ -43,59 +103,90 @@ enum ServiceStatus {
   ARCHIVED
 }
 
+enum ServiceTargetAudience {
+  ALL
+  MEN
+  WOMEN
+}
+
+enum CustomerOnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+enum CustomerPricePreference {
+  NO_PREFERENCE
+  BUDGET
+  BALANCED
+  PREMIUM
+}
+
 model User {
-  id        String     @id @default(uuid())
-  phone     String     @unique
-  fullName  String?
-  status    UserStatus @default(ACTIVE)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id                     String                  @id @default(uuid())
+  phone                  String                  @unique
+  firebaseUid            String?                 @unique
+  phoneVerifiedAt        DateTime                @default(now())
+  fullName               String?
+  status                 UserStatus              @default(ACTIVE)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  roles                  UserRoleAssignment[]
+  providerApplications   ProviderApplication[]
+  providerProfile        ProviderProfile?
+  providerIdentityClaims ProviderIdentityClaim[]
+  customerProfile        CustomerProfile?
+  customerAddresses      CustomerAddress[]
+  auditLogs              AuditLog[]
 
   @@map("users")
 }
 
-model OtpCode {
-  id           String   @id @default(uuid())
-  phone        String
-  codeHash     String
-  type         OtpType  @default(REGISTER)
-  expiresAt    DateTime
-  isUsed       Boolean  @default(false)
-  attemptCount Int      @default(0)
-  createdAt    DateTime @default(now())
+model UserRoleAssignment {
+  id                  String               @id @default(uuid())
+  userId              String
+  role                UserRole
+  sourceApplicationId String?
+  assignedAt          DateTime             @default(now())
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceApplication   ProviderApplication? @relation(fields: [sourceApplicationId], references: [id], onDelete: SetNull)
 
-  @@index([phone, isUsed, expiresAt])
-  @@index([phone, createdAt])
-  @@index([expiresAt])
-  @@index([isUsed, createdAt])
-  @@map("otp_codes")
+  @@unique([userId, role])
+  @@index([role])
+  @@index([sourceApplicationId])
+  @@map("user_role_assignments")
 }
 
 model InternalAccount {
-  id                 String                   @id @default(uuid())
-  username           String
-  normalizedUsername String                   @unique
-  fullName           String
-  email              String?                  @unique
-  status             InternalAccountStatus    @default(INVITED)
-  mustChangePassword Boolean                  @default(true)
-  failedLoginCount   Int                      @default(0)
-  lockedUntil        DateTime?
-  lastLoginAt        DateTime?
-  passwordChangedAt  DateTime?
-  tokenVersion       Int                      @default(0)
-  createdById        String?
-  disabledById       String?
-  disabledAt         DateTime?
-  createdAt          DateTime                 @default(now())
-  updatedAt          DateTime                 @updatedAt
-  credential         InternalCredential?
-  roles              InternalRoleAssignment[]
-  sessions           InternalSession[]
-  categoriesCreated  ServiceCategory[]        @relation("ServiceCategoryCreatedBy")
-  categoriesUpdated  ServiceCategory[]        @relation("ServiceCategoryUpdatedBy")
-  servicesCreated    Service[]                @relation("ServiceCreatedBy")
-  servicesUpdated    Service[]                @relation("ServiceUpdatedBy")
+  id                           String                        @id @default(uuid())
+  username                     String
+  normalizedUsername           String                        @unique
+  fullName                     String
+  email                        String?                       @unique
+  status                       InternalAccountStatus         @default(INVITED)
+  mustChangePassword           Boolean                       @default(true)
+  failedLoginCount             Int                           @default(0)
+  lockedUntil                  DateTime?
+  lastLoginAt                  DateTime?
+  passwordChangedAt            DateTime?
+  tokenVersion                 Int                           @default(0)
+  createdById                  String?
+  disabledById                 String?
+  disabledAt                   DateTime?
+  createdAt                    DateTime                      @default(now())
+  updatedAt                    DateTime                      @updatedAt
+  credential                   InternalCredential?
+  roles                        InternalRoleAssignment[]
+  sessions                     InternalSession[]
+  categoriesCreated            ServiceCategory[]             @relation("ServiceCategoryCreatedBy")
+  categoriesUpdated            ServiceCategory[]             @relation("ServiceCategoryUpdatedBy")
+  servicesCreated              Service[]                     @relation("ServiceCreatedBy")
+  servicesUpdated              Service[]                     @relation("ServiceUpdatedBy")
+  providerApplicationsReviewed ProviderApplication[]         @relation("ProviderApplicationReviewedBy")
+  providerChecksReviewed       ProviderApplicationCheck[]    @relation("ProviderApplicationCheckReviewedBy")
+  providerDocumentsReviewed    ProviderApplicationDocument[] @relation("ProviderApplicationDocumentReviewedBy")
+  providerServicesReviewed     ProviderApplicationService[]  @relation("ProviderApplicationServiceReviewedBy")
 
   @@index([status])
   @@map("internal_accounts")
@@ -151,6 +242,7 @@ model InternalSession {
 
 model AuditLog {
   id                     String   @id @default(uuid())
+  actorUserId            String?
   actorInternalAccountId String?
   action                 String
   resourceType           String
@@ -161,7 +253,9 @@ model AuditLog {
   userAgent              String?
   requestId              String?
   createdAt              DateTime @default(now())
+  actorUser              User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
+  @@index([actorUserId, createdAt])
   @@index([actorInternalAccountId, createdAt])
   @@index([resourceType, resourceId])
   @@index([requestId])
@@ -169,24 +263,25 @@ model AuditLog {
 }
 
 model ServiceCategory {
-  id                 String                @id @default(uuid())
-  code               String                @unique
+  id                 String                     @id @default(uuid())
+  code               String                     @unique
   name               String
-  normalizedName     String                @unique
-  slug               String                @unique
+  normalizedName     String                     @unique
+  slug               String                     @unique
   description        String?
   iconUrl            String?
   coverImageUrl      String?
   coverImagePublicId String?
-  sortOrder          Int                   @default(0)
-  status             ServiceCategoryStatus @default(INACTIVE)
+  sortOrder          Int                        @default(0)
+  status             ServiceCategoryStatus      @default(INACTIVE)
   createdById        String?
   updatedById        String?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-  createdBy          InternalAccount?      @relation("ServiceCategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy          InternalAccount?      @relation("ServiceCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  createdBy          InternalAccount?           @relation("ServiceCategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy          InternalAccount?           @relation("ServiceCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   services           Service[]
+  customerInterests  CustomerCategoryInterest[]
 
   @@index([status, sortOrder])
   @@index([createdById])
@@ -195,34 +290,359 @@ model ServiceCategory {
 }
 
 model Service {
-  id                     String           @id @default(uuid())
-  categoryId             String
-  code                   String           @unique
-  name                   String
-  normalizedName         String
-  slug                   String           @unique
-  description            String?
-  iconUrl                String?
-  coverImageUrl          String?
-  coverImagePublicId     String?
-  minPriceAmount         Int
-  maxPriceAmount         Int
-  currencyCode           String           @default("VND")
-  defaultDurationMinutes Int?
-  sortOrder              Int              @default(0)
-  status                 ServiceStatus    @default(INACTIVE)
-  createdById            String?
-  updatedById            String?
-  createdAt              DateTime         @default(now())
-  updatedAt              DateTime         @updatedAt
-  category               ServiceCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  createdBy              InternalAccount? @relation("ServiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy              InternalAccount? @relation("ServiceUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  id                          String                       @id @default(uuid())
+  categoryId                  String
+  code                        String                       @unique
+  name                        String
+  normalizedName              String
+  slug                        String                       @unique
+  description                 String?
+  iconUrl                     String?
+  coverImageUrl               String?
+  coverImagePublicId          String?
+  minPriceAmount              Int
+  maxPriceAmount              Int
+  currencyCode                String                       @default("VND")
+  defaultDurationMinutes      Int?
+  targetAudience              ServiceTargetAudience        @default(ALL)
+  requiresCertificate         Boolean                      @default(false)
+  minPortfolioImages          Int                          @default(0)
+  minExperienceYears          Int                          @default(0)
+  sortOrder                   Int                          @default(0)
+  status                      ServiceStatus                @default(INACTIVE)
+  createdById                 String?
+  updatedById                 String?
+  createdAt                   DateTime                     @default(now())
+  updatedAt                   DateTime                     @updatedAt
+  category                    ServiceCategory              @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  createdBy                   InternalAccount?             @relation("ServiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy                   InternalAccount?             @relation("ServiceUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  providerApplicationServices ProviderApplicationService[]
+  providerServices            ProviderService[]
+  customerInterests           CustomerServiceInterest[]
 
   @@unique([categoryId, normalizedName])
   @@index([categoryId, status, sortOrder])
+  @@index([targetAudience, status, sortOrder])
   @@index([status, sortOrder])
   @@index([createdById])
   @@index([updatedById])
   @@map("services")
+}
+
+model CustomerProfile {
+  id                String                     @id @default(uuid())
+  userId            String                     @unique
+  gender            Gender?
+  preferredAudience ServiceTargetAudience      @default(ALL)
+  pricePreference   CustomerPricePreference    @default(NO_PREFERENCE)
+  onboardingStatus  CustomerOnboardingStatus   @default(NOT_STARTED)
+  completedAt       DateTime?
+  skippedAt         DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  user              User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryInterests CustomerCategoryInterest[]
+  serviceInterests  CustomerServiceInterest[]
+
+  @@index([onboardingStatus])
+  @@map("customer_profiles")
+}
+
+model CustomerCategoryInterest {
+  id                String          @id @default(uuid())
+  customerProfileId String
+  categoryId        String
+  createdAt         DateTime        @default(now())
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  category          ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([customerProfileId, categoryId])
+  @@index([categoryId])
+  @@map("customer_category_interests")
+}
+
+model CustomerServiceInterest {
+  id                String          @id @default(uuid())
+  customerProfileId String
+  serviceId         String
+  createdAt         DateTime        @default(now())
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  service           Service         @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([customerProfileId, serviceId])
+  @@index([serviceId])
+  @@map("customer_service_interests")
+}
+
+model CustomerAddress {
+  id          String   @id @default(uuid())
+  userId      String
+  label       String
+  addressLine String
+  latitude    Float
+  longitude   Float
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isDefault])
+  @@map("customer_addresses")
+}
+
+model ProviderApplication {
+  id                         String                                @id @default(uuid())
+  userId                     String
+  providerType               ProviderType
+  status                     ProviderApplicationStatus             @default(DRAFT)
+  revisionNumber             Int                                   @default(0)
+  legalFullName              String?
+  birthDate                  DateTime?                             @db.Date
+  gender                     Gender?
+  email                      String?
+  emailVerifiedAt            DateTime?
+  biography                  String?
+  nationalIdNumber           String?
+  nationalIdEncrypted        String?
+  nationalIdHash             String?
+  nationalIdLast4            String?
+  experienceYears            Int?
+  organizationName           String?
+  taxCode                    String?
+  businessRegistrationNumber String?
+  registeredAddress          String?
+  representativeName         String?
+  submittedAt                DateTime?
+  reviewedAt                 DateTime?
+  reviewedById               String?
+  decisionReason             String?
+  withdrawnAt                DateTime?
+  createdAt                  DateTime                              @default(now())
+  updatedAt                  DateTime                              @updatedAt
+  user                       User                                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  reviewedBy                 InternalAccount?                      @relation("ProviderApplicationReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  revisions                  ProviderApplicationRevision[]
+  checks                     ProviderApplicationCheck[]
+  documents                  ProviderApplicationDocument[]
+  services                   ProviderApplicationService[]
+  termsAcceptances           ProviderApplicationTermsAcceptance[]
+  grantedRoles               UserRoleAssignment[]
+  providerProfile            ProviderProfile?
+  providerServices           ProviderService[]
+  emailVerification          ProviderApplicationEmailVerification?
+
+  @@index([userId, status])
+  @@index([status, submittedAt])
+  @@index([reviewedById])
+  @@index([nationalIdHash])
+  @@map("provider_applications")
+}
+
+// Identity ownership survives rejected/withdrawn applications without duplicating PII.
+model ProviderIdentityClaim {
+  nationalIdHash String   @id
+  userId         String
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("provider_identity_claims")
+}
+
+model ProviderApplicationEmailVerification {
+  applicationId String              @id
+  email         String
+  nonce         String
+  codeHash      String
+  attempts      Int                 @default(0)
+  expiresAt     DateTime
+  requestedAt   DateTime            @default(now())
+  application   ProviderApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("provider_application_email_verifications")
+}
+
+model MailOutbox {
+  id               String    @id @default(uuid())
+  deduplicationKey String    @unique
+  recipient        String
+  subject          String
+  text             String
+  html             String
+  attempts         Int       @default(0)
+  availableAt      DateTime  @default(now())
+  lockedUntil      DateTime?
+  sentAt           DateTime?
+  failedAt         DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([sentAt, failedAt, availableAt])
+  @@map("mail_outbox")
+}
+
+model ProviderApplicationRevision {
+  id             String              @id @default(uuid())
+  applicationId  String
+  revisionNumber Int
+  snapshot       Json
+  submittedAt    DateTime            @default(now())
+  application    ProviderApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, revisionNumber])
+  @@map("provider_application_revisions")
+}
+
+model ProviderApplicationCheck {
+  id            String                     @id @default(uuid())
+  applicationId String
+  section       ProviderApplicationSection
+  status        ReviewStatus               @default(PENDING)
+  reviewNote    String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+  application   ProviderApplication        @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reviewedBy    InternalAccount?           @relation("ProviderApplicationCheckReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([applicationId, section])
+  @@index([status])
+  @@index([reviewedById])
+  @@map("provider_application_checks")
+}
+
+model ProviderApplicationDocument {
+  id                   String                      @id @default(uuid())
+  applicationId        String
+  applicationServiceId String?
+  type                 ProviderDocumentType
+  fileUrl              String
+  publicId             String
+  fileFormat           String?
+  deliveryType         String                      @default("upload")
+  isPublicCandidate    Boolean                     @default(false)
+  status               ReviewStatus                @default(PENDING)
+  reviewNote           String?
+  reviewedById         String?
+  reviewedAt           DateTime?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  application          ProviderApplication         @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  applicationService   ProviderApplicationService? @relation(fields: [applicationServiceId], references: [id], onDelete: Cascade)
+  reviewedBy           InternalAccount?            @relation("ProviderApplicationDocumentReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([applicationId, type])
+  @@index([applicationServiceId])
+  @@index([reviewedById])
+  @@map("provider_application_documents")
+}
+
+model ProviderApplicationService {
+  id                  String                        @id @default(uuid())
+  applicationId       String
+  serviceId           String
+  proposedPriceAmount Int
+  durationMinutes     Int?
+  description         String?
+  status              ReviewStatus                  @default(PENDING)
+  reviewNote          String?
+  reviewedById        String?
+  reviewedAt          DateTime?
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+  application         ProviderApplication           @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  service             Service                       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  reviewedBy          InternalAccount?              @relation("ProviderApplicationServiceReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  documents           ProviderApplicationDocument[]
+
+  @@unique([applicationId, serviceId])
+  @@index([serviceId, status])
+  @@index([reviewedById])
+  @@map("provider_application_services")
+}
+
+model ProviderApplicationTermsAcceptance {
+  id            String              @id @default(uuid())
+  applicationId String
+  termsVersion  String
+  acceptedAt    DateTime            @default(now())
+  ipAddress     String?
+  userAgent     String?
+  application   ProviderApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, termsVersion])
+  @@map("provider_application_terms_acceptances")
+}
+
+model ProviderProfile {
+  id                  String                @id @default(uuid())
+  userId              String                @unique
+  sourceApplicationId String                @unique
+  providerType        ProviderType
+  displayName         String
+  avatarUrl           String?
+  biography           String?
+  experienceYears     Int?
+  status              ProviderProfileStatus @default(SETUP_REQUIRED)
+  serviceAreaName     String?
+  serviceRadiusKm     Int?
+  setupCompletedAt    DateTime?
+  workingHours        ProviderWorkingHour[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  user                User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  sourceApplication   ProviderApplication   @relation(fields: [sourceApplicationId], references: [id], onDelete: Restrict)
+  wallet              ProviderWallet?
+  services            ProviderService[]
+
+  @@index([status])
+  @@map("provider_profiles")
+}
+
+model ProviderWorkingHour {
+  id          String          @id @default(uuid())
+  providerId  String
+  dayOfWeek   Int
+  startMinute Int
+  endMinute   Int
+  provider    ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, dayOfWeek, startMinute])
+  @@map("provider_working_hours")
+}
+
+model ProviderWallet {
+  id            String          @id @default(uuid())
+  providerId    String          @unique
+  balanceAmount Int             @default(0)
+  heldAmount    Int             @default(0)
+  currencyCode  String          @default("VND")
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  provider      ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Restrict)
+
+  @@map("provider_wallets")
+}
+
+model ProviderService {
+  id                  String                @id @default(uuid())
+  providerId          String
+  serviceId           String
+  sourceApplicationId String
+  priceAmount         Int
+  durationMinutes     Int?
+  description         String?
+  status              ProviderServiceStatus @default(INACTIVE)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  provider            ProviderProfile       @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  service             Service               @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  sourceApplication   ProviderApplication   @relation(fields: [sourceApplicationId], references: [id], onDelete: Restrict)
+
+  @@unique([providerId, serviceId])
+  @@index([serviceId, status])
+  @@index([sourceApplicationId])
+  @@map("provider_services")
 }

@@ -12,28 +12,38 @@ interface ApiResponse {
   message: string
 }
 
-export type SendOtpResponse = ApiResponse
-
-export type VerifyOtpResponse =
-  | (ApiResponse & {
+export type FirebaseTokenExchangeResponse = ApiResponse & {
+  data:
+    | {
+      requiresPhoneVerification: true
+      provider: 'google.com' | 'facebook.com'
+      email: string | null
+      suggestedFullName: string | null
+    }
+    | {
+      requiresPhoneVerification: false
       isNewUser: true
-      data: {
-        phone: string
-        registrationToken: string
-      }
-    })
-  | (ApiResponse & {
+      phone: string
+      registrationToken: string
+    }
+    | {
+      requiresPhoneVerification: false
       isNewUser: false
-      data: {
-        accessToken: string
-        user: User
-      }
-    })
+      accessToken: string
+      user: User
+    }
+}
 
 export interface AuthenticatedResponse extends ApiResponse {
   data: {
     accessToken: string
     user: User
+  }
+}
+
+export interface PhoneLinkCheckResponse extends ApiResponse {
+  data: {
+    canLink: true
   }
 }
 

@@ -3,7 +3,11 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { ServiceCategoryStatus, ServiceStatus } from '@prisma/client';
+import {
+  ServiceCategoryStatus,
+  ServiceStatus,
+  ServiceTargetAudience,
+} from '@prisma/client';
 import {
   ADMIN_SERVICE,
   BASE_SERVICE,
@@ -29,6 +33,7 @@ describe('ServicesCommandService', () => {
           minPriceAmount: 50000,
           maxPriceAmount: 300000,
           defaultDurationMinutes: 45,
+          targetAudience: ServiceTargetAudience.MEN,
         },
         SERVICE_ACTOR.id,
       ),
@@ -40,6 +45,7 @@ describe('ServicesCommandService', () => {
           normalizedName: 'cat toc nam',
           currencyCode: 'VND',
           status: ServiceStatus.INACTIVE,
+          targetAudience: ServiceTargetAudience.MEN,
         }) as object,
       }),
     );
@@ -185,6 +191,7 @@ describe('ServicesCommandService', () => {
         description: ' Mô tả ',
         iconUrl: ' content_cut ',
         defaultDurationMinutes: null,
+        targetAudience: ServiceTargetAudience.ALL,
         sortOrder: 2,
       },
       SERVICE_ACTOR.id,
@@ -198,6 +205,7 @@ describe('ServicesCommandService', () => {
           description: 'Mô tả',
           iconUrl: 'content_cut',
           defaultDurationMinutes: null,
+          targetAudience: ServiceTargetAudience.ALL,
           sortOrder: 2,
         }) as object,
       }),

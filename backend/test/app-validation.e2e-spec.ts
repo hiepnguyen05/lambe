@@ -29,24 +29,17 @@ describe('Application validation (e2e)', () => {
       });
   });
 
-  it('/api/auth/send-otp rejects an invalid phone number', () => {
+  it('/api/auth/firebase rejects a malformed Firebase token', () => {
     return request(context.app.getHttpServer())
-      .post('/api/auth/send-otp')
-      .send({ phone: '0|12345678' })
+      .post('/api/auth/firebase')
+      .send({ idToken: 'short-token' })
       .expect(400);
   });
 
-  it('/api/auth/send-otp rejects fields outside the DTO', () => {
+  it('/api/auth/firebase rejects fields outside the DTO', () => {
     return request(context.app.getHttpServer())
-      .post('/api/auth/send-otp')
-      .send({ phone: '0363668951', role: 'ADMIN' })
-      .expect(400);
-  });
-
-  it('/api/auth/verify-otp rejects a malformed OTP', () => {
-    return request(context.app.getHttpServer())
-      .post('/api/auth/verify-otp')
-      .send({ phone: '0363668951', code: '12AB56' })
+      .post('/api/auth/firebase')
+      .send({ idToken: 'x'.repeat(100), role: 'ADMIN' })
       .expect(400);
   });
 

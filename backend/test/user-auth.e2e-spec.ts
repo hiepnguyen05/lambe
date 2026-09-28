@@ -12,21 +12,40 @@ describe('User authentication (e2e)', () => {
     await context?.app.close();
   });
 
-  it('completes OTP registration and authenticated profile flow', async () => {
+  it('requires a verified phone before exchanging a Google identity', async () => {
+    context.setVerifiedIdentity({
+      uid: 'firebase-google-e2e-user',
+      signInProvider: 'google.com',
+      email: 'customer@example.com',
+      displayName: 'E2E Google Customer',
+    });
+
+    await request(context.app.getHttpServer())
+      .post('/api/auth/firebase')
+      .send({ idToken: 'x'.repeat(100) })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          success: true,
+          data: {
+            requiresPhoneVerification: true,
+            provider: 'google.com',
+            email: 'customer@example.com',
+            suggestedFullName: 'E2E Google Customer',
+          },
+        });
+      });
+  });
+
+  it('completes Firebase phone registration and authenticated profile flow', async () => {
     const phone = '0390000001';
-    await context.prisma.otpCode.deleteMany({ where: { phone } });
+    context.setVerifiedPhone('+84390000001');
     await context.prisma.user.deleteMany({ where: { phone } });
 
     try {
-      await request(context.app.getHttpServer())
-        .post('/api/auth/send-otp')
-        .send({ phone })
-        .expect(200);
-
-      expect(context.smsSender.sendOtp).toHaveBeenCalledTimes(1);
       const verificationResponse = await request(context.app.getHttpServer())
-        .post('/api/auth/verify-otp')
-        .send({ phone, code: context.getSentOtpCode() })
+        .post('/api/auth/firebase')
+        .send({ idToken: 'x'.repeat(100) })
         .expect(200);
       const verificationBody = verificationResponse.body as unknown as {
         data: { isNewUser: boolean; registrationToken: string };
@@ -56,7 +75,6 @@ describe('User authentication (e2e)', () => {
           });
         });
     } finally {
-      await context.prisma.otpCode.deleteMany({ where: { phone } });
       await context.prisma.user.deleteMany({ where: { phone } });
     }
   });

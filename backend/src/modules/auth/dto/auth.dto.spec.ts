@@ -1,45 +1,26 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CompleteRegistrationDto } from './complete-registration.dto';
-import { SendOtpDto } from './send-otp.dto';
-import { VerifyOtpDto } from './verify-otp.dto';
+import { CheckFirebasePhoneLinkDto } from './check-firebase-phone-link.dto';
+import { ExchangeFirebaseTokenDto } from './exchange-firebase-token.dto';
 
 describe('public auth DTO validation', () => {
-  it.each(['0363668951', '+84363668951', '84363668951'])(
-    'accepts a supported Vietnamese phone format: %s',
-    async (phone) => {
-      const errors = await validate(plainToInstance(SendOtpDto, { phone }));
-      expect(errors).toHaveLength(0);
-    },
-  );
-
-  it.each(['', '123456', '0212345678', '036|668951', 363668951])(
-    'rejects an invalid phone value: %s',
-    async (phone) => {
-      const errors = await validate(plainToInstance(SendOtpDto, { phone }));
-      expect(errors.length).toBeGreaterThan(0);
-    },
-  );
-
-  it.each(['12345', '1234567', 'abcdef', '', 123456])(
-    'rejects an invalid OTP value: %s',
-    async (code) => {
-      const errors = await validate(
-        plainToInstance(VerifyOtpDto, { phone: '0363668951', code }),
-      );
-      expect(errors.some((error) => error.property === 'code')).toBe(true);
-    },
-  );
-
-  it('accepts a six-digit OTP', async () => {
+  it('accepts a Firebase ID token with a valid length', async () => {
     const errors = await validate(
-      plainToInstance(VerifyOtpDto, {
-        phone: '0363668951',
-        code: '123456',
-      }),
+      plainToInstance(ExchangeFirebaseTokenDto, { idToken: 'x'.repeat(100) }),
     );
     expect(errors).toHaveLength(0);
   });
+
+  it.each(['', 'short-token', 123])(
+    'rejects an invalid Firebase ID token: %s',
+    async (idToken) => {
+      const errors = await validate(
+        plainToInstance(ExchangeFirebaseTokenDto, { idToken }),
+      );
+      expect(errors.length).toBeGreaterThan(0);
+    },
+  );
 
   it('trims a valid registration name', async () => {
     const dto = plainToInstance(CompleteRegistrationDto, {
@@ -61,6 +42,29 @@ describe('public auth DTO validation', () => {
         }),
       );
       expect(errors.some((error) => error.property === 'fullName')).toBe(true);
+    },
+  );
+
+  it('normalizes a valid phone for Firebase phone-link pre-check', async () => {
+    const dto = plainToInstance(CheckFirebasePhoneLinkDto, {
+      idToken: 'x'.repeat(100),
+      phone: '+84363668951',
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.phone).toBe('0363668951');
+  });
+
+  it.each(['', '123', '+84123456789', '036366895', 123])(
+    'rejects an invalid phone-link pre-check phone: %s',
+    async (phone) => {
+      const errors = await validate(
+        plainToInstance(CheckFirebasePhoneLinkDto, {
+          idToken: 'x'.repeat(100),
+          phone,
+        }),
+      );
+      expect(errors.some((error) => error.property === 'phone')).toBe(true);
     },
   );
 });

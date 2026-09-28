@@ -391,6 +391,80 @@
   box-shadow: none;
 }
 
+.auth-method-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-secondary);
+  font-size: 12px;
+}
+
+.auth-method-divider::before,
+.auth-method-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background-color: var(--color-surface-container-high);
+}
+
+.social-auth-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.social-auth-btn {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px solid var(--color-surface-container-high);
+  border-radius: 8px;
+  background-color: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.social-auth-btn:hover:not(:disabled) {
+  background-color: var(--color-surface-container-low);
+  border-color: var(--color-outline);
+}
+
+.social-auth-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.social-auth-mark {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 22px;
+  font-family: Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.social-auth-mark--google {
+  color: #4285f4;
+}
+
+.social-auth-mark--facebook {
+  border-radius: 50%;
+  background-color: #1877f2;
+  color: #ffffff;
+  font-family: Arial, sans-serif;
+  font-size: 19px;
+  align-items: flex-end;
+}
+
 .submit-btn-icon {
   font-size: 20px;
   transition: transform 0.2s ease;

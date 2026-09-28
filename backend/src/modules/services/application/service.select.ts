@@ -27,6 +27,10 @@ export const adminServiceSelect = {
   maxPriceAmount: true,
   currencyCode: true,
   defaultDurationMinutes: true,
+  targetAudience: true,
+  requiresCertificate: true,
+  minPortfolioImages: true,
+  minExperienceYears: true,
   sortOrder: true,
   status: true,
   createdAt: true,
@@ -48,6 +52,7 @@ export const publicServiceSelect = {
   maxPriceAmount: true,
   currencyCode: true,
   defaultDurationMinutes: true,
+  targetAudience: true,
   sortOrder: true,
   category: {
     select: { id: true, code: true, name: true, slug: true },
@@ -55,6 +60,9 @@ export const publicServiceSelect = {
 } satisfies Prisma.ServiceSelect;
 
 export interface ServiceSnapshotSource {
+  requiresCertificate?: boolean;
+  minPortfolioImages?: number;
+  minExperienceYears?: number;
   categoryId: string;
   code: string;
   name: string;
@@ -66,6 +74,7 @@ export interface ServiceSnapshotSource {
   maxPriceAmount: number;
   currencyCode: string;
   defaultDurationMinutes: number | null;
+  targetAudience: string;
   sortOrder: number;
   status: string;
 }
@@ -83,6 +92,10 @@ export function toServiceAuditSnapshot(service: ServiceSnapshotSource) {
     maxPriceAmount: service.maxPriceAmount,
     currencyCode: service.currencyCode,
     defaultDurationMinutes: service.defaultDurationMinutes,
+    targetAudience: service.targetAudience,
+    requiresCertificate: service.requiresCertificate ?? false,
+    minPortfolioImages: service.minPortfolioImages ?? 0,
+    minExperienceYears: service.minExperienceYears ?? 0,
     sortOrder: service.sortOrder,
     status: service.status,
   };

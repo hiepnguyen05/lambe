@@ -32,6 +32,23 @@ function requireSecret(config: Record<string, unknown>, key: string): void {
   }
 }
 
+function requireBase64Key(
+  config: Record<string, unknown>,
+  key: string,
+  byteLength: number,
+): void {
+  const value = requireValue(config, key);
+  const decoded = Buffer.from(value, 'base64');
+  if (
+    decoded.length !== byteLength ||
+    decoded.toString('base64').replace(/=+$/, '') !== value.replace(/=+$/, '')
+  ) {
+    throw new Error(
+      `${key} must be a valid base64-encoded ${byteLength}-byte key`,
+    );
+  }
+}
+
 export function validateEnvironment(
   config: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -39,6 +56,16 @@ export function validateEnvironment(
   const port = Number(config.PORT ?? 5000);
   const redisEnabled = toStringValue(config.REDIS_ENABLED, 'false');
   const cloudinaryEnabled = toStringValue(config.CLOUDINARY_ENABLED, 'false');
+  const mailEnabled = toStringValue(config.MAIL_ENABLED, 'false');
+  const firebaseEnabled = toStringValue(config.FIREBASE_ENABLED, 'false');
+  const smtpSecure = toStringValue(config.SMTP_SECURE, 'true');
+  const smtpPort = Number(config.SMTP_PORT ?? 465);
+  const smtpConnectionTimeoutMs = Number(
+    config.SMTP_CONNECTION_TIMEOUT_MS ?? 10000,
+  );
+  const privateUrlTtlSeconds = Number(
+    config.CLOUDINARY_PRIVATE_URL_TTL_SECONDS ?? 300,
+  );
   const trustProxy = toStringValue(config.TRUST_PROXY, 'false').trim();
 
   if (!['development', 'test', 'production'].includes(nodeEnv)) {
@@ -55,6 +82,42 @@ export function validateEnvironment(
 
   if (!['true', 'false'].includes(cloudinaryEnabled)) {
     throw new Error('CLOUDINARY_ENABLED must be true or false');
+  }
+
+  if (!['true', 'false'].includes(mailEnabled)) {
+    throw new Error('MAIL_ENABLED must be true or false');
+  }
+
+  if (!['true', 'false'].includes(firebaseEnabled)) {
+    throw new Error('FIREBASE_ENABLED must be true or false');
+  }
+
+  if (!['true', 'false'].includes(smtpSecure)) {
+    throw new Error('SMTP_SECURE must be true or false');
+  }
+
+  if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
+    throw new Error('SMTP_PORT must be a valid TCP port');
+  }
+
+  if (
+    !Number.isInteger(smtpConnectionTimeoutMs) ||
+    smtpConnectionTimeoutMs < 1000 ||
+    smtpConnectionTimeoutMs > 60000
+  ) {
+    throw new Error(
+      'SMTP_CONNECTION_TIMEOUT_MS must be between 1000 and 60000',
+    );
+  }
+
+  if (
+    !Number.isInteger(privateUrlTtlSeconds) ||
+    privateUrlTtlSeconds < 60 ||
+    privateUrlTtlSeconds > 900
+  ) {
+    throw new Error(
+      'CLOUDINARY_PRIVATE_URL_TTL_SECONDS must be between 60 and 900',
+    );
   }
 
   if (
@@ -80,9 +143,34 @@ export function validateEnvironment(
     }
   }
 
+  if (mailEnabled === 'true') {
+    requireValue(config, 'SMTP_HOST');
+    const smtpUser = requireValue(config, 'SMTP_USER');
+    const appPassword = requireValue(config, 'SMTP_APP_PASSWORD').replace(
+      /\s+/g,
+      '',
+    );
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(smtpUser)) {
+      throw new Error('SMTP_USER must be a valid email address');
+    }
+    if (appPassword.length < 16) {
+      throw new Error('SMTP_APP_PASSWORD must contain at least 16 characters');
+    }
+  }
+
+  if (firebaseEnabled === 'true') {
+    requireValue(config, 'FIREBASE_PROJECT_ID');
+    const emulatorHost = toStringValue(
+      config.FIREBASE_AUTH_EMULATOR_HOST,
+    ).trim();
+
+    if (!emulatorHost) {
+      requireValue(config, 'GOOGLE_APPLICATION_CREDENTIALS');
+    }
+  }
+
   requireValue(config, 'DATABASE_URL');
   requireSecret(config, 'JWT_SECRET');
-  requireSecret(config, 'OTP_HASH_SECRET');
   requireSecret(config, 'INTERNAL_JWT_SECRET');
 
   if (config.INTERNAL_JWT_SECRET === config.JWT_SECRET) {
@@ -90,16 +178,10 @@ export function validateEnvironment(
   }
 
   if (nodeEnv === 'production') {
+    requireBase64Key(config, 'KYC_ENCRYPTION_KEY', 32);
     requireValue(config, 'CORS_ORIGIN');
-    const speedSmsAccessToken = requireValue(config, 'SPEEDSMS_ACCESS_TOKEN');
-
-    if (
-      speedSmsAccessToken.startsWith('YOUR_') ||
-      speedSmsAccessToken.startsWith('CHANGE_ME')
-    ) {
-      throw new Error(
-        'Production SpeedSMS access token cannot use a placeholder',
-      );
+    if (firebaseEnabled !== 'true') {
+      throw new Error('FIREBASE_ENABLED must be true in production');
     }
   }
 
@@ -109,6 +191,12 @@ export function validateEnvironment(
     PORT: port,
     REDIS_ENABLED: redisEnabled,
     CLOUDINARY_ENABLED: cloudinaryEnabled,
+    MAIL_ENABLED: mailEnabled,
+    FIREBASE_ENABLED: firebaseEnabled,
+    SMTP_PORT: smtpPort,
+    SMTP_SECURE: smtpSecure,
+    SMTP_CONNECTION_TIMEOUT_MS: smtpConnectionTimeoutMs,
+    CLOUDINARY_PRIVATE_URL_TTL_SECONDS: privateUrlTtlSeconds,
     TRUST_PROXY: trustProxy,
   };
 }

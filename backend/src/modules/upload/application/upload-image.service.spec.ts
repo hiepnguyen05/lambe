@@ -9,7 +9,10 @@ describe('UploadImageService', () => {
         publicId: 'lambe/categories/image',
         format: 'webp',
         resourceType: 'image',
+        deliveryType: 'upload' as const,
       }),
+      uploadPrivateImage: jest.fn(),
+      createPrivateDownloadUrl: jest.fn(),
       deleteImage: jest.fn(),
     };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };

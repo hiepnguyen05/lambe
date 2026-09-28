@@ -10,7 +10,18 @@ describe('UserProfileService', () => {
 
     await expect(userProfile.getCurrentUser(TEST_USER.id)).resolves.toEqual({
       success: true,
-      data: { user: TEST_USER },
+      data: {
+        user: {
+          id: TEST_USER.id,
+          phone: TEST_USER.phone,
+          fullName: TEST_USER.fullName,
+          status: TEST_USER.status,
+          roles: ['CUSTOMER'],
+          onboardingStatus: 'NOT_STARTED',
+          createdAt: TEST_USER.createdAt,
+          updatedAt: TEST_USER.updatedAt,
+        },
+      },
     });
   });
 

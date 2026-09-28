@@ -3,7 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ServiceCategoryStatus, ServiceStatus } from '@prisma/client';
+import {
+  ServiceCategoryStatus,
+  ServiceStatus,
+  ServiceTargetAudience,
+} from '@prisma/client';
 import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 import { AuditService } from '../../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../../infrastructure/persistence/postgres/prisma.service';
@@ -74,6 +78,10 @@ export class CreateServiceService {
             maxPriceAmount: dto.maxPriceAmount,
             currencyCode: 'VND',
             defaultDurationMinutes: dto.defaultDurationMinutes ?? null,
+            targetAudience: dto.targetAudience ?? ServiceTargetAudience.ALL,
+            requiresCertificate: dto.requiresCertificate ?? false,
+            minPortfolioImages: dto.minPortfolioImages ?? 0,
+            minExperienceYears: dto.minExperienceYears ?? 0,
             sortOrder: dto.sortOrder ?? 0,
             status: ServiceStatus.INACTIVE,
             createdById: actorId,

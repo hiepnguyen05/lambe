@@ -83,6 +83,15 @@ export class UpdateServiceService {
         if (dto.defaultDurationMinutes !== undefined) {
           updates.defaultDurationMinutes = dto.defaultDurationMinutes;
         }
+        if (dto.targetAudience !== undefined) {
+          updates.targetAudience = dto.targetAudience;
+        }
+        if (dto.requiresCertificate !== undefined)
+          updates.requiresCertificate = dto.requiresCertificate;
+        if (dto.minPortfolioImages !== undefined)
+          updates.minPortfolioImages = dto.minPortfolioImages;
+        if (dto.minExperienceYears !== undefined)
+          updates.minExperienceYears = dto.minExperienceYears;
         if (dto.sortOrder !== undefined) updates.sortOrder = dto.sortOrder;
 
         await this.uniqueness.assertAvailable(transaction, uniqueInput, id);

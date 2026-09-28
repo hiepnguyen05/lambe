@@ -1,4 +1,4 @@
-import { ServiceStatus } from '@prisma/client';
+import { ServiceStatus, ServiceTargetAudience } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsEnum,
@@ -24,6 +24,10 @@ export class ServiceQueryDto {
   @IsEnum(ServiceStatus)
   @IsOptional()
   status?: ServiceStatus;
+
+  @IsEnum(ServiceTargetAudience)
+  @IsOptional()
+  targetAudience?: ServiceTargetAudience;
 
   @Type(() => Number)
   @IsInt()

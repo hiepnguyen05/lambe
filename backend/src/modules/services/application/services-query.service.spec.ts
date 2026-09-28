@@ -1,5 +1,9 @@
 import { NotFoundException } from '@nestjs/common';
-import { ServiceCategoryStatus, ServiceStatus } from '@prisma/client';
+import {
+  ServiceCategoryStatus,
+  ServiceStatus,
+  ServiceTargetAudience,
+} from '@prisma/client';
 import {
   ADMIN_SERVICE,
   PUBLIC_SERVICE,
@@ -76,6 +80,42 @@ describe('ServicesQueryService', () => {
       queryService.findActive({ categorySlug: 'toc' }),
     ).resolves.toEqual({ success: true, data: [PUBLIC_SERVICE] });
     expect(service.findMany).not.toHaveBeenCalled();
+  });
+
+  it('filters public services by audience, search and affordable minimum', async () => {
+    const { queryService, cache } = createServicesTestContext();
+    const universal = {
+      ...PUBLIC_SERVICE,
+      id: 'universal',
+      targetAudience: ServiceTargetAudience.ALL,
+    };
+    const womenOnly = {
+      ...PUBLIC_SERVICE,
+      id: 'women-only',
+      targetAudience: ServiceTargetAudience.WOMEN,
+    };
+    const expensive = {
+      ...PUBLIC_SERVICE,
+      id: 'expensive',
+      minPriceAmount: 500000,
+    };
+    cache.get.mockResolvedValue([
+      PUBLIC_SERVICE,
+      universal,
+      womenOnly,
+      expensive,
+    ]);
+
+    await expect(
+      queryService.findActive({
+        targetAudience: ServiceTargetAudience.MEN,
+        search: 'cắt tóc',
+        maxPriceAmount: 300000,
+      }),
+    ).resolves.toEqual({
+      success: true,
+      data: [PUBLIC_SERVICE, universal],
+    });
   });
 
   it('returns an active service by slug and hides missing ones', async () => {

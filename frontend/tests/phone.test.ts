@@ -4,6 +4,7 @@ import {
   formatInternationalPhone,
   formatNationalPhone,
   normalizeNationalPhoneInput,
+  toE164VietnamesePhone,
   toVietnamesePhone,
   VIETNAMESE_PHONE_PATTERN,
 } from '../src/features/auth/utils/phone.ts'
@@ -12,6 +13,7 @@ test('normalizes supported Vietnamese phone input formats', () => {
   assert.equal(normalizeNationalPhoneInput('0912 345 678'), '912345678')
   assert.equal(normalizeNationalPhoneInput('+84 912 345 678'), '912345678')
   assert.equal(toVietnamesePhone('912345678'), '0912345678')
+  assert.equal(toE164VietnamesePhone('0912345678'), '+84912345678')
 })
 
 test('formats phone numbers consistently for the UI', () => {

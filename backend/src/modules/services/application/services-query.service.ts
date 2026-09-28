@@ -7,6 +7,10 @@ import { adminServiceSelect, publicServiceSelect } from './service.select';
 import { ServiceCacheService } from './service-cache.service';
 
 export interface PublicServiceCacheItem {
+  name: string;
+  description: string | null;
+  minPriceAmount: number;
+  targetAudience: string;
   category: { slug: string };
 }
 
@@ -23,6 +27,7 @@ export class ServicesQueryService {
     const where: Prisma.ServiceWhereInput = {};
     if (query.categoryId) where.categoryId = query.categoryId;
     if (query.status) where.status = query.status;
+    if (query.targetAudience) where.targetAudience = query.targetAudience;
     if (query.search?.trim()) {
       const search = query.search.trim();
       where.OR = [
@@ -82,11 +87,34 @@ export class ServicesQueryService {
       await this.cache.setActive(services);
     }
 
-    const data = query.categorySlug
-      ? services.filter(
-          (service) => service.category.slug === query.categorySlug,
-        )
-      : services;
+    const normalizedSearch = query.search?.trim().toLocaleLowerCase('vi-VN');
+    const data = services.filter((service) => {
+      if (query.categorySlug && service.category.slug !== query.categorySlug) {
+        return false;
+      }
+      if (
+        query.targetAudience &&
+        service.targetAudience !== query.targetAudience &&
+        service.targetAudience !== 'ALL'
+      ) {
+        return false;
+      }
+      if (
+        query.maxPriceAmount !== undefined &&
+        service.minPriceAmount > query.maxPriceAmount
+      ) {
+        return false;
+      }
+      if (
+        normalizedSearch &&
+        !`${service.name} ${service.description ?? ''}`
+          .toLocaleLowerCase('vi-VN')
+          .includes(normalizedSearch)
+      ) {
+        return false;
+      }
+      return true;
+    });
     return { success: true, data };
   }
 

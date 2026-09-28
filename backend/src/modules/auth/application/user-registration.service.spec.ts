@@ -10,6 +10,7 @@ describe('UserRegistrationService', () => {
     jwtService.verifyAsync.mockResolvedValue({
       sub: 'registration',
       phone: TEST_USER.phone,
+      firebaseUid: TEST_USER.firebaseUid,
       purpose: 'complete-registration',
     });
 
@@ -19,7 +20,14 @@ describe('UserRegistrationService', () => {
     });
 
     expect(prisma.user.create).toHaveBeenCalledWith({
-      data: { phone: TEST_USER.phone, fullName: TEST_USER.fullName },
+      data: {
+        phone: TEST_USER.phone,
+        firebaseUid: TEST_USER.firebaseUid,
+        fullName: TEST_USER.fullName,
+        roles: { create: { role: 'CUSTOMER' } },
+        customerProfile: { create: {} },
+      },
+      include: { roles: true, customerProfile: true },
     });
     expect(result).toMatchObject({ data: { accessToken: 'access-token' } });
   });
@@ -40,10 +48,27 @@ describe('UserRegistrationService', () => {
     {
       sub: 'user-id',
       phone: TEST_USER.phone,
+      firebaseUid: TEST_USER.firebaseUid,
       purpose: 'complete-registration',
     },
-    { sub: 'registration', phone: TEST_USER.phone, purpose: 'access' },
-    { sub: 'registration', phone: '', purpose: 'complete-registration' },
+    {
+      sub: 'registration',
+      phone: TEST_USER.phone,
+      firebaseUid: TEST_USER.firebaseUid,
+      purpose: 'access',
+    },
+    {
+      sub: 'registration',
+      phone: '',
+      firebaseUid: TEST_USER.firebaseUid,
+      purpose: 'complete-registration',
+    },
+    {
+      sub: 'registration',
+      phone: TEST_USER.phone,
+      firebaseUid: '',
+      purpose: 'complete-registration',
+    },
   ])(
     'rejects a registration token with an invalid payload',
     async (payload) => {
@@ -65,6 +90,7 @@ describe('UserRegistrationService', () => {
     jwtService.verifyAsync.mockResolvedValue({
       sub: 'registration',
       phone: TEST_USER.phone,
+      firebaseUid: TEST_USER.firebaseUid,
       purpose: 'complete-registration',
     });
     prisma.user.create.mockRejectedValue(
@@ -87,6 +113,7 @@ describe('UserRegistrationService', () => {
     jwtService.verifyAsync.mockResolvedValue({
       sub: 'registration',
       phone: TEST_USER.phone,
+      firebaseUid: TEST_USER.firebaseUid,
       purpose: 'complete-registration',
     });
     prisma.user.create.mockRejectedValue(new Error('database unavailable'));

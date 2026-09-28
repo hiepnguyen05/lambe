@@ -1,5 +1,7 @@
+import { ServiceTargetAudience } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -11,11 +13,12 @@ import {
   MinLength,
 } from 'class-validator';
 import { IsIcon } from '../../../common/validation/icon.validator';
+import { ServiceEvidenceRequirementsDto } from './service-evidence-requirements.dto';
 import { normalizeServiceSlug, trimString } from './service-transformers';
 
 const MAX_PRICE_AMOUNT = 2_000_000_000;
 
-export class UpdateServiceDto {
+export class UpdateServiceDto extends ServiceEvidenceRequirementsDto {
   @Transform(trimString)
   @IsString()
   @IsNotEmpty()
@@ -64,6 +67,10 @@ export class UpdateServiceDto {
   @Max(720)
   @IsOptional()
   defaultDurationMinutes?: number | null;
+
+  @IsEnum(ServiceTargetAudience)
+  @IsOptional()
+  targetAudience?: ServiceTargetAudience;
 
   @Type(() => Number)
   @IsInt()

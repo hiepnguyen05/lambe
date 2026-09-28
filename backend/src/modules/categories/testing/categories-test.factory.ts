@@ -89,7 +89,10 @@ export function createCategoriesTestContext() {
       publicId: 'lambe/categories/category-id/image',
       format: 'webp',
       resourceType: 'image',
+      deliveryType: 'upload' as const,
     }),
+    uploadPrivateImage: jest.fn(),
+    createPrivateDownloadUrl: jest.fn(),
     deleteImage: jest.fn().mockResolvedValue(true),
   };
   const prisma = {

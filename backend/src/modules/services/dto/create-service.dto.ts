@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ServiceTargetAudience } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -13,6 +15,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { IsIcon } from '../../../common/validation/icon.validator';
+import { ServiceEvidenceRequirementsDto } from './service-evidence-requirements.dto';
 import {
   normalizeServiceCode,
   normalizeServiceSlug,
@@ -21,7 +24,7 @@ import {
 
 const MAX_PRICE_AMOUNT = 2_000_000_000;
 
-export class CreateServiceDto {
+export class CreateServiceDto extends ServiceEvidenceRequirementsDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID('4')
   categoryId: string;
@@ -83,6 +86,15 @@ export class CreateServiceDto {
   @Max(720)
   @IsOptional()
   defaultDurationMinutes?: number | null;
+
+  @ApiPropertyOptional({
+    enum: ServiceTargetAudience,
+    default: ServiceTargetAudience.ALL,
+    description: 'Đối tượng chính mà dịch vụ hướng tới',
+  })
+  @IsEnum(ServiceTargetAudience)
+  @IsOptional()
+  targetAudience?: ServiceTargetAudience;
 
   @ApiPropertyOptional({ example: 0, default: 0 })
   @Type(() => Number)

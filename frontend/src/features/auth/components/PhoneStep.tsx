@@ -10,6 +10,10 @@ interface PhoneStepProps {
   onPhoneChange: (value: string) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   isPending: boolean
+  isSocialPending: boolean
+  isLinkingSocialAccount: boolean
+  onGoogleSignIn: () => void
+  onFacebookSignIn: () => void
   error?: string
   message?: string
 }
@@ -19,6 +23,10 @@ export function PhoneStep({
   onPhoneChange,
   onSubmit,
   isPending,
+  isSocialPending,
+  isLinkingSocialAccount,
+  onGoogleSignIn,
+  onFacebookSignIn,
   error,
   message,
 }: PhoneStepProps) {
@@ -58,7 +66,7 @@ export function PhoneStep({
             className="phone-input-field"
             value={formatNationalPhone(phone)}
             onChange={handleInputChange}
-            disabled={isPending}
+            disabled={isPending || isSocialPending}
             maxLength={11}
             autoFocus
           />
@@ -83,7 +91,7 @@ export function PhoneStep({
       <button
         type="submit"
         className="primary-submit-btn"
-        disabled={isPending}
+        disabled={isPending || isSocialPending}
       >
         {isPending ? (
           <>
@@ -106,13 +114,49 @@ export function PhoneStep({
           </>
         ) : (
           <>
-            <span>Tiếp tục</span>
+            <span>
+              {isLinkingSocialAccount ? 'Gửi mã xác minh' : 'Tiếp tục'}
+            </span>
             <span className="material-symbols-outlined submit-btn-icon" aria-hidden="true">
               arrow_forward
             </span>
           </>
         )}
       </button>
+
+      {!isLinkingSocialAccount && (
+        <>
+          <div className="auth-method-divider" role="separator">
+            <span>hoặc</span>
+          </div>
+
+          <div className="social-auth-actions">
+            <button
+              type="button"
+              className="social-auth-btn"
+              onClick={onGoogleSignIn}
+              disabled={isPending || isSocialPending}
+            >
+              <span className="social-auth-mark social-auth-mark--google" aria-hidden="true">
+                G
+              </span>
+              <span>Tiếp tục với Google</span>
+            </button>
+
+            <button
+              type="button"
+              className="social-auth-btn"
+              onClick={onFacebookSignIn}
+              disabled={isPending || isSocialPending}
+            >
+              <span className="social-auth-mark social-auth-mark--facebook" aria-hidden="true">
+                f
+              </span>
+              <span>Tiếp tục với Facebook</span>
+            </button>
+          </div>
+        </>
+      )}
 
       <p className="auth-legal-text">
         Bằng việc tiếp tục, bạn đồng ý với{' '}

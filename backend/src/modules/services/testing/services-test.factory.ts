@@ -1,4 +1,8 @@
-import { ServiceCategoryStatus, ServiceStatus } from '@prisma/client';
+import {
+  ServiceCategoryStatus,
+  ServiceStatus,
+  ServiceTargetAudience,
+} from '@prisma/client';
 import { ChangeServiceStatusService } from '../application/change-service-status.service';
 import { CreateServiceService } from '../application/create-service.service';
 import { ReorderServicesService } from '../application/reorder-services.service';
@@ -38,6 +42,7 @@ export const BASE_SERVICE = {
   maxPriceAmount: 300000,
   currencyCode: 'VND',
   defaultDurationMinutes: 45,
+  targetAudience: ServiceTargetAudience.MEN,
   sortOrder: 0,
   status: ServiceStatus.INACTIVE,
   createdById: SERVICE_ACTOR.id,
@@ -59,6 +64,7 @@ export const ADMIN_SERVICE = {
   maxPriceAmount: BASE_SERVICE.maxPriceAmount,
   currencyCode: BASE_SERVICE.currencyCode,
   defaultDurationMinutes: BASE_SERVICE.defaultDurationMinutes,
+  targetAudience: BASE_SERVICE.targetAudience,
   sortOrder: BASE_SERVICE.sortOrder,
   status: BASE_SERVICE.status,
   createdAt: BASE_SERVICE.createdAt,
@@ -80,6 +86,7 @@ export const PUBLIC_SERVICE = {
   maxPriceAmount: BASE_SERVICE.maxPriceAmount,
   currencyCode: BASE_SERVICE.currencyCode,
   defaultDurationMinutes: BASE_SERVICE.defaultDurationMinutes,
+  targetAudience: BASE_SERVICE.targetAudience,
   sortOrder: BASE_SERVICE.sortOrder,
   category: {
     id: SERVICE_CATEGORY.id,
@@ -122,7 +129,10 @@ export function createServicesTestContext() {
       publicId: 'lambe/services/service-id/cover',
       format: 'webp',
       resourceType: 'image',
+      deliveryType: 'upload' as const,
     }),
+    uploadPrivateImage: jest.fn(),
+    createPrivateDownloadUrl: jest.fn(),
     deleteImage: jest.fn().mockResolvedValue(true),
   };
   const transaction = { service, serviceCategory, auditLog };

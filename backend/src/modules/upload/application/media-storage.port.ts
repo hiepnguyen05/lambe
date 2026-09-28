@@ -1,5 +1,7 @@
 export const MEDIA_STORAGE = Symbol('MEDIA_STORAGE');
 
+export type MediaDeliveryType = 'upload' | 'authenticated';
+
 export interface UploadResult {
   url: string;
   secureUrl: string;
@@ -8,9 +10,15 @@ export interface UploadResult {
   width?: number;
   height?: number;
   resourceType: string;
+  deliveryType: MediaDeliveryType;
 }
 
 export interface MediaStorage {
   uploadImage(buffer: Buffer, folder: string): Promise<UploadResult>;
-  deleteImage(publicId: string): Promise<boolean>;
+  uploadPrivateImage(buffer: Buffer, folder: string): Promise<UploadResult>;
+  createPrivateDownloadUrl(publicId: string, format: string): string;
+  deleteImage(
+    publicId: string,
+    deliveryType?: MediaDeliveryType,
+  ): Promise<boolean>;
 }

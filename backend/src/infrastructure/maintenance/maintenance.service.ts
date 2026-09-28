@@ -21,7 +21,6 @@ export class MaintenanceService {
 
     try {
       const now = new Date();
-      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const result = await this.prisma.$transaction(async (transaction) => {
         const [lock] = await transaction.$queryRaw<
@@ -32,14 +31,6 @@ export class MaintenanceService {
 
         if (!lock?.acquired) return null;
 
-        const deletedOtps = await transaction.otpCode.deleteMany({
-          where: {
-            OR: [
-              { expiresAt: { lt: now } },
-              { isUsed: true, createdAt: { lt: oneDayAgo } },
-            ],
-          },
-        });
         const deletedSessions = await transaction.internalSession.deleteMany({
           where: {
             OR: [
@@ -50,7 +41,6 @@ export class MaintenanceService {
         });
 
         return {
-          otpCount: deletedOtps.count,
           sessionCount: deletedSessions.count,
         };
       });
@@ -63,7 +53,7 @@ export class MaintenanceService {
       }
 
       this.logger.log(
-        `Cleanup completed: removed ${result.otpCount} OTP records and ${result.sessionCount} internal sessions`,
+        `Cleanup completed: removed ${result.sessionCount} internal sessions`,
       );
     } catch (error: unknown) {
       const message =

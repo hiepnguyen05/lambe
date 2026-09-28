@@ -11,6 +11,7 @@ import {
 } from 'cloudinary';
 import { Readable } from 'stream';
 import type {
+  MediaDeliveryType,
   MediaStorage,
   UploadResult,
 } from '../../modules/upload/application/media-storage.port';
@@ -24,12 +25,22 @@ export class CloudinaryService implements MediaStorage {
   private readonly logger = new Logger(CloudinaryService.name);
   private readonly enabled: boolean;
   private readonly uploadPreset: string;
+  private readonly kycUploadPreset: string;
+  private readonly privateUrlTtlSeconds: number;
 
   constructor(private readonly configService: ConfigService) {
     this.enabled = this.configService.get<boolean>('cloudinary.enabled', false);
     this.uploadPreset = this.configService.get<string>(
       'cloudinary.uploadPreset',
       '',
+    );
+    this.kycUploadPreset = this.configService.get<string>(
+      'cloudinary.kycUploadPreset',
+      this.uploadPreset,
+    );
+    this.privateUrlTtlSeconds = this.configService.get<number>(
+      'cloudinary.privateUrlTtlSeconds',
+      300,
     );
 
     if (this.enabled) {
@@ -47,14 +58,42 @@ export class CloudinaryService implements MediaStorage {
   }
 
   async uploadImage(buffer: Buffer, folder: string): Promise<UploadResult> {
+    return this.upload(buffer, folder, this.uploadPreset, 'upload');
+  }
+
+  async uploadPrivateImage(
+    buffer: Buffer,
+    folder: string,
+  ): Promise<UploadResult> {
+    return this.upload(buffer, folder, this.kycUploadPreset, 'authenticated');
+  }
+
+  createPrivateDownloadUrl(publicId: string, format: string): string {
+    this.assertEnabled();
+
+    return cloudinary.utils.private_download_url(publicId, format, {
+      resource_type: 'image',
+      type: 'authenticated',
+      expires_at: Math.floor(Date.now() / 1000) + this.privateUrlTtlSeconds,
+      attachment: false,
+    });
+  }
+
+  private async upload(
+    buffer: Buffer,
+    folder: string,
+    preset: string,
+    deliveryType: MediaDeliveryType,
+  ): Promise<UploadResult> {
     this.assertEnabled();
 
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder,
-          upload_preset: this.uploadPreset,
+          upload_preset: preset,
           resource_type: 'image',
+          type: deliveryType,
           allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
         },
         (error?: UploadApiErrorResponse, result?: UploadApiResponse) => {
@@ -78,6 +117,7 @@ export class CloudinaryService implements MediaStorage {
             width: result.width,
             height: result.height,
             resourceType: result.resource_type,
+            deliveryType,
           });
         },
       );
@@ -86,12 +126,17 @@ export class CloudinaryService implements MediaStorage {
     });
   }
 
-  async deleteImage(publicId: string): Promise<boolean> {
+  async deleteImage(
+    publicId: string,
+    deliveryType: MediaDeliveryType = 'upload',
+  ): Promise<boolean> {
     this.assertEnabled();
 
     try {
       const response = (await cloudinary.uploader.destroy(publicId, {
         resource_type: 'image',
+        type: deliveryType,
+        invalidate: true,
       })) as CloudinaryDestroyResponse;
       return response.result === 'ok';
     } catch (error: unknown) {

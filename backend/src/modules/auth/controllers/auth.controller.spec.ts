@@ -3,8 +3,8 @@ import { AuthController } from './auth.controller';
 describe('AuthController', () => {
   const createController = () => {
     const authService = {
-      sendOtp: jest.fn().mockResolvedValue({ success: true }),
-      verifyOtp: jest.fn().mockResolvedValue({ success: true }),
+      exchangeIdToken: jest.fn().mockResolvedValue({ success: true }),
+      checkPhoneLink: jest.fn().mockResolvedValue({ success: true }),
       completeRegistration: jest.fn().mockResolvedValue({ success: true }),
       getCurrentUser: jest.fn().mockResolvedValue({ success: true }),
     };
@@ -19,20 +19,27 @@ describe('AuthController', () => {
     };
   };
 
-  it('forwards an OTP request to the auth service', async () => {
+  it('forwards a Firebase ID token to the auth service', async () => {
     const { controller, authService } = createController();
-    const dto = { phone: '0363668951' };
+    const dto = { idToken: 'firebase-id-token' };
 
-    await expect(controller.sendOtp(dto)).resolves.toEqual({ success: true });
-    expect(authService.sendOtp).toHaveBeenCalledWith(dto);
+    await expect(controller.exchangeFirebaseToken(dto)).resolves.toEqual({
+      success: true,
+    });
+    expect(authService.exchangeIdToken).toHaveBeenCalledWith(dto);
   });
 
-  it('forwards OTP verification to the auth service', async () => {
+  it('forwards a Firebase phone-link pre-check to the auth service', async () => {
     const { controller, authService } = createController();
-    const dto = { phone: '0363668951', code: '123456' };
+    const dto = {
+      idToken: 'firebase-id-token',
+      phone: '0363668951',
+    };
 
-    await expect(controller.verifyOtp(dto)).resolves.toEqual({ success: true });
-    expect(authService.verifyOtp).toHaveBeenCalledWith(dto);
+    await expect(controller.checkFirebasePhoneLink(dto)).resolves.toEqual({
+      success: true,
+    });
+    expect(authService.checkPhoneLink).toHaveBeenCalledWith(dto);
   });
 
   it('forwards registration completion to the auth service', async () => {
