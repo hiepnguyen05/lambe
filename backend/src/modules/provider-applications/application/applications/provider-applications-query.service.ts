@@ -155,6 +155,16 @@ export class ProviderApplicationsQueryService {
             service: { select: { id: true, name: true, targetAudience: true } },
           },
         },
+        serviceSuggestions: {
+          select: {
+            id: true,
+            categoryId: true,
+            name: true,
+            proposedPriceAmount: true,
+            status: true,
+            reviewNote: true,
+          },
+        },
       },
     });
     if (!application)

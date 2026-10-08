@@ -41,6 +41,7 @@ describe('ProviderApplicationDocumentsService', () => {
     const providerApplicationDocument = {
       create: jest.fn().mockResolvedValue(storedDocument),
       findFirst: jest.fn().mockResolvedValue(storedDocument),
+      findMany: jest.fn().mockResolvedValue([storedDocument]),
     };
     const providerApplicationCheck = {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -116,7 +117,10 @@ describe('ProviderApplicationDocumentsService', () => {
       service.getApplicantAccess(applicationId, documentId, userId, request),
     ).resolves.toEqual({
       success: true,
-      data: { url: 'https://signed.example.test/temporary' },
+      data: {
+        url: 'https://signed.example.test/temporary',
+        fileFormat: 'webp',
+      },
     });
     const [ownershipQuery] = prisma.providerApplicationDocument.findFirst.mock
       .calls[0] as unknown as [{ where: { application: { userId: string } } }];
@@ -132,6 +136,71 @@ describe('ProviderApplicationDocumentsService', () => {
       }),
       request,
     );
+  });
+
+  it('issues document metadata for an internal KYC reviewer and audits access', async () => {
+    const { service, audit } = createContext();
+    const reviewerId = '5d87b169-b352-402e-a49b-c5d67bb36274';
+    const request = { requestId: 'internal-request-id', ipAddress: '127.0.0.1' };
+
+    await expect(
+      service.getInternalAccess(applicationId, documentId, reviewerId, request),
+    ).resolves.toEqual({
+      success: true,
+      data: {
+        url: 'https://signed.example.test/temporary',
+        fileFormat: 'webp',
+      },
+    });
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorInternalAccountId: reviewerId,
+        action: 'KYC_DOCUMENT_ACCESSED',
+      }),
+      request,
+    );
+  });
+
+  it('returns all document previews in one audited request', async () => {
+    const { service, audit } = createContext();
+    const reviewerId = '5d87b169-b352-402e-a49b-c5d67bb36274';
+
+    await expect(
+      service.getInternalPreviewGallery(applicationId, reviewerId, {}),
+    ).resolves.toEqual({
+      success: true,
+      data: [
+        {
+          documentId,
+          url: 'https://signed.example.test/temporary',
+          fileFormat: 'webp',
+        },
+      ],
+    });
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorInternalAccountId: reviewerId,
+        action: 'KYC_DOCUMENT_GALLERY_ACCESSED',
+        metadata: { documentCount: 1 },
+      }),
+      {},
+    );
+  });
+
+  it('allows internal reviewers to inspect legacy public documents', async () => {
+    const { service, prisma, mediaStorage, storedDocument } = createContext();
+    prisma.providerApplicationDocument.findFirst.mockResolvedValue({
+      ...storedDocument,
+      deliveryType: 'upload',
+    });
+
+    await expect(
+      service.getInternalAccess(applicationId, documentId, userId, {}),
+    ).resolves.toEqual({
+      success: true,
+      data: { url: storedDocument.fileUrl, fileFormat: 'webp' },
+    });
+    expect(mediaStorage.createPrivateDownloadUrl).not.toHaveBeenCalled();
   });
 
   it('refuses to issue access URLs for legacy public documents', async () => {

@@ -24,6 +24,8 @@ const providerSetupSelect = {
   displayName: true,
   status: true,
   serviceAreaName: true,
+  serviceAreaLatitude: true,
+  serviceAreaLongitude: true,
   serviceRadiusKm: true,
   setupCompletedAt: true,
   workingHours: {
@@ -138,6 +140,8 @@ export class ProviderSetupService {
         where: { id: current.id },
         data: {
           serviceAreaName: dto.serviceAreaName,
+          serviceAreaLatitude: dto.serviceAreaLatitude,
+          serviceAreaLongitude: dto.serviceAreaLongitude,
           serviceRadiusKm: dto.serviceRadiusKm,
           setupCompletedAt: current.setupCompletedAt ?? new Date(),
           status: ProviderProfileStatus.ACTIVE,

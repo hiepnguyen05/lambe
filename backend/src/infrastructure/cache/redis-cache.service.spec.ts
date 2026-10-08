@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { RedisCacheService } from './redis-cache.service';
 
 describe('RedisCacheService', () => {
@@ -19,6 +20,12 @@ describe('RedisCacheService', () => {
     await expect(service.set('key', { value: true })).resolves.toBeUndefined();
     await expect(service.delete('key')).resolves.toBeUndefined();
     expect(service.getStatus()).toBe('disabled');
+    await expect(service.isOnline('provider')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    await expect(
+      service.findNearby(10.7, 106.7, 10, 20),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
     await expect(service.onModuleDestroy()).resolves.toBeUndefined();
   });
 });

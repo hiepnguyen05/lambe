@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { ReviewStatus } from '@prisma/client';
+import { ProviderServiceSuggestionStatus, ReviewStatus } from '@prisma/client';
 import { REQUIRED_REVIEW_SECTIONS } from './provider-application.policy';
 import {
   assertProviderSubmissionComplete,
@@ -10,6 +10,13 @@ import { assertProviderServiceEligible } from './provider-service-eligibility.po
 export function assertProviderApprovable(
   application: SubmittableApplication,
 ): void {
+  if (
+    application.serviceSuggestions.some(
+      (suggestion) =>
+        suggestion.status === ProviderServiceSuggestionStatus.PENDING,
+    )
+  )
+    throw new BadRequestException('Vẫn còn đề xuất dịch vụ chưa được xử lý.');
   if (
     !REQUIRED_REVIEW_SECTIONS.every((section) =>
       application.checks.some(
@@ -39,7 +46,12 @@ export function assertProviderApprovable(
   const documents = application.documents.filter(
     (item) => item.status === ReviewStatus.VERIFIED,
   );
-  assertProviderSubmissionComplete({ ...application, services, documents });
+  assertProviderSubmissionComplete({
+    ...application,
+    services,
+    documents,
+    serviceSuggestions: [],
+  });
   for (const item of services)
     assertProviderServiceEligible(
       item,

@@ -8,6 +8,7 @@ import {
   Prisma,
   ProviderApplicationSection,
   ProviderApplicationStatus,
+  ProviderServiceSuggestionStatus,
   ProviderType,
   ReviewStatus,
   UserRole,
@@ -155,6 +156,146 @@ export class ProviderApplicationReviewService {
     return { success: true, message: 'Đã xét duyệt dịch vụ đăng ký.' };
   }
 
+  async reviewAllEligible(
+    applicationId: string,
+    actorId: string,
+    request: RequestMetadata,
+  ) {
+    const result = await this.prisma.$transaction(async (transaction) => {
+      const current = await this.assertPending(applicationId, transaction);
+      const reviewedAt = new Date();
+      const pendingDocuments = current.documents.filter(
+        (item) => item.status === ReviewStatus.PENDING,
+      );
+      const projectedDocuments = current.documents.map((item) =>
+        item.status === ReviewStatus.PENDING
+          ? { ...item, status: ReviewStatus.VERIFIED }
+          : item,
+      );
+      const eligibleServiceIds: string[] = [];
+      const skippedServices: Array<{
+        id: string;
+        name: string;
+        reason: string;
+      }> = [];
+
+      for (const item of current.services.filter(
+        (service) => service.status === ReviewStatus.PENDING,
+      )) {
+        try {
+          assertProviderServiceEligible(
+            item,
+            current.experienceYears,
+            projectedDocuments,
+            true,
+          );
+          eligibleServiceIds.push(item.id);
+        } catch (error: unknown) {
+          skippedServices.push({
+            id: item.id,
+            name: item.service.name,
+            reason:
+              error instanceof BadRequestException
+                ? String(error.message)
+                : 'Dịch vụ chưa đáp ứng điều kiện xác minh.',
+          });
+        }
+      }
+
+      if (pendingDocuments.length > 0) {
+        await transaction.providerApplicationDocument.updateMany({
+          where: {
+            applicationId,
+            id: { in: pendingDocuments.map((item) => item.id) },
+            status: ReviewStatus.PENDING,
+          },
+          data: {
+            status: ReviewStatus.VERIFIED,
+            reviewNote: null,
+            reviewedById: actorId,
+            reviewedAt,
+          },
+        });
+      }
+      if (eligibleServiceIds.length > 0) {
+        await transaction.providerApplicationService.updateMany({
+          where: {
+            applicationId,
+            id: { in: eligibleServiceIds },
+            status: ReviewStatus.PENDING,
+          },
+          data: {
+            status: ReviewStatus.VERIFIED,
+            reviewNote: null,
+            reviewedById: actorId,
+            reviewedAt,
+          },
+        });
+      }
+
+      const hasPendingSuggestions = current.serviceSuggestions.some(
+        (item) => item.status === ProviderServiceSuggestionStatus.PENDING,
+      );
+      const hasUnresolvedServices =
+        skippedServices.length > 0 ||
+        current.services.some(
+          (item) => item.status === ReviewStatus.NEEDS_CHANGES,
+        );
+      const checkSections = current.checks
+        .filter((item) => item.status === ReviewStatus.PENDING)
+        .filter(
+          (item) =>
+            item.section !== ProviderApplicationSection.SERVICES ||
+            (!hasPendingSuggestions && !hasUnresolvedServices),
+        )
+        .map((item) => item.section);
+      if (checkSections.length > 0) {
+        await transaction.providerApplicationCheck.updateMany({
+          where: {
+            applicationId,
+            section: { in: checkSections },
+            status: ReviewStatus.PENDING,
+          },
+          data: {
+            status: ReviewStatus.VERIFIED,
+            reviewNote: null,
+            reviewedById: actorId,
+            reviewedAt,
+          },
+        });
+      }
+
+      await this.recordReview(
+        'PROVIDER_APPLICATION_BULK_REVIEWED',
+        applicationId,
+        actorId,
+        {
+          verifiedDocuments: String(pendingDocuments.length),
+          verifiedServices: String(eligibleServiceIds.length),
+          verifiedChecks: String(checkSections.length),
+          skippedServices: String(skippedServices.length),
+        },
+        request,
+        transaction,
+      );
+      return {
+        verifiedDocuments: pendingDocuments.length,
+        verifiedServices: eligibleServiceIds.length,
+        verifiedChecks: checkSections.length,
+        skippedServices,
+        pendingSuggestions: current.serviceSuggestions.filter(
+          (item) => item.status === ProviderServiceSuggestionStatus.PENDING,
+        ).length,
+      };
+    });
+
+    return {
+      success: true,
+      message: 'Đã xác minh các mục đang chờ và đủ điều kiện.',
+      data: result,
+    };
+  }
+
   async requestChanges(
     id: string,
     dto: ProviderApplicationDecisionDto,
@@ -275,6 +416,7 @@ export class ProviderApplicationReviewService {
       );
       return created;
     });
+    await this.notifications.flushPending('provider-application-approval');
     return {
       success: true,
       message: 'Đã duyệt hồ sơ và tạo tài khoản nhà cung cấp.',
@@ -295,6 +437,7 @@ export class ProviderApplicationReviewService {
         checks: true,
         documents: true,
         services: { include: { service: { include: { category: true } } } },
+        serviceSuggestions: true,
         termsAcceptances: true,
       },
     });
@@ -366,6 +509,9 @@ export class ProviderApplicationReviewService {
           transaction,
         );
     });
+    await this.notifications.flushPending(
+      `provider-application-${status.toLowerCase()}`,
+    );
   }
 
   private async recordReview(

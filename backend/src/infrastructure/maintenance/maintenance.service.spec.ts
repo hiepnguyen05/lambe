@@ -6,11 +6,13 @@ describe('MaintenanceService', () => {
   let prisma: jest.Mocked<PrismaService>;
   let queryLock: jest.Mock;
   let deleteSessions: jest.Mock;
+  let closeProviderSessions: jest.Mock;
 
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date('2026-09-25T03:00:00.000Z'));
     queryLock = jest.fn().mockResolvedValue([{ acquired: true }]);
     deleteSessions = jest.fn().mockResolvedValue({ count: 2 });
+    closeProviderSessions = jest.fn().mockResolvedValue({ count: 0 });
     const transaction = {
       $queryRaw: queryLock,
       internalSession: { deleteMany: deleteSessions },
@@ -19,8 +21,11 @@ describe('MaintenanceService', () => {
       $transaction: jest.fn((callback: (client: unknown) => unknown) =>
         callback(transaction),
       ),
+      providerAvailabilitySession: { updateMany: closeProviderSessions },
     } as unknown as jest.Mocked<PrismaService>;
-    service = new MaintenanceService(prisma);
+    service = new MaintenanceService(prisma, {
+      get: jest.fn((_key: string, fallback: unknown) => fallback),
+    } as never);
   });
 
   afterEach(() => jest.useRealTimers());
@@ -54,5 +59,22 @@ describe('MaintenanceService', () => {
       'database offline',
     );
     expect(deleteSessions).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes provider sessions whose heartbeat expired', async () => {
+    closeProviderSessions.mockResolvedValue({ count: 1 });
+
+    await service.closeStaleProviderSessions();
+
+    expect(closeProviderSessions).toHaveBeenCalledWith({
+      where: {
+        endedAt: null,
+        lastHeartbeatAt: { lt: new Date('2026-09-25T02:58:00.000Z') },
+      },
+      data: {
+        endedAt: new Date('2026-09-25T03:00:00.000Z'),
+        endReason: 'HEARTBEAT_EXPIRED',
+      },
+    });
   });
 });

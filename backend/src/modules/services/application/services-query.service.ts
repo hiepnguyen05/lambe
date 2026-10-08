@@ -11,6 +11,9 @@ export interface PublicServiceCacheItem {
   description: string | null;
   minPriceAmount: number;
   targetAudience: string;
+  requiresCertificate: boolean;
+  minPortfolioImages: number;
+  minExperienceYears: number;
   category: { slug: string };
 }
 

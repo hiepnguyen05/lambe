@@ -12,8 +12,10 @@ import { ProviderApplicationReviewService } from './application/review/provider-
 import { ProviderApplicationNotificationService } from './application/notifications/provider-application-notification.service';
 import { ProviderApplicationsQueryService } from './application/applications/provider-applications-query.service';
 import { ProviderApplicationsService } from './application/applications/provider-applications.service';
-import { ProviderEmailVerificationService } from './application/email-verification/provider-email-verification.service';
 import { ProviderApplicationServicesService } from './application/services/provider-application-services.service';
+import { ProviderServiceSuggestionsService } from './application/services/provider-service-suggestions.service';
+import { ReviewProviderServiceSuggestionService } from './application/services/review-provider-service-suggestion.service';
+import { ServicesModule } from '../services/services.module';
 import { AdminProviderApplicationsController } from './controllers/admin-provider-applications.controller';
 import { ProviderApplicationsController } from './controllers/provider-applications.controller';
 
@@ -25,6 +27,7 @@ import { ProviderApplicationsController } from './controllers/provider-applicati
     UploadModule,
     AuditModule,
     MailModule,
+    ServicesModule,
   ],
   controllers: [
     ProviderApplicationsController,
@@ -33,8 +36,9 @@ import { ProviderApplicationsController } from './controllers/provider-applicati
   providers: [
     ProviderApplicationsQueryService,
     ProviderApplicationsService,
-    ProviderEmailVerificationService,
     ProviderApplicationServicesService,
+    ProviderServiceSuggestionsService,
+    ReviewProviderServiceSuggestionService,
     ProviderApplicationDocumentsService,
     ProviderApplicationReviewService,
     ProviderApplicationNotificationService,

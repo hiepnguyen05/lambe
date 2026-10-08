@@ -22,6 +22,8 @@ import { validateEnvironment } from './config/env.validation';
 import { AuthModule } from './modules/auth/auth.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { CustomerOnboardingModule } from './modules/customer-onboarding/customer-onboarding.module';
+import { CustomersModule } from './modules/customers/customers.module';
+import { DiscoveryModule } from './modules/discovery/discovery.module';
 import { HealthModule } from './modules/health/health.module';
 import { InternalAuthModule } from './modules/internal-auth/internal-auth.module';
 import { ProviderApplicationsModule } from './modules/provider-applications/provider-applications.module';
@@ -66,8 +68,10 @@ import { MaintenanceModule } from './infrastructure/maintenance/maintenance.modu
     CategoriesModule,
     ServicesModule,
     CustomerOnboardingModule,
+    CustomersModule,
     ProviderApplicationsModule,
     ProvidersModule,
+    DiscoveryModule,
     HealthModule,
     MaintenanceModule,
     UploadModule,

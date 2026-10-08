@@ -78,4 +78,33 @@ describe('configureApp', () => {
 
     expect(express.set).toHaveBeenCalledWith('trust proxy', 1);
   });
+
+  it('sets basic security headers on every response', () => {
+    const { app } = createApp('test');
+    const middlewareCalls = app.use.mock.calls as unknown as Array<
+      [
+        (
+          request: object,
+          response: { setHeader: jest.Mock },
+          next: jest.Mock,
+        ) => void,
+      ]
+    >;
+    const middleware = middlewareCalls[1][0];
+    const response = { setHeader: jest.fn() };
+    const next = jest.fn();
+
+    middleware({}, response, next);
+
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'X-Content-Type-Options',
+      'nosniff',
+    );
+    expect(response.setHeader).toHaveBeenCalledWith('X-Frame-Options', 'DENY');
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'Referrer-Policy',
+      'no-referrer',
+    );
+    expect(next).toHaveBeenCalledTimes(1);
+  });
 });

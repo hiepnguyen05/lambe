@@ -56,6 +56,7 @@ export function CustomerApp() {
         />
       )}
 
+      {/* Show bottom nav only when not on full auth screen or when navigating main tabs */}
       <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   )

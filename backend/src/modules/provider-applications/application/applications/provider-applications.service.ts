@@ -133,19 +133,6 @@ export class ProviderApplicationsService {
             userId,
           );
         const email = dto.email?.trim().toLowerCase() ?? null;
-        const emailChanged = dto.email !== undefined && email !== current.email;
-        if (emailChanged) {
-          await transaction.providerApplicationEmailVerification.deleteMany({
-            where: { applicationId: id },
-          });
-          await transaction.mailOutbox.updateMany({
-            where: {
-              deduplicationKey: { startsWith: `provider-email:${id}:` },
-              sentAt: null,
-            },
-            data: { failedAt: new Date(), text: '', html: '' },
-          });
-        }
         await transaction.providerApplicationCheck.updateMany({
           where: { applicationId: id, section: { in: sections } },
           data: {
@@ -160,7 +147,6 @@ export class ProviderApplicationsService {
           data: {
             ...fields,
             ...(dto.email !== undefined && { email }),
-            ...(emailChanged && { emailVerifiedAt: null }),
             ...(birthDate !== undefined && {
               birthDate: parsedBirthDate,
             }),
@@ -247,6 +233,7 @@ export class ProviderApplicationsService {
         include: {
           documents: true,
           services: { include: { service: { include: { category: true } } } },
+          serviceSuggestions: true,
           termsAcceptances: true,
           checks: true,
         },
@@ -327,6 +314,7 @@ export class ProviderApplicationsService {
       );
       return nextRevision;
     });
+    await this.notifications.flushPending('provider-application-submit');
     return {
       success: true,
       message: 'Hồ sơ đã được gửi để xét duyệt.',

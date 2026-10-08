@@ -39,10 +39,16 @@ const profileInclude = {
         take: 1,
         select: {
           id: true,
+          type: true,
           label: true,
           addressLine: true,
+          provinceName: true,
+          districtName: true,
+          wardName: true,
+          streetLine: true,
           latitude: true,
           longitude: true,
+          isMapConfirmed: true,
         },
       },
     },
@@ -162,28 +168,16 @@ export class CustomerOnboardingService {
       select: { id: true },
     });
 
-    const [activeCategoryCount, activeServiceCount] = await Promise.all([
-      this.prisma.customerCategoryInterest.count({
+    const activeCategoryCount =
+      await this.prisma.customerCategoryInterest.count({
         where: {
           customerProfileId: profile.id,
           category: { status: ServiceCategoryStatus.ACTIVE },
         },
-      }),
-      this.prisma.customerServiceInterest.count({
-        where: {
-          customerProfileId: profile.id,
-          service: {
-            status: ServiceStatus.ACTIVE,
-            category: { status: ServiceCategoryStatus.ACTIVE },
-          },
-        },
-      }),
-    ]);
+      });
 
-    if (activeCategoryCount === 0 && activeServiceCount === 0) {
-      throw new BadRequestException(
-        'Hãy chọn ít nhất một danh mục hoặc dịch vụ quan tâm.',
-      );
+    if (activeCategoryCount === 0) {
+      throw new BadRequestException('Hãy chọn ít nhất một danh mục quan tâm.');
     }
 
     await this.prisma.customerProfile.update({
@@ -308,10 +302,16 @@ export class CustomerOnboardingService {
       select: { id: true },
     });
     const data = {
+      type: address.type,
       label: address.label,
       addressLine: address.addressLine,
+      provinceName: address.provinceName,
+      districtName: address.districtName,
+      wardName: address.wardName,
+      streetLine: address.streetLine,
       latitude: address.latitude,
       longitude: address.longitude,
+      isMapConfirmed: address.isMapConfirmed,
       isDefault: true,
     };
 

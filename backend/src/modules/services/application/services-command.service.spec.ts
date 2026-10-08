@@ -212,6 +212,85 @@ describe('ServicesCommandService', () => {
     );
   });
 
+  it('moves a service to another active category and checks its existing name there', async () => {
+    const { commandService, service, cache } = createServicesTestContext();
+    const destinationId = '75a593c4-afc8-4cce-a211-f25287b8d012';
+    service.update.mockResolvedValue({
+      ...ADMIN_SERVICE,
+      categoryId: destinationId,
+    });
+
+    await commandService.update(
+      BASE_SERVICE.id,
+      { categoryId: destinationId },
+      SERVICE_ACTOR.id,
+    );
+
+    expect(service.findFirst).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          {
+            categoryId: destinationId,
+            normalizedName: BASE_SERVICE.normalizedName,
+          },
+        ],
+        NOT: { id: BASE_SERVICE.id },
+      },
+    });
+    expect(JSON.stringify(service.update.mock.calls)).toContain(
+      `"categoryId":"${destinationId}"`,
+    );
+    expect(cache.delete).toHaveBeenCalledWith('services:active:v1');
+  });
+
+  it('rejects a duplicate name in the destination category', async () => {
+    const { commandService, service } = createServicesTestContext();
+    service.findFirst.mockResolvedValue({
+      ...BASE_SERVICE,
+      id: 'another-service',
+    });
+
+    await expect(
+      commandService.update(
+        BASE_SERVICE.id,
+        { categoryId: '75a593c4-afc8-4cce-a211-f25287b8d012' },
+        SERVICE_ACTOR.id,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(service.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing or inactive destinations for an active service', async () => {
+    const { commandService, service, serviceCategory } =
+      createServicesTestContext();
+    const destinationId = '75a593c4-afc8-4cce-a211-f25287b8d012';
+    service.findUnique.mockResolvedValue({
+      ...BASE_SERVICE,
+      status: ServiceStatus.ACTIVE,
+    });
+    serviceCategory.findUnique.mockResolvedValue(null);
+    await expect(
+      commandService.update(
+        BASE_SERVICE.id,
+        { categoryId: destinationId },
+        SERVICE_ACTOR.id,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    serviceCategory.findUnique.mockResolvedValue({
+      ...SERVICE_CATEGORY,
+      status: ServiceCategoryStatus.INACTIVE,
+    });
+    await expect(
+      commandService.update(
+        BASE_SERVICE.id,
+        { categoryId: destinationId },
+        SERVICE_ACTOR.id,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(service.update).not.toHaveBeenCalled();
+  });
+
   it('only activates a service under an active category', async () => {
     const { commandService, service } = createServicesTestContext();
     service.findUnique.mockResolvedValue({

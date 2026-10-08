@@ -200,7 +200,10 @@ describe('validateEnvironment', () => {
       'Missing required environment variable: CORS_ORIGIN',
     );
     expect(() =>
-      validateEnvironment({ ...productionEnvironment, CORS_ORIGIN: '*' }),
+      validateEnvironment({
+        ...productionEnvironment,
+        CORS_ORIGIN: 'https://admin.lambe.vn',
+      }),
     ).toThrow('FIREBASE_ENABLED must be true in production');
   });
 
@@ -216,6 +219,46 @@ describe('validateEnvironment', () => {
         KYC_ENCRYPTION_KEY: kycEncryptionKey,
       }),
     ).toMatchObject({ NODE_ENV: 'production', PORT: 5000 });
+  });
+
+  it.each([
+    '*',
+    'http://admin.lambe.vn',
+    'https://admin.lambe.vn/path',
+    'https://admin.lambe.vn, ',
+  ])('rejects unsafe production CORS origins: %s', (CORS_ORIGIN) => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        KYC_ENCRYPTION_KEY: kycEncryptionKey,
+        CORS_ORIGIN,
+      }),
+    ).toThrow('CORS_ORIGIN must contain only HTTPS origins');
+  });
+
+  it('rejects Firebase Auth Emulator in production', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        KYC_ENCRYPTION_KEY: kycEncryptionKey,
+        CORS_ORIGIN: 'https://admin.lambe.vn',
+        FIREBASE_ENABLED: 'true',
+        FIREBASE_PROJECT_ID: 'lambe-f7213',
+        FIREBASE_AUTH_EMULATOR_HOST: 'localhost:9099',
+      }),
+    ).toThrow('FIREBASE_AUTH_EMULATOR_HOST must be empty in production');
+  });
+
+  it.each([
+    ['INTERNAL_REFRESH_TOKEN_EXPIRES_DAYS', '0'],
+    ['INTERNAL_MAX_FAILED_ATTEMPTS', 'NaN'],
+    ['INTERNAL_LOCK_DURATION_MINUTES', '1441'],
+  ])('rejects invalid internal auth setting %s', (key, value) => {
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, [key]: value }),
+    ).toThrow(`${key} must be an integer between 1 and`);
   });
 
   it('requires a 32-byte base64 KYC encryption key in production', () => {

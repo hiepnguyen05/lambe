@@ -103,6 +103,12 @@ enum ServiceStatus {
   ARCHIVED
 }
 
+enum ProviderServiceSuggestionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum ServiceTargetAudience {
   ALL
   MEN
@@ -123,12 +129,20 @@ enum CustomerPricePreference {
   PREMIUM
 }
 
+enum CustomerAddressType {
+  HOME
+  WORK
+  OTHER
+}
+
 model User {
   id                     String                  @id @default(uuid())
   phone                  String                  @unique
   firebaseUid            String?                 @unique
   phoneVerifiedAt        DateTime                @default(now())
   fullName               String?
+  avatarUrl              String?
+  avatarPublicId         String?
   status                 UserStatus              @default(ACTIVE)
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
@@ -187,6 +201,7 @@ model InternalAccount {
   providerChecksReviewed       ProviderApplicationCheck[]    @relation("ProviderApplicationCheckReviewedBy")
   providerDocumentsReviewed    ProviderApplicationDocument[] @relation("ProviderApplicationDocumentReviewedBy")
   providerServicesReviewed     ProviderApplicationService[]  @relation("ProviderApplicationServiceReviewedBy")
+  serviceSuggestionsReviewed   ProviderServiceSuggestion[]
 
   @@index([status])
   @@map("internal_accounts")
@@ -263,24 +278,25 @@ model AuditLog {
 }
 
 model ServiceCategory {
-  id                 String                     @id @default(uuid())
-  code               String                     @unique
+  id                 String                      @id @default(uuid())
+  code               String                      @unique
   name               String
-  normalizedName     String                     @unique
-  slug               String                     @unique
+  normalizedName     String                      @unique
+  slug               String                      @unique
   description        String?
   iconUrl            String?
   coverImageUrl      String?
   coverImagePublicId String?
-  sortOrder          Int                        @default(0)
-  status             ServiceCategoryStatus      @default(INACTIVE)
+  sortOrder          Int                         @default(0)
+  status             ServiceCategoryStatus       @default(INACTIVE)
   createdById        String?
   updatedById        String?
-  createdAt          DateTime                   @default(now())
-  updatedAt          DateTime                   @updatedAt
-  createdBy          InternalAccount?           @relation("ServiceCategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy          InternalAccount?           @relation("ServiceCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  createdBy          InternalAccount?            @relation("ServiceCategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy          InternalAccount?            @relation("ServiceCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   services           Service[]
+  serviceSuggestions ProviderServiceSuggestion[]
   customerInterests  CustomerCategoryInterest[]
 
   @@index([status, sortOrder])
@@ -318,6 +334,7 @@ model Service {
   createdBy                   InternalAccount?             @relation("ServiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   updatedBy                   InternalAccount?             @relation("ServiceUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   providerApplicationServices ProviderApplicationService[]
+  approvedSuggestions         ProviderServiceSuggestion[]  @relation("ApprovedSuggestedService")
   providerServices            ProviderService[]
   customerInterests           CustomerServiceInterest[]
 
@@ -376,32 +393,40 @@ model CustomerServiceInterest {
 }
 
 model CustomerAddress {
-  id          String   @id @default(uuid())
-  userId      String
-  label       String
-  addressLine String
-  latitude    Float
-  longitude   Float
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String              @id @default(uuid())
+  userId         String
+  type           CustomerAddressType @default(HOME)
+  label          String
+  addressLine    String
+  provinceName   String?
+  districtName   String?
+  wardName       String?
+  streetLine     String?
+  latitude       Float
+  longitude      Float
+  isMapConfirmed Boolean             @default(false)
+  contactName    String?
+  contactPhone   String?
+  note           String?
+  isDefault      Boolean             @default(false)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isDefault])
   @@map("customer_addresses")
 }
 
 model ProviderApplication {
-  id                         String                                @id @default(uuid())
+  id                         String                               @id @default(uuid())
   userId                     String
   providerType               ProviderType
-  status                     ProviderApplicationStatus             @default(DRAFT)
-  revisionNumber             Int                                   @default(0)
+  status                     ProviderApplicationStatus            @default(DRAFT)
+  revisionNumber             Int                                  @default(0)
   legalFullName              String?
-  birthDate                  DateTime?                             @db.Date
+  birthDate                  DateTime?                            @db.Date
   gender                     Gender?
   email                      String?
-  emailVerifiedAt            DateTime?
   biography                  String?
   nationalIdNumber           String?
   nationalIdEncrypted        String?
@@ -418,19 +443,19 @@ model ProviderApplication {
   reviewedById               String?
   decisionReason             String?
   withdrawnAt                DateTime?
-  createdAt                  DateTime                              @default(now())
-  updatedAt                  DateTime                              @updatedAt
-  user                       User                                  @relation(fields: [userId], references: [id], onDelete: Restrict)
-  reviewedBy                 InternalAccount?                      @relation("ProviderApplicationReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt                  DateTime                             @default(now())
+  updatedAt                  DateTime                             @updatedAt
+  user                       User                                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  reviewedBy                 InternalAccount?                     @relation("ProviderApplicationReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   revisions                  ProviderApplicationRevision[]
   checks                     ProviderApplicationCheck[]
   documents                  ProviderApplicationDocument[]
   services                   ProviderApplicationService[]
+  serviceSuggestions         ProviderServiceSuggestion[]
   termsAcceptances           ProviderApplicationTermsAcceptance[]
   grantedRoles               UserRoleAssignment[]
   providerProfile            ProviderProfile?
   providerServices           ProviderService[]
-  emailVerification          ProviderApplicationEmailVerification?
 
   @@index([userId, status])
   @@index([status, submittedAt])
@@ -448,19 +473,6 @@ model ProviderIdentityClaim {
 
   @@index([userId])
   @@map("provider_identity_claims")
-}
-
-model ProviderApplicationEmailVerification {
-  applicationId String              @id
-  email         String
-  nonce         String
-  codeHash      String
-  attempts      Int                 @default(0)
-  expiresAt     DateTime
-  requestedAt   DateTime            @default(now())
-  application   ProviderApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-
-  @@map("provider_application_email_verifications")
 }
 
 model MailOutbox {
@@ -563,6 +575,35 @@ model ProviderApplicationService {
   @@map("provider_application_services")
 }
 
+model ProviderServiceSuggestion {
+  id                  String                          @id @default(uuid())
+  applicationId       String
+  categoryId          String
+  name                String
+  normalizedName      String
+  description         String?
+  proposedPriceAmount Int
+  durationMinutes     Int?
+  status              ProviderServiceSuggestionStatus @default(PENDING)
+  reviewNote          String?
+  approvedServiceId   String?
+  reviewedById        String?
+  reviewedAt          DateTime?
+  createdAt           DateTime                        @default(now())
+  updatedAt           DateTime                        @updatedAt
+  application         ProviderApplication             @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  category            ServiceCategory                 @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  approvedService     Service?                        @relation("ApprovedSuggestedService", fields: [approvedServiceId], references: [id], onDelete: SetNull)
+  reviewedBy          InternalAccount?                @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([applicationId, categoryId, normalizedName])
+  @@index([applicationId, status])
+  @@index([status, createdAt])
+  @@index([approvedServiceId])
+  @@index([reviewedById])
+  @@map("provider_service_suggestions")
+}
+
 model ProviderApplicationTermsAcceptance {
   id            String              @id @default(uuid())
   applicationId String
@@ -577,28 +618,45 @@ model ProviderApplicationTermsAcceptance {
 }
 
 model ProviderProfile {
-  id                  String                @id @default(uuid())
-  userId              String                @unique
-  sourceApplicationId String                @unique
-  providerType        ProviderType
-  displayName         String
-  avatarUrl           String?
-  biography           String?
-  experienceYears     Int?
-  status              ProviderProfileStatus @default(SETUP_REQUIRED)
-  serviceAreaName     String?
-  serviceRadiusKm     Int?
-  setupCompletedAt    DateTime?
-  workingHours        ProviderWorkingHour[]
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  user                User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
-  sourceApplication   ProviderApplication   @relation(fields: [sourceApplicationId], references: [id], onDelete: Restrict)
-  wallet              ProviderWallet?
-  services            ProviderService[]
+  id                   String                        @id @default(uuid())
+  userId               String                        @unique
+  sourceApplicationId  String                        @unique
+  providerType         ProviderType
+  displayName          String
+  avatarUrl            String?
+  biography            String?
+  experienceYears      Int?
+  status               ProviderProfileStatus         @default(SETUP_REQUIRED)
+  serviceAreaName      String?
+  serviceAreaLatitude  Float?
+  serviceAreaLongitude Float?
+  serviceRadiusKm      Int?
+  setupCompletedAt     DateTime?
+  workingHours         ProviderWorkingHour[]
+  availabilitySessions ProviderAvailabilitySession[]
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+  user                 User                          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  sourceApplication    ProviderApplication           @relation(fields: [sourceApplicationId], references: [id], onDelete: Restrict)
+  wallet               ProviderWallet?
+  services             ProviderService[]
 
   @@index([status])
   @@map("provider_profiles")
+}
+
+model ProviderAvailabilitySession {
+  id              String          @id @default(uuid())
+  providerId      String
+  startedAt       DateTime        @default(now())
+  lastHeartbeatAt DateTime        @default(now())
+  endedAt         DateTime?
+  endReason       String?
+  provider        ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, endedAt])
+  @@index([lastHeartbeatAt])
+  @@map("provider_availability_sessions")
 }
 
 model ProviderWorkingHour {

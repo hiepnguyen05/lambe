@@ -3,25 +3,38 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, type RedisClientType } from 'redis';
 import type { CacheStatus, CacheStore } from './cache-store';
+import type {
+  ProviderLocationPoint,
+  ProviderLocationStore,
+} from '../location/provider-location.store';
+
+const PROVIDER_GEO_KEY = 'lambe:providers:online:geo';
+const PROVIDER_HEARTBEAT_KEY = 'lambe:providers:online:heartbeat';
 
 @Injectable()
 export class RedisCacheService
-  implements CacheStore, OnModuleInit, OnModuleDestroy
+  implements CacheStore, ProviderLocationStore, OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(RedisCacheService.name);
   private client?: RedisClientType;
   private readonly enabled: boolean;
   private readonly defaultTtlSeconds: number;
+  private readonly providerLocationTtlSeconds: number;
 
   constructor(private readonly configService: ConfigService) {
     this.enabled = this.configService.get<boolean>('cache.enabled', false);
     this.defaultTtlSeconds = this.configService.get<number>(
       'cache.defaultTtlSeconds',
       300,
+    );
+    this.providerLocationTtlSeconds = this.configService.get<number>(
+      'cache.providerLocationTtlSeconds',
+      120,
     );
   }
 
@@ -104,6 +117,91 @@ export class RedisCacheService
   getStatus(): CacheStatus {
     if (!this.enabled) return 'disabled';
     return this.client?.isReady ? 'up' : 'down';
+  }
+
+  async upsert(
+    providerId: string,
+    latitude: number,
+    longitude: number,
+  ): Promise<void> {
+    const client = this.requireRealtimeClient();
+    await client
+      .multi()
+      .geoAdd(PROVIDER_GEO_KEY, {
+        member: providerId,
+        latitude,
+        longitude,
+      })
+      .zAdd(PROVIDER_HEARTBEAT_KEY, {
+        score: Date.now(),
+        value: providerId,
+      })
+      .exec();
+  }
+
+  async remove(providerId: string): Promise<void> {
+    const client = this.requireRealtimeClient();
+    await client
+      .multi()
+      .zRem(PROVIDER_GEO_KEY, providerId)
+      .zRem(PROVIDER_HEARTBEAT_KEY, providerId)
+      .exec();
+  }
+
+  async isOnline(providerId: string): Promise<boolean> {
+    const client = this.requireRealtimeClient();
+    const lastHeartbeat = await client.zScore(
+      PROVIDER_HEARTBEAT_KEY,
+      providerId,
+    );
+    return (
+      lastHeartbeat !== null &&
+      lastHeartbeat >= Date.now() - this.providerLocationTtlSeconds * 1000
+    );
+  }
+
+  async findNearby(
+    latitude: number,
+    longitude: number,
+    radiusKm: number,
+    limit: number,
+  ): Promise<ProviderLocationPoint[]> {
+    const client = this.requireRealtimeClient();
+    const candidates = await client.geoSearchWith(
+      PROVIDER_GEO_KEY,
+      { latitude, longitude },
+      { radius: radiusKm, unit: 'km' },
+      ['WITHDIST'],
+      { SORT: 'ASC', COUNT: Math.min(limit * 3, 300) },
+    );
+    if (!candidates.length) return [];
+
+    const providerIds = candidates.map((candidate) => String(candidate.member));
+    const heartbeats = await client.zmScore(
+      PROVIDER_HEARTBEAT_KEY,
+      providerIds,
+    );
+    const freshAfter = Date.now() - this.providerLocationTtlSeconds * 1000;
+
+    return candidates
+      .filter((_, index) => {
+        const heartbeat = heartbeats[index];
+        return heartbeat !== null && heartbeat >= freshAfter;
+      })
+      .slice(0, limit)
+      .map((candidate) => ({
+        providerId: String(candidate.member),
+        distanceKm: Number(candidate.distance ?? 0),
+      }));
+  }
+
+  private requireRealtimeClient(): RedisClientType {
+    if (!this.client?.isReady) {
+      throw new ServiceUnavailableException(
+        'Dịch vụ vị trí thời gian thực đang tạm thời không khả dụng.',
+      );
+    }
+    return this.client;
   }
 
   private logOperationFailure(

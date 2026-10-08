@@ -1,28 +1,32 @@
-export const VIETNAMESE_PHONE_PATTERN = /^(?:\+84|84|0)[35789][0-9]{8}$/
+export const VIETNAMESE_PHONE_PATTERN = /^(?:\+84|84|0)[35789][0-9]{8}$/;
 
-export function normalizeNationalPhoneInput(value: string): string {
-  let digits = value.replace(/\D/g, '')
-
-  if (digits.startsWith('84') && digits.length > 9) digits = digits.slice(2)
-  if (digits.startsWith('0')) digits = digits.slice(1)
-
-  return digits.slice(0, 9)
+function digitsOnly(value: string) {
+  return value.replace(/\D/g, '');
 }
 
-export function toVietnamesePhone(value: string): string {
-  return `0${normalizeNationalPhoneInput(value)}`
+export function normalizeNationalPhoneInput(value: string) {
+  const digits = digitsOnly(value);
+  if (digits.startsWith('84')) return digits.slice(2, 11);
+  if (digits.startsWith('0')) return digits.slice(1, 10);
+  return digits.slice(0, 9);
 }
 
-export function toE164VietnamesePhone(value: string): string {
-  return `+84${normalizeNationalPhoneInput(value)}`
+export function toVietnamesePhone(value: string) {
+  return `0${normalizeNationalPhoneInput(value)}`;
 }
 
-export function formatNationalPhone(value: string): string {
-  return normalizeNationalPhoneInput(value)
-    .replace(/(\d{3})(?=\d)/g, '$1 ')
-    .trim()
+export function toE164VietnamesePhone(value: string) {
+  return `+84${normalizeNationalPhoneInput(value)}`;
 }
 
-export function formatInternationalPhone(value: string): string {
-  return `+84 ${formatNationalPhone(value)}`.trim()
+export function formatNationalPhone(value: string) {
+  const national = normalizeNationalPhoneInput(value);
+  return national.replace(/^(\d{3})(\d{3})(\d{0,3}).*$/, (_, a, b, c) =>
+    [a, b, c].filter(Boolean).join(' '),
+  );
+}
+
+export function formatInternationalPhone(value: string) {
+  const formatted = formatNationalPhone(value);
+  return formatted ? `+84 ${formatted}` : '+84';
 }

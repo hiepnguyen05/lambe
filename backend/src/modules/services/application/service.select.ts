@@ -53,6 +53,9 @@ export const publicServiceSelect = {
   currencyCode: true,
   defaultDurationMinutes: true,
   targetAudience: true,
+  requiresCertificate: true,
+  minPortfolioImages: true,
+  minExperienceYears: true,
   sortOrder: true,
   category: {
     select: { id: true, code: true, name: true, slug: true },

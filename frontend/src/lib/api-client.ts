@@ -29,7 +29,11 @@ export async function apiRequest<T>(
   let response: Response
   const headers = new Headers(options.headers)
 
-  if (options.body && !headers.has('Content-Type') && !(options.body instanceof FormData)) {
+  if (
+    options.body &&
+    !headers.has('Content-Type') &&
+    !(options.body instanceof FormData)
+  ) {
     headers.set('Content-Type', 'application/json')
   }
 
@@ -53,7 +57,10 @@ export async function apiRequest<T>(
       body = JSON.parse(responseText) as T | ApiErrorBody
     } catch {
       if (response.ok) {
-        throw new ApiError('Máy chủ trả về dữ liệu không hợp lệ.', response.status)
+        throw new ApiError(
+          'Máy chủ trả về dữ liệu không hợp lệ.',
+          response.status,
+        )
       }
     }
   }

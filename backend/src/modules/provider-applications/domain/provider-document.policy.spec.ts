@@ -1,9 +1,5 @@
-import {
-  ProviderDocumentType,
-  ProviderApplicationStatus,
-} from '@prisma/client';
+import { ProviderDocumentType } from '@prisma/client';
 import { assertProviderDocumentQuota } from './provider-document.policy';
-import { assertProviderEmailVerifiable } from './provider-email.policy';
 
 describe('Provider document quotas', () => {
   it.each([
@@ -24,20 +20,5 @@ describe('Provider document quotas', () => {
     expect(() =>
       assertProviderDocumentQuota(documents, ProviderDocumentType.OTHER, false),
     ).toThrow();
-  });
-});
-
-describe('Email verification status policy', () => {
-  it('allows legacy pending applications to verify their unchanged email', () => {
-    expect(() =>
-      assertProviderEmailVerifiable(ProviderApplicationStatus.PENDING_REVIEW),
-    ).not.toThrow();
-  });
-  it.each([
-    ProviderApplicationStatus.APPROVED,
-    ProviderApplicationStatus.REJECTED,
-    ProviderApplicationStatus.WITHDRAWN,
-  ])('does not reopen a finished %s application', (status) => {
-    expect(() => assertProviderEmailVerifiable(status)).toThrow();
   });
 });

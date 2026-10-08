@@ -28,6 +28,16 @@ import {
   createImageUploadPipe,
   MAX_IMAGE_SIZE_BYTES,
 } from '../../../common/http/files/image-upload.validation';
+import { adminCategoryExample } from '../../../common/openapi/api-examples';
+import {
+  ApiConflictError,
+  ApiInternalAuthorizationErrors,
+  ApiNotFoundError,
+  ApiRateLimitError,
+  ApiStandardCreated,
+  ApiStandardOk,
+  ApiValidationError,
+} from '../../../common/openapi/api-response.decorators';
 import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 import { CurrentInternalAccount } from '../../internal-auth/decorators/current-internal-account.decorator';
 import { InternalRoles } from '../../internal-auth/decorators/internal-roles.decorator';
@@ -57,18 +67,37 @@ export class AdminCategoriesController {
 
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách danh mục phân trang dành cho Admin' })
+  @ApiStandardOk({
+    description: 'Danh sách danh mục có phân trang.',
+    data: [adminCategoryExample],
+    meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
+  })
+  @ApiInternalAuthorizationErrors()
   findAll(@Query() query: CategoryQueryDto) {
     return this.categoriesQuery.findAllForAdmin(query);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Xem chi tiết danh mục theo ID' })
+  @ApiStandardOk({
+    description: 'Chi tiết danh mục dành cho Admin.',
+    data: adminCategoryExample,
+  })
+  @ApiInternalAuthorizationErrors()
+  @ApiNotFoundError('Danh mục')
   findOne(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
     return this.categoriesQuery.findOneForAdmin(id);
   }
 
   @Post()
   @ApiOperation({ summary: 'Tạo mới danh mục dịch vụ' })
+  @ApiStandardCreated({
+    description: 'Tạo danh mục dịch vụ thành công.',
+    data: adminCategoryExample,
+  })
+  @ApiInternalAuthorizationErrors()
+  @ApiValidationError()
+  @ApiConflictError('Mã, tên hoặc slug danh mục đã tồn tại.')
   create(
     @Body() dto: CreateCategoryDto,
     @CurrentInternalAccount() account: AuthenticatedInternalAccount,
@@ -83,6 +112,12 @@ export class AdminCategoriesController {
 
   @Patch('reorder')
   @ApiOperation({ summary: 'Thay đổi thứ tự hiển thị danh mục (Sort Order)' })
+  @ApiStandardOk({
+    description: 'Sắp xếp danh mục thành công.',
+    data: [adminCategoryExample],
+  })
+  @ApiInternalAuthorizationErrors()
+  @ApiValidationError()
   reorder(
     @Body() dto: ReorderCategoriesDto,
     @CurrentInternalAccount() account: AuthenticatedInternalAccount,
@@ -99,6 +134,13 @@ export class AdminCategoriesController {
   @ApiOperation({
     summary: 'Cập nhật trạng thái danh mục (ACTIVE, INACTIVE, ARCHIVED)',
   })
+  @ApiStandardOk({
+    description: 'Cập nhật trạng thái danh mục thành công.',
+    data: adminCategoryExample,
+  })
+  @ApiInternalAuthorizationErrors()
+  @ApiValidationError()
+  @ApiNotFoundError('Danh mục')
   updateStatus(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() dto: UpdateCategoryStatusDto,
@@ -115,6 +157,14 @@ export class AdminCategoriesController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Cập nhật thông tin danh mục dịch vụ' })
+  @ApiStandardOk({
+    description: 'Cập nhật danh mục thành công.',
+    data: adminCategoryExample,
+  })
+  @ApiInternalAuthorizationErrors()
+  @ApiValidationError()
+  @ApiConflictError('Mã, tên hoặc slug danh mục đã tồn tại.')
+  @ApiNotFoundError('Danh mục')
   update(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() dto: UpdateCategoryDto,
@@ -149,6 +199,15 @@ export class AdminCategoriesController {
       },
     },
   })
+  @ApiStandardOk({
+    description: 'Tải ảnh bìa danh mục thành công.',
+    message: 'Cập nhật ảnh danh mục thành công.',
+    data: adminCategoryExample,
+  })
+  @ApiInternalAuthorizationErrors()
+  @ApiValidationError()
+  @ApiRateLimitError()
+  @ApiNotFoundError('Danh mục')
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: MAX_IMAGE_SIZE_BYTES } }),
   )
@@ -168,6 +227,13 @@ export class AdminCategoriesController {
 
   @Delete(':id/cover-image')
   @ApiOperation({ summary: 'Xóa ảnh bìa của danh mục' })
+  @ApiStandardOk({
+    description: 'Xóa ảnh bìa danh mục thành công.',
+    message: 'Xóa ảnh danh mục thành công.',
+    data: adminCategoryExample,
+  })
+  @ApiInternalAuthorizationErrors()
+  @ApiNotFoundError('Danh mục')
   removeCoverImage(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @CurrentInternalAccount() account: AuthenticatedInternalAccount,

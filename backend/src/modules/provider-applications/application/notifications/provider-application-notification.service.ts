@@ -89,6 +89,10 @@ export class ProviderApplicationNotificationService {
     );
   }
 
+  async flushPending(source: string): Promise<void> {
+    await this.outbox.deliverPending(source);
+  }
+
   private async sendSafely(
     recipient: ApplicationEmailRecipient,
     content: {

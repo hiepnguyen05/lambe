@@ -37,8 +37,16 @@ export class MailOutboxService {
   }
 
   @Interval(30_000)
-  async deliverPending(): Promise<void> {
-    if (this.processing || !this.mail.isEnabled()) return;
+  async deliverPending(source = 'scheduled'): Promise<void> {
+    if (this.processing) return;
+    if (!this.mail.isEnabled()) {
+      if (source !== 'scheduled') {
+        this.logger.warn(
+          `Mail delivery skipped from ${source}: SMTP disabled.`,
+        );
+      }
+      return;
+    }
     this.processing = true;
     try {
       await this.prisma.mailOutbox.updateMany({
@@ -65,11 +73,14 @@ export class MailOutboxService {
           FROM candidate WHERE mail."id" = candidate."id" RETURNING mail.*
         `);
         if (!rows.length) break;
+        this.logger.log(
+          `Mail outbox ${rows[0].id}: delivering to ${rows[0].recipient}.`,
+        );
         await this.deliver(rows[0]);
       }
-    } catch {
+    } catch (error: unknown) {
       this.logger.error(
-        'Mail outbox processing failed; pending messages will be retried.',
+        `Mail outbox processing failed from ${source}; pending messages will be retried. ${this.describeError(error)}`,
       );
     } finally {
       this.processing = false;
@@ -94,7 +105,10 @@ export class MailOutboxService {
         where: lease,
         data: { sentAt: new Date(), lockedUntil: null, text: '', html: '' },
       });
-    } catch {
+      this.logger.log(
+        `Mail outbox ${message.id}: delivered to ${message.recipient}.`,
+      );
+    } catch (error: unknown) {
       const failed = message.attempts >= MAX_ATTEMPTS;
       await this.prisma.mailOutbox.updateMany({
         where: lease,
@@ -108,8 +122,22 @@ export class MailOutboxService {
         },
       });
       this.logger.warn(
-        `Mail outbox ${message.id}: ${failed ? 'delivery exhausted' : 'retry scheduled'}.`,
+        `Mail outbox ${message.id}: ${failed ? 'delivery exhausted' : 'retry scheduled'}. ${this.describeError(error)}`,
       );
     }
+  }
+
+  private describeError(error: unknown): string {
+    if (!error || typeof error !== 'object') return 'reason=unknown';
+    const record = error as Record<string, unknown>;
+    const details = ['code', 'command', 'responseCode']
+      .map((key) => {
+        const value = record[key];
+        return typeof value === 'string' || typeof value === 'number'
+          ? `${key}=${value}`
+          : null;
+      })
+      .filter(Boolean);
+    return details.length ? details.join(' ') : 'reason=unknown';
   }
 }

@@ -144,6 +144,14 @@ describe('Provider service eligibility', () => {
     expect(() => assertProviderServiceEligible(item, 3, [doc])).not.toThrow();
     expect(() => assertProviderServiceEligible(item, 3, [doc], true)).toThrow();
   });
+  it('accepts verified application-wide evidence for a service', () => {
+    const item = fixture();
+    item.service.requiresCertificate = true;
+    const doc = { ...document(), applicationServiceId: null };
+    expect(() =>
+      assertProviderServiceEligible(item, 3, [doc], true),
+    ).not.toThrow();
+  });
   it('counts portfolio only for the selected service', () => {
     const item = fixture();
     item.service.minPortfolioImages = 2;

@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -10,9 +11,11 @@ import {
 } from 'class-validator';
 
 export class ServiceOrderItemDto {
+  @ApiProperty({ format: 'uuid' })
   @IsUUID('4')
   id: string;
 
+  @ApiProperty({ example: 1, minimum: 0 })
   @Type(() => Number)
   @IsInt()
   @Min(0)
@@ -20,6 +23,7 @@ export class ServiceOrderItemDto {
 }
 
 export class ReorderServicesDto {
+  @ApiProperty({ type: [ServiceOrderItemDto] })
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(100)

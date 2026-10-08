@@ -74,11 +74,22 @@ export class InternalAuthenticationService {
       throw new UnauthorizedException('Tài khoản nội bộ chưa được cấp quyền.');
     }
 
-    const refreshToken = this.tokenService.createRefreshToken();
     const sessionId = randomUUID();
+    const refreshToken = this.tokenService.createRefreshToken(sessionId);
     const now = new Date();
 
     await this.prisma.$transaction(async (transaction) => {
+      const activeAccount = await transaction.internalAccount.updateMany({
+        where: { id: account.id, status: 'ACTIVE' },
+        data: {
+          failedLoginCount: 0,
+          lockedUntil: null,
+          lastLoginAt: now,
+        },
+      });
+      if (activeAccount.count === 0) {
+        throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
+      }
       await transaction.internalSession.create({
         data: {
           id: sessionId,
@@ -87,15 +98,6 @@ export class InternalAuthenticationService {
           ipAddress: request.ipAddress,
           userAgent: request.userAgent,
           expiresAt: this.tokenService.getRefreshExpiry(),
-        },
-      });
-      await transaction.internalAccount.update({
-        where: { id: account.id },
-        data: {
-          status: 'ACTIVE',
-          failedLoginCount: 0,
-          lockedUntil: null,
-          lastLoginAt: now,
         },
       });
       await this.auditService.record(
@@ -175,19 +177,21 @@ export class InternalAuthenticationService {
       'internalAuth.lockDurationMinutes',
       15,
     );
-    const failedLoginCount = account.failedLoginCount + 1;
-    const shouldLock = failedLoginCount >= maxFailedAttempts;
-
-    await this.prisma.internalAccount.update({
+    const updated = await this.prisma.internalAccount.update({
       where: { id: account.id },
-      data: {
-        failedLoginCount,
-        status: shouldLock ? 'LOCKED' : account.status,
-        lockedUntil: shouldLock
-          ? new Date(Date.now() + lockDurationMinutes * 60 * 1000)
-          : account.lockedUntil,
-      },
+      data: { failedLoginCount: { increment: 1 } },
+      select: { failedLoginCount: true },
     });
+    const shouldLock = updated.failedLoginCount >= maxFailedAttempts;
+    if (shouldLock) {
+      await this.prisma.internalAccount.updateMany({
+        where: { id: account.id, status: 'ACTIVE' },
+        data: {
+          status: 'LOCKED',
+          lockedUntil: new Date(Date.now() + lockDurationMinutes * 60 * 1000),
+        },
+      });
+    }
 
     await this.auditLogin(
       account.id,

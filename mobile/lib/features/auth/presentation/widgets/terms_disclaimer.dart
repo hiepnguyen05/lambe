@@ -1,54 +1,37 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_typography.dart';
 
 class TermsDisclaimer extends StatelessWidget {
-  final VoidCallback? onTermsTap;
-  final VoidCallback? onPrivacyTap;
-
-  const TermsDisclaimer({
-    super.key,
-    this.onTermsTap,
-    this.onPrivacyTap,
-  });
+  const TermsDisclaimer({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 32.0, bottom: 16.0),
-      child: Center(
-        child: RichText(
-          textAlign: TextAlign.center,
-          text: TextSpan(
-            style: AppTypography.bodyMd.copyWith(
-              fontSize: 12,
-              color: AppColors.outline,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: RichText(
+        textAlign: TextAlign.center,
+        text: const TextSpan(
+          style: TextStyle(fontSize: 12, color: Color(0xFF3E4947), height: 1.5),
+          children: [
+            TextSpan(text: 'Bằng việc tiếp tục, bạn đồng ý với '),
+            TextSpan(
+              text: 'Điều khoản dịch vụ',
+              style: TextStyle(
+                color: Color(0xFF005C55),
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.underline,
+              ),
             ),
-            children: [
-              const TextSpan(text: 'Bằng việc tiếp tục, bạn đồng ý với '),
-              TextSpan(
-                text: 'Điều khoản',
-                style: AppTypography.bodyMd.copyWith(
-                  fontSize: 12,
-                  color: AppColors.primary,
-                  decoration: TextDecoration.underline,
-                ),
-                recognizer: TapGestureRecognizer()..onTap = onTermsTap,
+            TextSpan(text: ' và '),
+            TextSpan(
+              text: 'Chính sách bảo mật',
+              style: TextStyle(
+                color: Color(0xFF005C55),
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.underline,
               ),
-              const TextSpan(text: ' & '),
-              TextSpan(
-                text: 'Chính sách',
-                style: AppTypography.bodyMd.copyWith(
-                  fontSize: 12,
-                  color: AppColors.primary,
-                  decoration: TextDecoration.underline,
-                ),
-                recognizer: TapGestureRecognizer()..onTap = onPrivacyTap,
-              ),
-              const TextSpan(text: ' của Lambe'),
-            ],
-          ),
+            ),
+            TextSpan(text: ' của Lambe.'),
+          ],
         ),
       ),
     );

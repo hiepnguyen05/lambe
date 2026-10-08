@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import {
+  CustomerAddressType,
   CustomerPricePreference,
   Gender,
   ServiceTargetAudience,
@@ -18,10 +19,16 @@ describe('Customer onboarding DTOs', () => {
       categoryIds: ['6f0fb120-f590-4b63-8782-15ae57eeaba0'],
       serviceIds: ['4eb236b4-959d-45b9-a3f0-1f9c8c11f5e7'],
       defaultAddress: {
+        type: CustomerAddressType.HOME,
         label: ' Nhà ',
         addressLine: ' 12 Nguyễn Huệ, Quận 1 ',
+        provinceName: ' Thành phố Hồ Chí Minh ',
+        districtName: ' Quận 1 ',
+        wardName: ' Phường Bến Nghé ',
+        streetLine: ' 12 Nguyễn Huệ ',
         latitude: '10.7731',
         longitude: '106.703',
+        isMapConfirmed: true,
       },
     });
 
@@ -29,8 +36,13 @@ describe('Customer onboarding DTOs', () => {
     expect(dto.defaultAddress).toMatchObject({
       label: 'Nhà',
       addressLine: '12 Nguyễn Huệ, Quận 1',
+      provinceName: 'Thành phố Hồ Chí Minh',
+      districtName: 'Quận 1',
+      wardName: 'Phường Bến Nghé',
+      streetLine: '12 Nguyễn Huệ',
       latitude: 10.7731,
       longitude: 106.703,
+      isMapConfirmed: true,
     });
   });
 

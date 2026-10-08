@@ -19,6 +19,7 @@ import { ServiceEvidenceRequirementsDto } from './service-evidence-requirements.
 import {
   normalizeServiceCode,
   normalizeServiceSlug,
+  trimOptionalString,
   trimString,
 } from './service-transformers';
 
@@ -52,14 +53,14 @@ export class CreateServiceDto extends ServiceEvidenceRequirementsDto {
   slug: string;
 
   @ApiPropertyOptional()
-  @Transform(trimString)
+  @Transform(trimOptionalString)
   @IsString()
   @IsOptional()
   @MaxLength(1000)
   description?: string | null;
 
   @ApiPropertyOptional({ example: 'content_cut' })
-  @Transform(trimString)
+  @Transform(trimOptionalString)
   @IsIcon()
   @IsOptional()
   @MaxLength(2048)

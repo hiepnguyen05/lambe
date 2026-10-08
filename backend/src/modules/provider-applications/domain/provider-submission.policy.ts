@@ -1,5 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
-import { Prisma, ProviderDocumentType, ProviderType } from '@prisma/client';
+import {
+  Prisma,
+  ProviderDocumentType,
+  ProviderServiceSuggestionStatus,
+  ProviderType,
+} from '@prisma/client';
 import { CURRENT_PROVIDER_TERMS_VERSION } from '../constants/provider-terms.constants';
 import { assertProviderAdult } from './provider-birth-date.policy';
 import { assertProviderServiceEligible } from './provider-service-eligibility.policy';
@@ -8,6 +13,7 @@ export type SubmittableApplication = Prisma.ProviderApplicationGetPayload<{
   include: {
     documents: true;
     services: { include: { service: { include: { category: true } } } };
+    serviceSuggestions: true;
     termsAcceptances: true;
     checks: true;
   };
@@ -18,7 +24,6 @@ export function assertProviderSubmissionComplete(
 ): void {
   const missing: string[] = [];
   if (!application.email) missing.push('email liên hệ');
-  else if (!application.emailVerifiedAt) missing.push('xác minh email liên hệ');
   const isIndividual = application.providerType === ProviderType.INDIVIDUAL;
   if (isIndividual) {
     if (!application.legalFullName) missing.push('họ tên pháp lý');
@@ -55,7 +60,15 @@ export function assertProviderSubmissionComplete(
       missing.push(`tài liệu được bảo vệ ${type}`);
     }
   }
-  if (!application.services.length) missing.push('ít nhất một dịch vụ');
+  if (!application.services.length && !application.serviceSuggestions.length)
+    missing.push('ít nhất một dịch vụ hoặc đề xuất dịch vụ');
+  if (
+    application.serviceSuggestions.some(
+      (suggestion) =>
+        suggestion.status === ProviderServiceSuggestionStatus.REJECTED,
+    )
+  )
+    missing.push('xử lý các đề xuất dịch vụ bị từ chối');
   if (
     !application.termsAcceptances.some(
       (item) => item.termsVersion === CURRENT_PROVIDER_TERMS_VERSION,

@@ -29,8 +29,12 @@ export class InternalSessionService {
       },
     });
 
+    if (!session) {
+      await this.revokeReplayedSession(refreshToken, refreshTokenHash, request);
+      throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
+    }
+
     if (
-      !session ||
       session.revokedAt ||
       session.expiresAt <= now ||
       session.account.status !== 'ACTIVE' ||
@@ -39,12 +43,13 @@ export class InternalSessionService {
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
     }
 
-    const nextRefreshToken = this.tokenService.createRefreshToken();
+    const nextRefreshToken = this.tokenService.createRefreshToken(session.id);
     const updateResult = await this.prisma.internalSession.updateMany({
       where: {
         id: session.id,
         refreshTokenHash,
         revokedAt: null,
+        expiresAt: { gt: now },
       },
       data: {
         refreshTokenHash: this.tokenService.hashRefreshToken(nextRefreshToken),
@@ -56,6 +61,7 @@ export class InternalSessionService {
     });
 
     if (updateResult.count === 0) {
+      await this.revokeReplayedSession(refreshToken, refreshTokenHash, request);
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
     }
 
@@ -74,20 +80,59 @@ export class InternalSessionService {
     };
   }
 
+  private async revokeReplayedSession(
+    refreshToken: string,
+    refreshTokenHash: string,
+    request: RequestMetadata,
+  ): Promise<void> {
+    const sessionId = this.tokenService.getRefreshSessionId(refreshToken);
+    if (!sessionId) return;
+
+    await this.prisma.$transaction(async (transaction) => {
+      const result = await transaction.internalSession.updateMany({
+        where: {
+          id: sessionId,
+          refreshTokenHash: { not: refreshTokenHash },
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date(), revokeReason: 'REFRESH_REPLAY' },
+      });
+      if (result.count === 0) return;
+
+      const session = await transaction.internalSession.findUnique({
+        where: { id: sessionId },
+        select: { accountId: true },
+      });
+      await this.auditService.record(
+        {
+          actorInternalAccountId: session?.accountId,
+          action: 'INTERNAL_REFRESH_REPLAY',
+          resourceType: 'InternalSession',
+          resourceId: sessionId,
+          result: 'REVOKED',
+        },
+        request,
+        transaction,
+      );
+    });
+  }
+
   async logout(refreshToken: string | undefined, request: RequestMetadata) {
     if (refreshToken) {
-      const session = await this.prisma.internalSession.findUnique({
-        where: {
-          refreshTokenHash: this.tokenService.hashRefreshToken(refreshToken),
-        },
-      });
+      const session =
+        (await this.prisma.internalSession.findUnique({
+          where: {
+            refreshTokenHash: this.tokenService.hashRefreshToken(refreshToken),
+          },
+        })) ?? (await this.findSignedRefreshSession(refreshToken));
 
       if (session && !session.revokedAt) {
         await this.prisma.$transaction(async (transaction) => {
-          await transaction.internalSession.update({
-            where: { id: session.id },
+          const revoked = await transaction.internalSession.updateMany({
+            where: { id: session.id, revokedAt: null },
             data: { revokedAt: new Date(), revokeReason: 'LOGOUT' },
           });
+          if (revoked.count === 0) return;
           await this.auditService.record(
             {
               actorInternalAccountId: session.accountId,
@@ -104,5 +149,12 @@ export class InternalSessionService {
     }
 
     return { success: true, message: 'Đăng xuất thành công.' };
+  }
+
+  private async findSignedRefreshSession(refreshToken: string) {
+    const sessionId = this.tokenService.getRefreshSessionId(refreshToken);
+    return sessionId
+      ? this.prisma.internalSession.findUnique({ where: { id: sessionId } })
+      : null;
   }
 }

@@ -54,11 +54,14 @@ export class ProviderApplicationServicesService {
           dto.serviceId,
           dto.proposedPriceAmount,
         );
-        if (
-          (await transaction.providerApplicationService.count({
+        const existingServices =
+          await transaction.providerApplicationService.count({
             where: { applicationId },
-          })) >= 20
-        )
+          });
+        const suggestions = await transaction.providerServiceSuggestion.count({
+          where: { applicationId, status: { not: 'APPROVED' } },
+        });
+        if (existingServices + suggestions >= 20)
           throw new BadRequestException(
             'Mỗi hồ sơ được đăng ký tối đa 20 dịch vụ.',
           );

@@ -30,7 +30,6 @@ function createContext() {
     birthDate: new Date('1995-08-20T00:00:00.000Z'),
     gender: null,
     email: 'provider@example.com',
-    emailVerifiedAt: new Date(),
     biography: null,
     nationalIdNumber: null,
     nationalIdEncrypted: 'encrypted-national-id',
@@ -76,6 +75,9 @@ function createContext() {
     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
   };
+  const providerServiceSuggestion = {
+    count: jest.fn().mockResolvedValue(0),
+  };
   const providerApplicationDocument = {
     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
   };
@@ -97,6 +99,7 @@ function createContext() {
     providerApplication,
     providerApplicationCheck,
     providerApplicationService,
+    providerServiceSuggestion,
     providerApplicationDocument,
     providerApplicationRevision,
   };
@@ -104,6 +107,7 @@ function createContext() {
     providerApplication,
     providerApplicationCheck,
     providerApplicationService,
+    providerServiceSuggestion,
     providerApplicationDocument,
     providerApplicationRevision,
     providerApplicationTermsAcceptance,
@@ -127,6 +131,7 @@ function createContext() {
   };
   const notifications = {
     notifySubmitted: jest.fn().mockResolvedValue(undefined),
+    flushPending: jest.fn().mockResolvedValue(undefined),
   };
   return {
     applicationServices: new ProviderApplicationServicesService(
@@ -185,6 +190,7 @@ describe('ProviderApplicationsService', () => {
       legalFullName: null,
       documents: [],
       services: [],
+      serviceSuggestions: [],
       termsAcceptances: [],
     });
 
@@ -223,6 +229,7 @@ describe('ProviderApplicationsService', () => {
           proposedPriceAmount: 150_000,
         },
       ],
+      serviceSuggestions: [],
       termsAcceptances: [{ termsVersion: CURRENT_PROVIDER_TERMS_VERSION }],
     });
 
@@ -249,5 +256,34 @@ describe('ProviderApplicationsService', () => {
       },
       expect.any(Object),
     );
+    expect(notifications.flushPending).toHaveBeenCalledWith(
+      'provider-application-submit',
+    );
+  });
+
+  it('accepts a complete application with only a new service suggestion', async () => {
+    const { serviceUnderTest, prisma, baseApplication } = createContext();
+    prisma.providerApplication.findFirst.mockResolvedValue({
+      ...baseApplication,
+      documents: [
+        ProviderDocumentType.PORTRAIT,
+        ProviderDocumentType.ID_CARD_FRONT,
+        ProviderDocumentType.ID_CARD_BACK,
+        ProviderDocumentType.IDENTITY_SELFIE,
+      ].map((type) => ({
+        type,
+        status: ReviewStatus.PENDING,
+        deliveryType: 'authenticated',
+        fileFormat: 'webp',
+      })),
+      services: [],
+      serviceSuggestions: [{ status: 'PENDING', name: 'Tạo kiểu tóc đi tiệc' }],
+      termsAcceptances: [{ termsVersion: CURRENT_PROVIDER_TERMS_VERSION }],
+    });
+
+    const result = await serviceUnderTest.submit(applicationId, userId);
+
+    expect(result.data.status).toBe(ProviderApplicationStatus.PENDING_REVIEW);
+    expect(prisma.providerApplicationRevision.create).toHaveBeenCalled();
   });
 });

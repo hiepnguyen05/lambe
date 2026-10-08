@@ -283,7 +283,10 @@ export class ProviderApplicationDocumentsService {
       },
       request,
     );
-    return { success: true, data: { url } };
+    return {
+      success: true,
+      data: { url, fileFormat: document.fileFormat },
+    };
   }
 
   async getInternalAccess(
@@ -296,13 +299,14 @@ export class ProviderApplicationDocumentsService {
       where: { id: documentId, applicationId },
       select: {
         id: true,
+        fileUrl: true,
         publicId: true,
         fileFormat: true,
         deliveryType: true,
       },
     });
     if (!document) throw new NotFoundException('Không tìm thấy tài liệu.');
-    const url = this.createAccessUrl(document);
+    const url = this.createInternalAccessUrl(document);
     await this.audit.record(
       {
         actorInternalAccountId: actorId,
@@ -314,7 +318,45 @@ export class ProviderApplicationDocumentsService {
       },
       request,
     );
-    return { success: true, data: { url } };
+    return {
+      success: true,
+      data: { url, fileFormat: document.fileFormat },
+    };
+  }
+
+  async getInternalPreviewGallery(
+    applicationId: string,
+    actorId: string,
+    request: RequestMetadata,
+  ) {
+    const documents = await this.prisma.providerApplicationDocument.findMany({
+      where: { applicationId },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        fileUrl: true,
+        publicId: true,
+        fileFormat: true,
+        deliveryType: true,
+      },
+    });
+    const data = documents.map((document) => ({
+      documentId: document.id,
+      url: this.createInternalAccessUrl(document),
+      fileFormat: document.fileFormat,
+    }));
+    await this.audit.record(
+      {
+        actorInternalAccountId: actorId,
+        action: 'KYC_DOCUMENT_GALLERY_ACCESSED',
+        resourceType: 'ProviderApplication',
+        resourceId: applicationId,
+        result: 'SUCCESS',
+        metadata: { documentCount: data.length },
+      },
+      request,
+    );
+    return { success: true, data };
   }
 
   private async resetSection(
@@ -367,6 +409,19 @@ export class ProviderApplicationDocumentsService {
       document.publicId,
       document.fileFormat,
     );
+  }
+
+  private createInternalAccessUrl(document: {
+    fileUrl: string;
+    publicId: string;
+    fileFormat: string | null;
+    deliveryType: string;
+  }): string {
+    if (document.deliveryType === 'authenticated' && document.fileFormat) {
+      return this.createAccessUrl(document);
+    }
+    if (document.fileUrl) return document.fileUrl;
+    throw new ConflictException('Tài liệu không còn dữ liệu ảnh để kiểm duyệt.');
   }
 
   private deliveryTypeOf(value: string): MediaDeliveryType {

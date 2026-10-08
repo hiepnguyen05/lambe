@@ -3,6 +3,7 @@ import { validate } from 'class-validator';
 import { CompleteRegistrationDto } from './complete-registration.dto';
 import { CheckFirebasePhoneLinkDto } from './check-firebase-phone-link.dto';
 import { ExchangeFirebaseTokenDto } from './exchange-firebase-token.dto';
+import { UpdateCurrentUserProfileDto } from './update-current-user-profile.dto';
 
 describe('public auth DTO validation', () => {
   it('accepts a Firebase ID token with a valid length', async () => {
@@ -67,4 +68,32 @@ describe('public auth DTO validation', () => {
       expect(errors.some((error) => error.property === 'phone')).toBe(true);
     },
   );
+
+  it('accepts a valid current user profile update', async () => {
+    const dto = plainToInstance(UpdateCurrentUserProfileDto, {
+      fullName: '  Nguyen Van B  ',
+      gender: 'MALE',
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.fullName).toBe('Nguyen Van B');
+  });
+
+  it.each(['A', 'A'.repeat(101), 123])(
+    'rejects an invalid profile name: %s',
+    async (fullName) => {
+      const errors = await validate(
+        plainToInstance(UpdateCurrentUserProfileDto, { fullName }),
+      );
+      expect(errors.some((error) => error.property === 'fullName')).toBe(true);
+    },
+  );
+
+  it('rejects an invalid profile gender', async () => {
+    const errors = await validate(
+      plainToInstance(UpdateCurrentUserProfileDto, { gender: 'UNKNOWN' }),
+    );
+
+    expect(errors.some((error) => error.property === 'gender')).toBe(true);
+  });
 });

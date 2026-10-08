@@ -1,24 +1,38 @@
+import '../../../../core/domain/value_objects/upload_payload.dart';
 import '../entities/user_entity.dart';
 
-class VerifyOtpResult {
-  final bool isNewUser;
-  final String? accessToken;
-  final UserEntity? user;
-  final String? registrationToken;
-  final String? phone;
-
-  const VerifyOtpResult({
-    required this.isNewUser,
-    this.accessToken,
-    this.user,
-    this.registrationToken,
-    this.phone,
-  });
-}
+typedef PhoneCodeSent = void Function(String verificationId);
+typedef PhoneVerificationCompleted = void Function(UserEntity user);
+typedef PhoneVerificationFailed = void Function(
+  Object error,
+  StackTrace stackTrace,
+);
 
 abstract class AuthRepository {
-  Future<void> sendOtp(String phone);
-  Future<VerifyOtpResult> verifyOtp(String phone, String code);
-  Future<UserEntity> completeRegistration(String registrationToken, String fullName);
   Future<UserEntity?> getCurrentUser();
+
+  Future<void> sendOtp(
+    String phone, {
+    required bool isLinking,
+    required PhoneCodeSent onCodeSent,
+    required PhoneVerificationCompleted onAutoVerified,
+    required PhoneVerificationFailed onError,
+  });
+
+  Future<UserEntity> verifyOtp(
+    String verificationId,
+    String smsCode, {
+    required bool isLinking,
+  });
+
+  Future<UserEntity?> loginWithGoogle();
+  Future<UserEntity?> loginWithFacebook();
+  Future<UserEntity> loginWithFirebase(String idToken);
+  Future<UserEntity> completeRegistration(
+    String registrationToken,
+    String fullName,
+  );
+  Future<void> logout();
+  Future<UserEntity> updateProfile({String? fullName, String? gender});
+  Future<UserEntity> uploadAvatar(UploadPayload upload);
 }

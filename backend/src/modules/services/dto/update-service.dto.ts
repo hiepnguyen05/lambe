@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ServiceTargetAudience } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -11,14 +12,28 @@ import {
   MaxLength,
   Min,
   MinLength,
+  IsUUID,
+  ValidateIf,
 } from 'class-validator';
 import { IsIcon } from '../../../common/validation/icon.validator';
 import { ServiceEvidenceRequirementsDto } from './service-evidence-requirements.dto';
-import { normalizeServiceSlug, trimString } from './service-transformers';
+import {
+  normalizeServiceSlug,
+  trimOptionalString,
+  trimString,
+} from './service-transformers';
 
 const MAX_PRICE_AMOUNT = 2_000_000_000;
 
 export class UpdateServiceDto extends ServiceEvidenceRequirementsDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Danh mục mới của dịch vụ',
+  })
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @IsUUID('4')
+  categoryId?: string;
+
   @Transform(trimString)
   @IsString()
   @IsNotEmpty()
@@ -35,13 +50,13 @@ export class UpdateServiceDto extends ServiceEvidenceRequirementsDto {
   @IsOptional()
   slug?: string;
 
-  @Transform(trimString)
+  @Transform(trimOptionalString)
   @IsString()
   @MaxLength(1000)
   @IsOptional()
   description?: string | null;
 
-  @Transform(trimString)
+  @Transform(trimOptionalString)
   @IsIcon()
   @MaxLength(2048)
   @IsOptional()

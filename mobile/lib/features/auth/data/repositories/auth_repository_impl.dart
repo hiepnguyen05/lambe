@@ -1,57 +1,144 @@
-import '../../../../core/storage/secure_storage_service.dart';
+import '../../../../core/domain/value_objects/upload_payload.dart';
+import '../../../../core/error/app_failure.dart';
+import '../../../../core/storage/token_storage.dart';
+import '../models/user_model.dart';
 import '../../domain/entities/user_entity.dart';
+import '../../domain/exceptions/auth_flow_exception.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../datasources/auth_identity_datasource.dart';
 import '../datasources/auth_remote_datasource.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
-  final AuthRemoteDataSource _remoteDataSource;
-  final SecureStorageService _storageService;
+  final AuthRemoteDataSource remoteDataSource;
+  final AuthIdentityDataSource identityDataSource;
+  final TokenStorage secureStorage;
 
-  AuthRepositoryImpl(this._remoteDataSource, this._storageService);
-
-  @override
-  Future<void> sendOtp(String phone) async {
-    await _remoteDataSource.sendOtp(phone);
-  }
-
-  @override
-  Future<VerifyOtpResult> verifyOtp(String phone, String code) async {
-    final result = await _remoteDataSource.verifyOtp(phone, code);
-    if (!result.isNewUser && result.accessToken != null && result.user != null) {
-      await _storageService.saveAccessToken(result.accessToken!);
-      await _storageService.saveUserSession(
-        userId: result.user!.id,
-        phone: result.user!.phone,
-      );
-    }
-    return result;
-  }
-
-  @override
-  Future<UserEntity> completeRegistration(String registrationToken, String fullName) async {
-    final data = await _remoteDataSource.completeRegistration(registrationToken, fullName);
-    final accessToken = data['accessToken'] as String;
-    final userData = data['user'] as Map<String, dynamic>;
-
-    final rolesList = (userData['roles'] as List?)?.map((e) => e.toString()).toList() ?? ['CUSTOMER'];
-    final user = UserEntity(
-      id: userData['id'] as String,
-      phone: userData['phone'] as String,
-      fullName: userData['fullName'] as String?,
-      roles: rolesList,
-      status: userData['status'] as String? ?? 'ACTIVE',
-    );
-
-    await _storageService.saveAccessToken(accessToken);
-    await _storageService.saveUserSession(userId: user.id, phone: user.phone);
-
-    return user;
-  }
+  AuthRepositoryImpl(
+    this.remoteDataSource,
+    this.identityDataSource,
+    this.secureStorage,
+  );
 
   @override
   Future<UserEntity?> getCurrentUser() async {
-    final token = await _storageService.getAccessToken();
-    if (token == null || token.isEmpty) return null;
-    return await _remoteDataSource.getCurrentUser();
+    final token = await secureStorage.getAccessToken();
+    if (token == null) return null;
+
+    try {
+      final data = await remoteDataSource.getCurrentUser();
+      return UserModel.fromJson(Map<String, dynamic>.from(data['user'] as Map))
+          .toEntity();
+    } on UnauthorizedFailure {
+      await secureStorage.clearAll();
+      return null;
+    }
+  }
+
+  @override
+  Future<void> sendOtp(
+    String phone, {
+    required bool isLinking,
+    required PhoneCodeSent onCodeSent,
+    required PhoneVerificationCompleted onAutoVerified,
+    required PhoneVerificationFailed onError,
+  }) {
+    return identityDataSource.sendOtp(
+      phone,
+      isLinking: isLinking,
+      onCodeSent: onCodeSent,
+      onAutoVerified: (idToken) async {
+        try {
+          onAutoVerified(await loginWithFirebase(idToken));
+        } catch (error, stack) {
+          onError(error, stack);
+        }
+      },
+      onError: onError,
+    );
+  }
+
+  @override
+  Future<UserEntity> verifyOtp(
+    String verificationId,
+    String smsCode, {
+    required bool isLinking,
+  }) async {
+    final idToken = await identityDataSource.verifyOtp(
+      verificationId,
+      smsCode,
+      isLinking: isLinking,
+    );
+    return loginWithFirebase(idToken);
+  }
+
+  @override
+  Future<UserEntity?> loginWithGoogle() async {
+    final idToken = await identityDataSource.signInWithGoogle();
+    return idToken == null ? null : loginWithFirebase(idToken);
+  }
+
+  @override
+  Future<UserEntity?> loginWithFacebook() async {
+    final idToken = await identityDataSource.signInWithFacebook();
+    return idToken == null ? null : loginWithFirebase(idToken);
+  }
+
+  @override
+  Future<UserEntity> loginWithFirebase(String idToken) async {
+    final data = await remoteDataSource.loginWithFirebase(idToken);
+
+    if (data.containsKey('registrationToken')) {
+      throw RegistrationRequiredException(data['registrationToken'] as String);
+    }
+    if (data['requiresPhoneVerification'] == true) {
+      throw const PhoneVerificationRequiredException();
+    }
+
+    final token = data['accessToken'] as String;
+    final userJson = data['user'] as Map<String, dynamic>;
+    await secureStorage.saveAccessToken(token);
+    return UserModel.fromJson(userJson).toEntity();
+  }
+
+  @override
+  Future<UserEntity> completeRegistration(
+    String registrationToken,
+    String fullName,
+  ) async {
+    final data = await remoteDataSource.completeRegistration(
+      registrationToken,
+      fullName,
+    );
+    final token = data['accessToken'] as String;
+    final userJson = data['user'] as Map<String, dynamic>;
+    await secureStorage.saveAccessToken(token);
+    return UserModel.fromJson(userJson).toEntity();
+  }
+
+  @override
+  Future<void> logout() async {
+    try {
+      await identityDataSource.signOut();
+    } finally {
+      await secureStorage.clearAll();
+    }
+  }
+
+  @override
+  Future<UserEntity> updateProfile({String? fullName, String? gender}) async {
+    final data = <String, dynamic>{};
+    if (fullName != null) data['fullName'] = fullName;
+    if (gender != null) data['gender'] = gender;
+
+    final result = await remoteDataSource.updateCurrentUser(data);
+    return UserModel.fromJson(Map<String, dynamic>.from(result['user'] as Map))
+        .toEntity();
+  }
+
+  @override
+  Future<UserEntity> uploadAvatar(UploadPayload upload) async {
+    final result = await remoteDataSource.uploadAvatar(upload);
+    return UserModel.fromJson(Map<String, dynamic>.from(result['user'] as Map))
+        .toEntity();
   }
 }

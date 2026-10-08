@@ -45,6 +45,7 @@ describe('InternalAuthenticationService', () => {
     const account = createInternalAccount();
     account.failedLoginCount = 4;
     prisma.internalAccount.findUnique.mockResolvedValue(account);
+    prisma.internalAccount.update.mockResolvedValue({ failedLoginCount: 5 });
 
     await expect(
       authenticationService.login(
@@ -56,18 +57,41 @@ describe('InternalAuthenticationService', () => {
     const updateAccountInput = prisma.internalAccount.update.mock
       .calls[0][0] as {
       where: { id: string };
-      data: { failedLoginCount: number; status: string; lockedUntil: Date };
+      data: { failedLoginCount: { increment: number } };
     };
     expect(updateAccountInput.where.id).toBe('account-id');
-    expect(updateAccountInput.data).toMatchObject({
-      failedLoginCount: 5,
-      status: 'LOCKED',
+    expect(updateAccountInput.data.failedLoginCount).toEqual({ increment: 1 });
+    const lockAccountInput = prisma.internalAccount.updateMany.mock
+      .calls[0][0] as {
+      where: { id: string; status: string };
+      data: { status: string; lockedUntil: Date };
+    };
+    expect(lockAccountInput.where).toEqual({
+      id: 'account-id',
+      status: 'ACTIVE',
     });
-    expect(updateAccountInput.data.lockedUntil).toBeInstanceOf(Date);
+    expect(lockAccountInput.data.status).toBe('LOCKED');
+    expect(lockAccountInput.data.lockedUntil).toBeInstanceOf(Date);
     const auditInput = prisma.auditLog.create.mock.calls[0][0] as {
       data: { result: string };
     };
     expect(auditInput.data.result).toBe('ACCOUNT_LOCKED');
+    expect(prisma.internalSession.create).not.toHaveBeenCalled();
+  });
+
+  it('does not create a session if the account was locked during login', async () => {
+    const { authenticationService, prisma } = createInternalAuthTestContext();
+    prisma.internalAccount.findUnique.mockResolvedValue(
+      createInternalAccount(),
+    );
+    prisma.internalAccount.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      authenticationService.login(
+        { username: 'admin', password: INTERNAL_TEST_PASSWORD },
+        {},
+      ),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(prisma.internalSession.create).not.toHaveBeenCalled();
   });
 

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Post,
@@ -16,6 +17,16 @@ import { Throttle } from '@nestjs/throttler';
 import { parse } from 'cookie';
 import type { Request, Response } from 'express';
 import { CurrentRequestMetadata } from '../../../common/http/decorators/current-request-metadata.decorator';
+import {
+  internalAccountExample,
+  internalAuthExample,
+} from '../../../common/openapi/api-examples';
+import {
+  ApiAuthenticationErrors,
+  ApiRateLimitError,
+  ApiStandardOk,
+  ApiValidationError,
+} from '../../../common/openapi/api-response.decorators';
 import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 import { InternalAuthenticationService } from '../application/internal-authentication.service';
 import { InternalSessionService } from '../application/internal-session.service';
@@ -64,11 +75,20 @@ export class InternalAuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
   @Throttle({
     short: { limit: 2, ttl: 1000 },
     medium: { limit: 10, ttl: 60_000 },
   })
   @ApiOperation({ summary: 'Sign in an internal account' })
+  @ApiStandardOk({
+    description:
+      'Đăng nhập tài khoản nội bộ, trả access token và set refresh token trong HTTP-only cookie.',
+    data: internalAuthExample,
+  })
+  @ApiValidationError()
+  @ApiAuthenticationErrors()
+  @ApiRateLimitError()
   async login(
     @Body() dto: InternalLoginDto,
     @CurrentRequestMetadata() requestMetadata: RequestMetadata,
@@ -81,8 +101,16 @@ export class InternalAuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
   @Throttle({ medium: { limit: 30, ttl: 60_000 } })
   @ApiOperation({ summary: 'Rotate an internal refresh session' })
+  @ApiStandardOk({
+    description:
+      'Làm mới access token bằng refresh token trong cookie HTTP-only.',
+    data: internalAuthExample,
+  })
+  @ApiAuthenticationErrors()
+  @ApiRateLimitError()
   async refresh(
     @Req() request: Request,
     @CurrentRequestMetadata() requestMetadata: RequestMetadata,
@@ -105,6 +133,11 @@ export class InternalAuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Revoke the current internal session' })
+  @ApiStandardOk({
+    description: 'Đăng xuất và thu hồi refresh session hiện tại.',
+    message: 'Đã đăng xuất.',
+    data: null,
+  })
   async logout(
     @Req() request: Request,
     @CurrentRequestMetadata() requestMetadata: RequestMetadata,
@@ -125,8 +158,14 @@ export class InternalAuthController {
 
   @Get('me')
   @UseGuards(InternalJwtAuthGuard)
+  @Header('Cache-Control', 'no-store')
   @ApiBearerAuth('internal-token')
   @ApiOperation({ summary: 'Get the current internal account' })
+  @ApiStandardOk({
+    description: 'Thông tin tài khoản nội bộ hiện tại.',
+    data: internalAccountExample,
+  })
+  @ApiAuthenticationErrors()
   async me(@CurrentInternalAccount() account: AuthenticatedInternalAccount) {
     return this.authenticationService.getCurrentAccount(account.accountId);
   }

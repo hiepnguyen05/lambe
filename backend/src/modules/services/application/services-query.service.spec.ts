@@ -65,7 +65,7 @@ describe('ServicesQueryService', () => {
         },
       }),
     );
-    expect(cache.set).toHaveBeenCalledWith('services:active:v1', [
+    expect(cache.set).toHaveBeenCalledWith('services:active:v2', [
       PUBLIC_SERVICE,
     ]);
   });

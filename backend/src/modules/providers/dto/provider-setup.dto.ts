@@ -6,6 +6,8 @@ import {
   ArrayUnique,
   IsArray,
   IsInt,
+  IsLatitude,
+  IsLongitude,
   IsString,
   IsUUID,
   Max,
@@ -49,6 +51,16 @@ export class ProviderSetupDto {
   @MinLength(2)
   @MaxLength(200)
   serviceAreaName: string;
+
+  @ApiProperty({ example: 21.0368 })
+  @Type(() => Number)
+  @IsLatitude()
+  serviceAreaLatitude: number;
+
+  @ApiProperty({ example: 105.7827 })
+  @Type(() => Number)
+  @IsLongitude()
+  serviceAreaLongitude: number;
 
   @ApiProperty({ example: 10, minimum: 1, maximum: 50 })
   @IsInt()

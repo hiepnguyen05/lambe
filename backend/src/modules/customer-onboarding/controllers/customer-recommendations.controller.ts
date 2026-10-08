@@ -1,5 +1,11 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { recommendationExample } from '../../../common/openapi/api-examples';
+import {
+  ApiAuthenticationErrors,
+  ApiStandardOk,
+  ApiValidationError,
+} from '../../../common/openapi/api-response.decorators';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
@@ -16,7 +22,14 @@ export class CustomerRecommendationsController {
   ) {}
 
   @Get('services')
-  @ApiOperation({ summary: 'Lấy dịch vụ được xếp hạng theo sở thích khách' })
+  @ApiOperation({ summary: 'Lấy dịch vụ đa dạng theo danh mục khách quan tâm' })
+  @ApiStandardOk({
+    description:
+      'Kết quả cân bằng giữa danh mục quan tâm, nhóm khách mục tiêu và nội dung khám phá.',
+    data: recommendationExample,
+  })
+  @ApiAuthenticationErrors()
+  @ApiValidationError()
   getServices(
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: RecommendationQueryDto,

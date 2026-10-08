@@ -9,6 +9,13 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InternalRole } from '@prisma/client';
 import { CurrentRequestMetadata } from '../../../common/http/decorators/current-request-metadata.decorator';
+import { adminServiceExample } from '../../../common/openapi/api-examples';
+import {
+  ApiInternalAuthorizationErrors,
+  ApiNotFoundError,
+  ApiStandardOk,
+  ApiValidationError,
+} from '../../../common/openapi/api-response.decorators';
 import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 import { CurrentInternalAccount } from '../../internal-auth/decorators/current-internal-account.decorator';
 import { InternalRoles } from '../../internal-auth/decorators/internal-roles.decorator';
@@ -28,6 +35,13 @@ export class AdminServiceOrderingController {
 
   @Patch('reorder')
   @ApiOperation({ summary: 'Sắp xếp dịch vụ trong một danh mục' })
+  @ApiStandardOk({
+    description: 'Sắp xếp dịch vụ trong danh mục thành công.',
+    data: [adminServiceExample],
+  })
+  @ApiInternalAuthorizationErrors()
+  @ApiValidationError()
+  @ApiNotFoundError('Danh mục hoặc dịch vụ')
   reorder(
     @Param('categoryId', new ParseUUIDPipe({ version: '4' }))
     categoryId: string,

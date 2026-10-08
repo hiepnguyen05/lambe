@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../persistence/postgres/prisma.service';
@@ -9,7 +10,29 @@ const CLEANUP_ADVISORY_LOCK_ID = 127_001_003;
 export class MaintenanceService {
   private readonly logger = new Logger(MaintenanceService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
+
+  @Cron(CronExpression.EVERY_MINUTE, {
+    name: 'close-stale-provider-sessions',
+    waitForCompletion: true,
+  })
+  async closeStaleProviderSessions(): Promise<void> {
+    const ttlSeconds = this.config.get<number>(
+      'cache.providerLocationTtlSeconds',
+      120,
+    );
+    const staleBefore = new Date(Date.now() - ttlSeconds * 1000);
+    const result = await this.prisma.providerAvailabilitySession.updateMany({
+      where: { endedAt: null, lastHeartbeatAt: { lt: staleBefore } },
+      data: { endedAt: new Date(), endReason: 'HEARTBEAT_EXPIRED' },
+    });
+    if (result.count > 0) {
+      this.logger.log(`Closed ${result.count} stale provider sessions`);
+    }
+  }
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM, {
     name: 'cleanup-expired-records',

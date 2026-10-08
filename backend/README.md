@@ -256,7 +256,7 @@ lưu Cloudinary và quản lý vòng đời ảnh.
 
 ## Media Upload
 
-Swagger is available at `http://localhost:5000/docs` outside production and test.
+Swagger is available at `http://localhost:5000/docs` only in development.
 The protected endpoint `POST /api/admin/upload/image` accepts JPEG, PNG, WEBP, and
 GIF files up to 5 MB. It is available to `ADMIN` and `MODERATOR` accounts. For a
 category cover, prefer `POST /api/admin/categories/:id/cover-image`; that endpoint
@@ -327,6 +327,10 @@ only be activated while their parent category is `ACTIVE`. Cover images must be
 uploaded through the dedicated multipart endpoint rather than supplied as URLs.
 `targetAudience` accepts `ALL`, `MEN`, or `WOMEN`. It is a recommendation signal;
 it does not prevent a customer from viewing or booking another service.
+`PATCH /api/admin/services/:id` accepts `categoryId` to move a service to
+another category. The destination must exist and cannot be `ARCHIVED`; an
+`ACTIVE` service requires an `ACTIVE` destination. The service name must remain
+unique within the destination category.
 
 ## Customer Onboarding And Recommendations
 
@@ -368,12 +372,13 @@ PATCH  /api/provider-applications/:id
 POST   /api/provider-applications/:id/services
 PATCH  /api/provider-applications/:id/services/:itemId
 DELETE /api/provider-applications/:id/services/:itemId
+POST   /api/provider-applications/:id/service-suggestions
+PATCH  /api/provider-applications/:id/service-suggestions/:suggestionId
+DELETE /api/provider-applications/:id/service-suggestions/:suggestionId
 POST   /api/provider-applications/:id/documents/:type
 GET    /api/provider-applications/:id/documents/:documentId/access
 DELETE /api/provider-applications/:id/documents/:documentId
 POST   /api/provider-applications/:id/terms/accept
-POST   /api/provider-applications/:id/email/request-code
-POST   /api/provider-applications/:id/email/verify
 POST   /api/provider-applications/:id/submit
 POST   /api/provider-applications/:id/withdraw
 ```
@@ -392,12 +397,23 @@ GET   /api/admin/provider-applications/:id/documents/:documentId/access
 PATCH /api/admin/provider-applications/:id/checks/:section
 PATCH /api/admin/provider-applications/:id/documents/:documentId/review
 PATCH /api/admin/provider-applications/:id/services/:itemId/review
+POST  /api/admin/provider-applications/:id/service-suggestions/:suggestionId/approve
+POST  /api/admin/provider-applications/:id/service-suggestions/:suggestionId/reject
 POST  /api/admin/provider-applications/:id/request-changes
 POST  /api/admin/provider-applications/:id/reject
 POST  /api/admin/provider-applications/:id/approve
 ```
 
 Các nhóm kiểm tra là `IDENTITY`, `PORTRAIT`, `EXPERTISE`, `SERVICES` và `TERMS`.
+Nếu dịch vụ chưa có, người đăng ký thêm đề xuất vào hồ sơ với `categoryId`,
+`name`, `description`, `proposedPriceAmount` và `durationMinutes`. Hồ sơ có thể
+được nộp chỉ với đề xuất dịch vụ. Admin duyệt bằng body của API tạo dịch vụ
+(`categoryId`, `code`, `name`, `slug`, giá sàn/trần, đối tượng, thời lượng,
+yêu cầu chứng chỉ/portfolio/kinh nghiệm). Backend tạo dịch vụ `ACTIVE` trong
+catalog và mục dịch vụ `PENDING` cho đối tác trong cùng transaction. Giá đối
+tác vẫn phải được duyệt riêng; hồ sơ không thể được duyệt cuối cùng khi còn
+đề xuất `PENDING`. Nếu từ chối, Admin gửi `reason`; người đăng ký sửa hoặc xóa
+đề xuất khi hồ sơ được trả về `NEEDS_CHANGES`.
 Khi yêu cầu bổ sung, hạng mục `NEEDS_CHANGES` hoặc chưa xác minh (`PENDING`)
 được chỉnh sửa; hạng mục `VERIFIED` vẫn khóa. Khi
 duyệt, backend thực hiện một transaction để cấp role `PROVIDER`, tạo
@@ -417,23 +433,19 @@ issue short-lived signed URLs, apply rate limits, and audit the viewer.
 - `MODERATOR` / `KYC_REVIEWER`: xem CCCD và tài liệu riêng tư, xác minh các nhóm,
   xét duyệt tài liệu/dịch vụ, yêu cầu bổ sung và trực tiếp duyệt/từ chối hồ sơ.
   Không cần chuyển hồ sơ sang Admin để ra quyết định cuối cùng.
-- `SERVICE_REVIEWER`: chỉ xét duyệt `EXPERTISE`, `SERVICES` và dịch vụ đề xuất;
+- `SERVICE_REVIEWER`: chỉ xét duyệt `EXPERTISE`, `SERVICES` và giá dịch vụ đã đăng ký;
   không xem CCCD/tài liệu KYC và không duyệt/từ chối toàn bộ hồ sơ.
 - `SUPPORT`: xem danh sách và thông tin tiến độ tối thiểu, không xem giấy tờ,
   ngày sinh hoặc CCCD. Vai trò mới không tự động cấp cho tài khoản hiện có.
 
-Duyệt trực tiếp vẫn yêu cầu đủ các hạng mục đã xác minh, điều kiện dịch vụ/giá
-hợp lệ và email đã xác minh. Audit log ghi người ra quyết định thực tế; cơ chế
-chống duyệt trùng và gửi email kết quả vẫn áp dụng như trước.
+Duyệt trực tiếp vẫn yêu cầu đủ các hạng mục đã xác minh và điều kiện dịch vụ/giá
+hợp lệ. Audit log ghi người ra quyết định thực tế; cơ chế chống duyệt trùng và
+gửi email kết quả vẫn áp dụng như trước.
 
 Người đăng ký cá nhân phải đủ 18 tuổi (ngày tại Việt Nam). `birthDate` chỉ nhận
-`YYYY-MM-DD`. Email phải được xác minh trước khi nộp hồ sơ. Yêu cầu mã bằng
-`POST /api/provider-applications/:id/email/request-code`, sau đó xác minh bằng
-`POST /api/provider-applications/:id/email/verify` với body `{"code":"123456"}`.
-Mã hết hạn sau 10 phút, tối đa 5 lần nhập sai, gửi lại cách nhau ít nhất 60 giây.
-Đổi email làm mất xác minh cũ. `emailVerifiedAt` không nhận từ client.
-Hồ sơ cũ đang `PENDING_REVIEW` vẫn được xác minh email hiện tại (không được
-chỉnh sửa nội dung); tránh phải tự coi email cũ là đã xác minh khi migration.
+`YYYY-MM-DD`. Email trong hồ sơ là email liên hệ để Lambe gửi thông báo tiếp
+nhận hồ sơ, yêu cầu bổ sung và kết quả xét duyệt; không dùng email OTP trong
+luồng đăng ký đối tác.
 
 API quản lý dịch vụ nhận thêm `requiresCertificate` (mặc định `false`),
 `minPortfolioImages` (0-20, mặc định 0), `minExperienceYears` (0-80, mặc định 0).
@@ -469,6 +481,8 @@ Chỉ tài khoản có `ProviderProfile` đã được duyệt mới sử dụng
 ```json
 {
   "serviceAreaName": "Quận Cầu Giấy, Hà Nội",
+  "serviceAreaLatitude": 21.0368,
+  "serviceAreaLongitude": 105.7827,
   "serviceRadiusKm": 10,
   "workingHours": [{ "dayOfWeek": 1, "startMinute": 480, "endMinute": 1020 }],
   "enabledServiceIds": ["<ProviderService.id đã được duyệt>"]
@@ -478,13 +492,102 @@ Chỉ tài khoản có `ProviderProfile` đã được duyệt mới sử dụng
 Lịch theo giờ Việt Nam; 0 là Chủ nhật, 1-6 là Thứ hai-Thứ bảy. Bán kính 1-50 km,
 tối đa 21 khung giờ không chồng lấn và ít nhất một dịch vụ đủ điều kiện. Không
 được dùng thiết lập để bỏ đình chỉ hồ sơ/dịch vụ. Cấu hình hợp lệ chuyển hồ sơ
-từ `SETUP_REQUIRED` sang `ACTIVE`, **không bật nhận đơn**. Vị trí online, kiểm
-tra số dư ví, giới hạn địa lý và tìm thợ gần khách vẫn thuộc luồng nhận đơn sẽ
-phát triển riêng. `serviceAreaName` hiện là mô tả, chưa phải ranh giới địa lý.
+từ `SETUP_REQUIRED` sang `ACTIVE`, nhưng **không tự bật nhận đơn**.
+`serviceAreaName` là nhãn hiển thị; tọa độ tâm và bán kính xác định vùng phục vụ.
+Sau đó thợ phải chủ động bật trạng thái online và gửi heartbeat vị trí. API khám
+phá chỉ trả về thợ đang online, đúng dịch vụ và còn nằm trong vùng phục vụ đã
+đăng ký. Kiểm tra số dư ví sẽ được bổ sung tại bước thợ nhận đơn.
 
 Chưa bật tự động xóa KYC của hồ sơ cũ: cần chốt thời hạn lưu trữ, ngoại lệ khiếu
 nại và quy trình xóa Cloudinary trước. Các thử nghiệm tự động dùng dữ liệu giả,
 database kiểm thử riêng và mock email/upload, không gửi SMS/email thật.
+
+## Customer Addresses And Provider Discovery
+
+Khách hàng quản lý tối đa 10 địa chỉ. Mọi thao tác đều kiểm tra quyền sở hữu;
+khi xóa địa chỉ mặc định, hệ thống tự chọn một địa chỉ còn lại làm mặc định.
+Địa chỉ đầu tiên tự động là mặc định và không thể bỏ mặc định trực tiếp nếu chưa
+chọn địa chỉ khác thay thế.
+
+Mỗi địa chỉ hỗ trợ:
+
+- `type`: `HOME`, `WORK` hoặc `OTHER`.
+- `label` và `addressLine` để hiển thị.
+- `provinceName`, `districtName`, `wardName`, `streetLine` để tách các cấp địa chỉ.
+- `latitude`, `longitude` để tìm nhà cung cấp gần khách.
+- `isMapConfirmed` để biết khách đã xác nhận ghim bản đồ.
+- `contactName`, `contactPhone`, `note` và `isDefault`.
+
+```text
+GET    /api/me/addresses
+POST   /api/me/addresses
+PATCH  /api/me/addresses/:id
+PUT    /api/me/addresses/:id/default
+DELETE /api/me/addresses/:id
+```
+
+Ví dụ tạo địa chỉ từ vị trí hiện tại:
+
+```json
+{
+  "type": "HOME",
+  "label": "Nhà",
+  "addressLine": "12 Nguyễn Huệ, Quận 1, TP.HCM",
+  "provinceName": "Thành phố Hồ Chí Minh",
+  "districtName": "Quận 1",
+  "wardName": "Phường Bến Nghé",
+  "streetLine": "12 Nguyễn Huệ",
+  "latitude": 10.7731,
+  "longitude": 106.703,
+  "isMapConfirmed": true,
+  "isDefault": true
+}
+```
+
+Mobile phải tự xin quyền GPS, đọc tọa độ và reverse geocode bằng dịch vụ bản đồ;
+backend không thể tự đọc vị trí thiết bị. Khi cập nhật vị trí, API yêu cầu gửi
+đồng thời `latitude` và `longitude`. Nếu tọa độ đổi mà request không gửi
+`isMapConfirmed`, backend tự đặt lại thành `false`.
+
+Schema được triển khai bởi migration:
+
+```text
+20261003100000_expand_customer_addresses
+```
+
+Nhà cung cấp đã duyệt và hoàn tất setup có thể bật online. Vị trí hiện tại chỉ
+lưu trong Redis GEO, hết heartbeat mặc định sau 120 giây và không được trả công
+khai cho khách hàng. PostgreSQL chỉ giữ phiên online để truy vết.
+
+```text
+GET  /api/me/provider/availability
+POST /api/me/provider/availability/online
+PUT  /api/me/provider/availability/heartbeat
+POST /api/me/provider/availability/offline
+```
+
+Tìm kiếm dùng body để hạn chế tọa độ chính xác xuất hiện trong access log. Có thể
+gửi `customerAddressId` hoặc cặp `latitude`/`longitude`; kết quả chỉ trả khoảng
+cách đã làm tròn, hồ sơ công khai và dịch vụ phù hợp.
+
+```text
+POST /api/discovery/providers/search
+GET  /api/providers/:id/public
+```
+
+```json
+{
+  "serviceId": "<Service.id>",
+  "customerAddressId": "<CustomerAddress.id>",
+  "radiusKm": 10,
+  "limit": 20
+}
+```
+
+`PROVIDER_LOCATION_TTL_SECONDS` cấu hình thời gian sống của heartbeat trong
+khoảng 30-600 giây, mặc định 120 giây. Redis là thành phần bắt buộc đối với bật
+online và tìm kiếm theo vị trí; các API dữ liệu PostgreSQL vẫn hoạt động nếu
+Redis tạm thời không khả dụng.
 
 ## Scripts
 
@@ -513,4 +616,10 @@ npm run admin:create -- --username admin --name "System Admin"
 - Không dùng schema/migration trong `src/database/prisma` nữa.
 - Redis là cache tùy chọn khi chạy local và được bật mặc định trong Docker.
 - Firebase Auth Emulator có thể dùng trong development/test mà không gửi SMS thật.
-- Production bắt buộc cấu hình CORS, Firebase project và service account.
+- Production bắt buộc cấu hình CORS bằng các HTTPS origin cụ thể, Firebase project
+  và service account; không được bật Firebase Auth Emulator.
+- Refresh token quản trị mới gắn với session bằng chữ ký. Dùng lại token đã xoay
+  sẽ thu hồi session và ghi audit. Token cũ tạo trước bản nâng cấp vẫn dùng được
+  đến lần refresh tiếp theo nhưng chưa phát hiện được replay.
+- Giới hạn tốc độ hiện dùng bộ nhớ từng tiến trình; khi chạy nhiều replica cần
+  chuyển sang storage dùng chung để giới hạn chính xác trên toàn hệ thống.

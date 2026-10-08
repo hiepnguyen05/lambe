@@ -10,6 +10,7 @@ import { ServiceSlugParamDto } from './service-slug-param.dto';
 import {
   normalizeServiceCode,
   normalizeServiceSlug,
+  trimOptionalString,
   trimString,
 } from './service-transformers';
 import { UpdateServiceStatusDto } from './update-service-status.dto';
@@ -40,6 +41,23 @@ describe('Service DTOs', () => {
     });
   });
 
+  it('normalizes empty optional text fields to null', async () => {
+    const dto = plainToInstance(CreateServiceDto, {
+      categoryId: '6f0fb120-f590-4b63-8782-15ae57eeaba0',
+      code: 'MEN_HAIRCUT',
+      name: 'Cắt tóc nam',
+      slug: 'cat-toc-nam',
+      description: '   ',
+      iconUrl: '',
+      minPriceAmount: 50000,
+      maxPriceAmount: 300000,
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.description).toBeNull();
+    expect(dto.iconUrl).toBeNull();
+  });
+
   it.each([
     { minPriceAmount: 0, maxPriceAmount: 100000 },
     { minPriceAmount: 50000, maxPriceAmount: 2_000_000_001 },
@@ -59,7 +77,7 @@ describe('Service DTOs', () => {
     await expect(validate(dto)).resolves.not.toHaveLength(0);
   });
 
-  it('does not expose immutable or cover image fields on update', async () => {
+  it('allows category changes but not immutable or cover image fields', async () => {
     const dto = plainToInstance(UpdateServiceDto, {
       name: ' Cắt tóc nữ ',
       code: 'CHANGED',
@@ -70,10 +88,18 @@ describe('Service DTOs', () => {
     await validate(dto, { whitelist: true });
     expect(dto.name).toBe('Cắt tóc nữ');
     expect(dto).not.toHaveProperty('code');
-    expect(dto).not.toHaveProperty('categoryId');
+    expect(dto.categoryId).toBe('6f0fb120-f590-4b63-8782-15ae57eeaba0');
     expect(dto).not.toHaveProperty('status');
     expect(dto).not.toHaveProperty('coverImageUrl');
   });
+
+  it.each([null, 'invalid'])(
+    'rejects invalid category on update',
+    async (categoryId) => {
+      const dto = plainToInstance(UpdateServiceDto, { categoryId });
+      await expect(validate(dto)).resolves.not.toHaveLength(0);
+    },
+  );
 
   it('validates admin filters and pagination', async () => {
     const valid = plainToInstance(ServiceQueryDto, {
@@ -138,5 +164,6 @@ describe('Service DTOs', () => {
     expect(trimString({ value: 1 })).toBe(1);
     expect(normalizeServiceCode({ value: 1 })).toBe(1);
     expect(normalizeServiceSlug({ value: 1 })).toBe(1);
+    expect(trimOptionalString({ value: 1 })).toBe(1);
   });
 });

@@ -22,6 +22,13 @@ import {
   createImageUploadPipe,
   MAX_IMAGE_SIZE_BYTES,
 } from '../../../common/http/files/image-upload.validation';
+import { uploadImageExample } from '../../../common/openapi/api-examples';
+import {
+  ApiInternalAuthorizationErrors,
+  ApiRateLimitError,
+  ApiStandardCreated,
+  ApiValidationError,
+} from '../../../common/openapi/api-response.decorators';
 import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 import { CurrentInternalAccount } from '../../internal-auth/decorators/current-internal-account.decorator';
 import { InternalRoles } from '../../internal-auth/decorators/internal-roles.decorator';
@@ -62,6 +69,13 @@ export class UploadController {
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: MAX_IMAGE_SIZE_BYTES } }),
   )
+  @ApiStandardCreated({
+    description: 'Upload ảnh thành công lên Cloudinary.',
+    data: uploadImageExample,
+  })
+  @ApiInternalAuthorizationErrors()
+  @ApiValidationError()
+  @ApiRateLimitError()
   uploadImage(
     @UploadedFile(createImageUploadPipe())
     file: Express.Multer.File,

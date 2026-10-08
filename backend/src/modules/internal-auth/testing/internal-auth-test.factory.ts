@@ -67,7 +67,11 @@ export function createInternalAuthTestContext() {
       }),
       update: jest.fn((input: unknown): Promise<unknown> => {
         void input;
-        return Promise.resolve({});
+        return Promise.resolve({ failedLoginCount: 1 });
+      }),
+      updateMany: jest.fn((input: unknown): Promise<{ count: number }> => {
+        void input;
+        return Promise.resolve({ count: 1 });
       }),
     },
     internalSession: {
@@ -112,11 +116,19 @@ export function createInternalAuthTestContext() {
     ['internalAuth.refreshTokenExpiresDays', 7],
     ['internalAuth.maxFailedAttempts', 5],
     ['internalAuth.lockDurationMinutes', 15],
+    [
+      'internalAuth.jwtSecret',
+      'internal-jwt-secret-for-tests-at-least-32-characters',
+    ],
   ]);
   const configService = {
     get: jest.fn((key: string, defaultValue: unknown) =>
       config.has(key) ? config.get(key) : defaultValue,
     ),
+    getOrThrow: jest.fn((key: string) => {
+      if (!config.has(key)) throw new Error(`Missing config: ${key}`);
+      return config.get(key);
+    }),
   };
   const auditService = {
     record: jest.fn((event: object, request: object = {}): Promise<void> => {
@@ -141,6 +153,7 @@ export function createInternalAuthTestContext() {
       auditService as never,
       tokenService,
     ),
+    tokenService,
     prisma,
     jwtService,
   };

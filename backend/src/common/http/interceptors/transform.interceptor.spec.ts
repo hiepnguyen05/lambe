@@ -45,4 +45,26 @@ describe('TransformInterceptor', () => {
       data: null,
     });
   });
+
+  it('preserves list data when pagination and summary are stored in meta', async () => {
+    await expect(
+      run({
+        success: true,
+        data: [{ id: 'provider-id' }],
+        meta: {
+          page: 1,
+          total: 1,
+          summary: { active: 1 },
+        },
+      }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: [{ id: 'provider-id' }],
+      meta: {
+        page: 1,
+        total: 1,
+        summary: { active: 1 },
+      },
+    });
+  });
 });

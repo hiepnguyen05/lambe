@@ -55,6 +55,8 @@ function context() {
   const audit = { record: jest.fn() };
   const dto = {
     serviceAreaName: 'Ha Noi',
+    serviceAreaLatitude: 21.0368,
+    serviceAreaLongitude: 105.7827,
     serviceRadiusKm: 10,
     enabledServiceIds: [selected.id],
     workingHours: [{ dayOfWeek: 1, startMinute: 480, endMinute: 1020 }],

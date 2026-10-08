@@ -166,7 +166,7 @@ describe('Provider registration upgrade (e2e)', () => {
   const internalHeader = (role: InternalRole) =>
     `Bearer ${internalTokens[role] ?? ''}`;
 
-  it('rejects invalid date/null required values and requires verified email and service-linked evidence', async () => {
+  it('rejects invalid date/null required values and requires contact email and service-linked evidence', async () => {
     const create = await userRequest()
       .post('/api/provider-applications')
       .set('Authorization', userHeader())
@@ -242,46 +242,11 @@ describe('Provider registration upgrade (e2e)', () => {
       .expect(400);
   });
 
-  it('verifies the contact email, rejects wrong codes and does not trust body-supplied verification flags', async () => {
+  it('rejects body-supplied verification flags and submits a complete application', async () => {
     await userRequest()
       .patch(`/api/provider-applications/${applicationId}`)
       .set('Authorization', userHeader())
       .send({ emailVerifiedAt: new Date().toISOString() })
-      .expect(400);
-    await userRequest()
-      .post(`/api/provider-applications/${applicationId}/email/request-code`)
-      .set('Authorization', userHeader())
-      .expect(200);
-    const pending = await context.prisma.mailOutbox.findFirstOrThrow({
-      where: {
-        deduplicationKey: { startsWith: `provider-email:${applicationId}:` },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    const code = pending.text.match(/\b\d{6}\b/)?.[0];
-    expect(code).toBeDefined();
-    const wrongCode = code === '000000' ? '999999' : '000000';
-    await userRequest()
-      .post(`/api/provider-applications/${applicationId}/email/verify`)
-      .set('Authorization', userHeader())
-      .send({ code: wrongCode })
-      .expect(400);
-    expect(
-      (
-        await context.prisma.providerApplicationEmailVerification.findUniqueOrThrow(
-          { where: { applicationId } },
-        )
-      ).attempts,
-    ).toBe(1);
-    await userRequest()
-      .post(`/api/provider-applications/${applicationId}/email/verify`)
-      .set('Authorization', userHeader())
-      .send({ code })
-      .expect(200);
-    await userRequest()
-      .post(`/api/provider-applications/${applicationId}/email/verify`)
-      .set('Authorization', userHeader())
-      .send({ code })
       .expect(400);
     await userRequest()
       .post(`/api/provider-applications/${applicationId}/submit`)
@@ -436,6 +401,8 @@ describe('Provider registration upgrade (e2e)', () => {
       });
     const setup = {
       serviceAreaName: 'Cau Giay, Ha Noi',
+      serviceAreaLatitude: 21.0368,
+      serviceAreaLongitude: 105.7827,
       serviceRadiusKm: 10,
       enabledServiceIds: [providerService.id],
       workingHours: [{ dayOfWeek: 1, startMinute: 480, endMinute: 1020 }],

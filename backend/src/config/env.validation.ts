@@ -49,6 +49,38 @@ function requireBase64Key(
   }
 }
 
+function requirePositiveIntegerInRange(
+  config: Record<string, unknown>,
+  key: string,
+  fallback: number,
+  maximum: number,
+): void {
+  const value = Number(config[key] ?? fallback);
+  if (!Number.isInteger(value) || value < 1 || value > maximum) {
+    throw new Error(`${key} must be an integer between 1 and ${maximum}`);
+  }
+}
+
+function validateProductionCorsOrigins(value: string): void {
+  for (const origin of value.split(',').map((item) => item.trim())) {
+    let url: URL;
+    try {
+      url = new URL(origin);
+    } catch {
+      throw new Error('CORS_ORIGIN must contain only HTTPS origins');
+    }
+    if (
+      url.protocol !== 'https:' ||
+      url.origin !== origin ||
+      url.username ||
+      url.password ||
+      origin.includes('*')
+    ) {
+      throw new Error('CORS_ORIGIN must contain only HTTPS origins');
+    }
+  }
+}
+
 export function validateEnvironment(
   config: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -65,6 +97,9 @@ export function validateEnvironment(
   );
   const privateUrlTtlSeconds = Number(
     config.CLOUDINARY_PRIVATE_URL_TTL_SECONDS ?? 300,
+  );
+  const providerLocationTtlSeconds = Number(
+    config.PROVIDER_LOCATION_TTL_SECONDS ?? 120,
   );
   const trustProxy = toStringValue(config.TRUST_PROXY, 'false').trim();
 
@@ -121,6 +156,14 @@ export function validateEnvironment(
   }
 
   if (
+    !Number.isInteger(providerLocationTtlSeconds) ||
+    providerLocationTtlSeconds < 30 ||
+    providerLocationTtlSeconds > 600
+  ) {
+    throw new Error('PROVIDER_LOCATION_TTL_SECONDS must be between 30 and 600');
+  }
+
+  if (
     !['false', 'loopback', 'linklocal', 'uniquelocal'].includes(trustProxy) &&
     !/^\d+$/.test(trustProxy)
   ) {
@@ -169,6 +212,20 @@ export function validateEnvironment(
     }
   }
 
+  requirePositiveIntegerInRange(
+    config,
+    'INTERNAL_REFRESH_TOKEN_EXPIRES_DAYS',
+    7,
+    30,
+  );
+  requirePositiveIntegerInRange(config, 'INTERNAL_MAX_FAILED_ATTEMPTS', 5, 20);
+  requirePositiveIntegerInRange(
+    config,
+    'INTERNAL_LOCK_DURATION_MINUTES',
+    15,
+    1440,
+  );
+
   requireValue(config, 'DATABASE_URL');
   requireSecret(config, 'JWT_SECRET');
   requireSecret(config, 'INTERNAL_JWT_SECRET');
@@ -179,9 +236,14 @@ export function validateEnvironment(
 
   if (nodeEnv === 'production') {
     requireBase64Key(config, 'KYC_ENCRYPTION_KEY', 32);
-    requireValue(config, 'CORS_ORIGIN');
+    validateProductionCorsOrigins(requireValue(config, 'CORS_ORIGIN'));
     if (firebaseEnabled !== 'true') {
       throw new Error('FIREBASE_ENABLED must be true in production');
+    }
+    if (toStringValue(config.FIREBASE_AUTH_EMULATOR_HOST).trim()) {
+      throw new Error(
+        'FIREBASE_AUTH_EMULATOR_HOST must be empty in production',
+      );
     }
   }
 
@@ -197,6 +259,7 @@ export function validateEnvironment(
     SMTP_SECURE: smtpSecure,
     SMTP_CONNECTION_TIMEOUT_MS: smtpConnectionTimeoutMs,
     CLOUDINARY_PRIVATE_URL_TTL_SECONDS: privateUrlTtlSeconds,
+    PROVIDER_LOCATION_TTL_SECONDS: providerLocationTtlSeconds,
     TRUST_PROXY: trustProxy,
   };
 }

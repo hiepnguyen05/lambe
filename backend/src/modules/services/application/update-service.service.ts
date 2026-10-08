@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, ServiceCategoryStatus, ServiceStatus } from '@prisma/client';
 import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 import { AuditService } from '../../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../../infrastructure/persistence/postgres/prisma.service';
@@ -50,6 +50,27 @@ export class UpdateServiceService {
         const maxPriceAmount = dto.maxPriceAmount ?? existing.maxPriceAmount;
         assertValidPriceRange(minPriceAmount, maxPriceAmount);
 
+        const categoryId = dto.categoryId ?? existing.categoryId;
+        if (dto.categoryId && dto.categoryId !== existing.categoryId) {
+          const category = await transaction.serviceCategory.findUnique({
+            where: { id: dto.categoryId },
+            select: { status: true },
+          });
+          if (!category)
+            throw new NotFoundException('Không tìm thấy danh mục dịch vụ.');
+          if (category.status === ServiceCategoryStatus.ARCHIVED)
+            throw new BadRequestException(
+              'Không thể chuyển dịch vụ sang danh mục đã lưu trữ.',
+            );
+          if (
+            existing.status === ServiceStatus.ACTIVE &&
+            category.status !== ServiceCategoryStatus.ACTIVE
+          )
+            throw new BadRequestException(
+              'Dịch vụ đang hoạt động chỉ được chuyển sang danh mục đang hoạt động.',
+            );
+        }
+
         const updates: Prisma.ServiceUncheckedUpdateInput = {
           updatedById: actorId,
         };
@@ -57,7 +78,12 @@ export class UpdateServiceService {
           categoryId: string;
           normalizedName?: string;
           slug?: string;
-        } = { categoryId: existing.categoryId };
+        } = { categoryId };
+
+        if (categoryId !== existing.categoryId) {
+          updates.categoryId = categoryId;
+          uniqueInput.normalizedName = existing.normalizedName;
+        }
 
         if (dto.name !== undefined) {
           updates.name = dto.name.trim();

@@ -3,6 +3,7 @@ import {
   ProviderApplicationSection,
   ProviderApplicationStatus,
   ProviderDocumentType,
+  ProviderServiceSuggestionStatus,
   ProviderType,
   ReviewStatus,
   UserRole,
@@ -29,7 +30,6 @@ function createContext() {
     status: ProviderApplicationStatus.PENDING_REVIEW,
     legalFullName: 'Nguyen Van A',
     email: 'provider@example.com',
-    emailVerifiedAt: new Date(),
     birthDate: new Date('1995-08-20'),
     nationalIdEncrypted: 'encrypted',
     revisionNumber: 1,
@@ -79,6 +79,7 @@ function createContext() {
         status: ReviewStatus.VERIFIED,
       },
     ],
+    serviceSuggestions: [] as { status: ProviderServiceSuggestionStatus }[],
   };
   const providerApplication = {
     findUnique: jest.fn().mockResolvedValue(application),
@@ -92,18 +93,32 @@ function createContext() {
       services: [{ serviceId: 'service-id' }],
     }),
   };
+  const providerApplicationCheck = {
+    findUnique: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+  };
+  const providerApplicationDocument = {
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+  };
+  const providerApplicationService = {
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+  };
   const transaction = {
     $queryRaw: jest.fn().mockResolvedValue([{ id: applicationId }]),
     providerApplication,
     userRoleAssignment,
     providerProfile,
+    providerApplicationCheck,
+    providerApplicationDocument,
+    providerApplicationService,
     auditLog: { create: jest.fn().mockResolvedValue({}) },
   };
   const prisma = {
     providerApplication,
-    providerApplicationCheck: { findUnique: jest.fn(), update: jest.fn() },
-    providerApplicationDocument: { updateMany: jest.fn() },
-    providerApplicationService: { updateMany: jest.fn() },
+    providerApplicationCheck,
+    providerApplicationDocument,
+    providerApplicationService,
     $transaction: jest.fn(
       async (callback: (client: typeof transaction) => Promise<unknown>) =>
         callback(transaction),
@@ -114,6 +129,7 @@ function createContext() {
     notifyApproved: jest.fn().mockResolvedValue(undefined),
     notifyRejected: jest.fn().mockResolvedValue(undefined),
     notifyChangesRequested: jest.fn().mockResolvedValue(undefined),
+    flushPending: jest.fn().mockResolvedValue(undefined),
   };
   return {
     review: new ProviderApplicationReviewService(
@@ -125,6 +141,9 @@ function createContext() {
     providerProfile,
     userRoleAssignment,
     notifications,
+    providerApplicationCheck,
+    providerApplicationDocument,
+    providerApplicationService,
   };
 }
 
@@ -137,6 +156,18 @@ describe('ProviderApplicationReviewService', () => {
     await expect(
       review.approve(applicationId, actorId, {}),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('does not approve while a new service suggestion is pending', async () => {
+    const { review, application, providerProfile } = createContext();
+    application.serviceSuggestions.push({
+      status: ProviderServiceSuggestionStatus.PENDING,
+    });
+
+    await expect(
+      review.approve(applicationId, actorId, {}),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(providerProfile.create).not.toHaveBeenCalled();
   });
 
   it('grants provider role, wallet and approved services atomically', async () => {
@@ -165,6 +196,36 @@ describe('ProviderApplicationReviewService', () => {
       },
       expect.any(Object),
     );
+    expect(notifications.flushPending).toHaveBeenCalledWith(
+      'provider-application-approval',
+    );
     expect(result.data.id).toBe('provider-id');
+  });
+
+  it('bulk verifies pending documents, eligible services and checks', async () => {
+    const {
+      review,
+      application,
+      providerApplicationCheck,
+      providerApplicationDocument,
+      providerApplicationService,
+    } = createContext();
+    application.checks[0].status = ReviewStatus.PENDING;
+    (application.documents[0] as { status: ReviewStatus }).status =
+      ReviewStatus.PENDING;
+    (application.services[0] as { status: ReviewStatus }).status =
+      ReviewStatus.PENDING;
+
+    const result = await review.reviewAllEligible(applicationId, actorId, {});
+
+    expect(providerApplicationDocument.updateMany).toHaveBeenCalled();
+    expect(providerApplicationService.updateMany).toHaveBeenCalled();
+    expect(providerApplicationCheck.updateMany).toHaveBeenCalled();
+    expect(result.data).toMatchObject({
+      verifiedDocuments: 1,
+      verifiedServices: 1,
+      verifiedChecks: 1,
+      skippedServices: [],
+    });
   });
 });

@@ -49,6 +49,13 @@ export const internalProviderApplicationDetailInclude = {
       reviewedBy: { select: reviewerSelect },
     },
   },
+  serviceSuggestions: {
+    orderBy: { createdAt: 'asc' as const },
+    include: {
+      category: { select: { id: true, name: true } },
+      reviewedBy: { select: reviewerSelect },
+    },
+  },
   termsAcceptances: { orderBy: { acceptedAt: 'desc' as const } },
   reviewedBy: { select: reviewerSelect },
 } satisfies Prisma.ProviderApplicationInclude;
@@ -63,7 +70,6 @@ export const applicantProviderApplicationSelect = {
   birthDate: true,
   gender: true,
   email: true,
-  emailVerifiedAt: true,
   biography: true,
   nationalIdLast4: true,
   experienceYears: true,
@@ -120,6 +126,23 @@ export const applicantProviderApplicationSelect = {
       service: { select: serviceSummarySelect },
     },
   },
+  serviceSuggestions: {
+    orderBy: { createdAt: 'asc' as const },
+    select: {
+      id: true,
+      categoryId: true,
+      name: true,
+      description: true,
+      proposedPriceAmount: true,
+      durationMinutes: true,
+      status: true,
+      reviewNote: true,
+      approvedServiceId: true,
+      reviewedAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  },
   termsAcceptances: {
     orderBy: { acceptedAt: 'desc' as const },
     select: { id: true, termsVersion: true, acceptedAt: true },
@@ -138,5 +161,7 @@ export const providerApplicationListSelect = {
   createdAt: true,
   updatedAt: true,
   user: { select: { id: true, phone: true, fullName: true } },
-  _count: { select: { documents: true, services: true } },
+  _count: {
+    select: { documents: true, services: true, serviceSuggestions: true },
+  },
 } satisfies Prisma.ProviderApplicationSelect;

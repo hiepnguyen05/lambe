@@ -56,7 +56,8 @@ export function assertProviderServiceEligible(
   }
   const evidence = documents.filter(
     (doc) =>
-      doc.applicationServiceId === item.id &&
+      (doc.applicationServiceId === null ||
+        doc.applicationServiceId === item.id) &&
       doc.deliveryType === 'authenticated' &&
       doc.fileFormat &&
       (requireVerified
@@ -73,12 +74,12 @@ export function assertProviderServiceEligible(
       'Dịch vụ yêu cầu chứng chỉ nghề liên kết hợp lệ.',
     );
   }
-  if (
-    evidence.filter((doc) => doc.type === ProviderDocumentType.PORTFOLIO)
-      .length < service.minPortfolioImages
-  ) {
+  const portfolioCount = evidence.filter(
+    (doc) => doc.type === ProviderDocumentType.PORTFOLIO,
+  ).length;
+  if (portfolioCount < service.minPortfolioImages) {
     throw new BadRequestException(
-      'Chưa đủ ảnh portfolio liên kết cho dịch vụ.',
+      `Dịch vụ yêu cầu ${service.minPortfolioImages} ảnh portfolio đã xác minh, hồ sơ hiện có ${portfolioCount}.`,
     );
   }
 }

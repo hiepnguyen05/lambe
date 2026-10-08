@@ -41,5 +41,6 @@ import { PublicServicesController } from './controllers/public-services.controll
     ChangeServiceStatusService,
     ReorderServicesService,
   ],
+  exports: [ServiceCacheService, ServiceUniquenessService],
 })
 export class ServicesModule {}

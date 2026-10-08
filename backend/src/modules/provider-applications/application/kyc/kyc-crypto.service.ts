@@ -85,25 +85,6 @@ export class KycCryptoService {
       .digest('hex');
   }
 
-  hashEmailVerification(
-    applicationId: string,
-    email: string,
-    nonce: string,
-    code: string,
-  ): string {
-    return createHmac('sha256', this.requireKey())
-      .update(
-        JSON.stringify([
-          'lambe:provider-email:v1',
-          applicationId,
-          email,
-          nonce,
-          code,
-        ]),
-      )
-      .digest('hex');
-  }
-
   maskNationalId(last4?: string | null): string | null {
     return last4 ? `********${last4}` : null;
   }

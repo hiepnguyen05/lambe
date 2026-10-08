@@ -5,4 +5,7 @@ export default registerAs('cache', () => ({
   url: process.env.REDIS_URL ?? 'redis://localhost:6379',
   defaultTtlSeconds: Number(process.env.REDIS_DEFAULT_TTL_SECONDS ?? 300),
   connectTimeoutMs: Number(process.env.REDIS_CONNECT_TIMEOUT_MS ?? 3000),
+  providerLocationTtlSeconds: Number(
+    process.env.PROVIDER_LOCATION_TTL_SECONDS ?? 120,
+  ),
 }));
