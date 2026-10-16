@@ -10,6 +10,7 @@ import { FirebaseAuthenticationService } from './application/firebase-authentica
 import { UserProfileService } from './application/user-profile.service';
 import { UserRegistrationService } from './application/user-registration.service';
 import { UserTokenService } from './application/user-token.service';
+import { UserSessionService } from './application/user-session.service';
 import { AuthController } from './controllers/auth.controller';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
@@ -23,7 +24,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const expiresIn = (configService.get<string>('security.jwtExpiresIn') ||
-          '7d') as JwtSignOptions['expiresIn'];
+          '15m') as JwtSignOptions['expiresIn'];
 
         return {
           secret: configService.getOrThrow<string>('security.jwtSecret'),
@@ -40,6 +41,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
     UserRegistrationService,
     UserProfileService,
     UserTokenService,
+    UserSessionService,
     JwtAuthGuard,
   ],
   exports: [JwtModule, JwtAuthGuard],

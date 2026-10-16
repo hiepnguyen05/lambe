@@ -4,6 +4,7 @@ import { AuditModule } from '../../infrastructure/audit/audit.module';
 import { CacheModule } from '../../infrastructure/cache/cache.module';
 import { AuthModule } from '../auth/auth.module';
 import { InternalAuthModule } from '../internal-auth/internal-auth.module';
+import { UploadModule } from '../upload/upload.module';
 import { AdminProviderManagementService } from './application/management/admin-provider-management.service';
 import { ProviderSetupController } from './controllers/provider-setup.controller';
 import { ProviderSetupService } from './application/provider-setup.service';
@@ -18,6 +19,7 @@ import { AdminProvidersController } from './controllers/admin-providers.controll
     CacheModule,
     AuthModule,
     InternalAuthModule,
+    UploadModule,
   ],
   controllers: [
     ProviderSetupController,
@@ -29,5 +31,6 @@ import { AdminProvidersController } from './controllers/admin-providers.controll
     ProviderAvailabilityService,
     AdminProviderManagementService,
   ],
+  exports: [AdminProviderManagementService],
 })
 export class ProvidersModule {}

@@ -16,6 +16,11 @@ export interface UploadResult {
 export interface MediaStorage {
   uploadImage(buffer: Buffer, folder: string): Promise<UploadResult>;
   uploadPrivateImage(buffer: Buffer, folder: string): Promise<UploadResult>;
+  publishPrivateImage(
+    publicId: string,
+    format: string,
+    folder: string,
+  ): Promise<UploadResult>;
   createPrivateDownloadUrl(publicId: string, format: string): string;
   deleteImage(
     publicId: string,

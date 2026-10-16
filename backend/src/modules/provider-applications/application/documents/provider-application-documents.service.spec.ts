@@ -74,6 +74,7 @@ describe('ProviderApplicationDocumentsService', () => {
         resourceType: 'image',
         deliveryType: 'authenticated' as const,
       }),
+      publishPrivateImage: jest.fn(),
       createPrivateDownloadUrl: jest
         .fn()
         .mockReturnValue('https://signed.example.test/temporary'),
@@ -141,7 +142,10 @@ describe('ProviderApplicationDocumentsService', () => {
   it('issues document metadata for an internal KYC reviewer and audits access', async () => {
     const { service, audit } = createContext();
     const reviewerId = '5d87b169-b352-402e-a49b-c5d67bb36274';
-    const request = { requestId: 'internal-request-id', ipAddress: '127.0.0.1' };
+    const request = {
+      requestId: 'internal-request-id',
+      ipAddress: '127.0.0.1',
+    };
 
     await expect(
       service.getInternalAccess(applicationId, documentId, reviewerId, request),
@@ -187,7 +191,7 @@ describe('ProviderApplicationDocumentsService', () => {
     );
   });
 
-  it('allows internal reviewers to inspect legacy public documents', async () => {
+  it('refuses legacy public documents even for internal reviewers', async () => {
     const { service, prisma, mediaStorage, storedDocument } = createContext();
     prisma.providerApplicationDocument.findFirst.mockResolvedValue({
       ...storedDocument,
@@ -196,10 +200,7 @@ describe('ProviderApplicationDocumentsService', () => {
 
     await expect(
       service.getInternalAccess(applicationId, documentId, userId, {}),
-    ).resolves.toEqual({
-      success: true,
-      data: { url: storedDocument.fileUrl, fileFormat: 'webp' },
-    });
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(mediaStorage.createPrivateDownloadUrl).not.toHaveBeenCalled();
   });
 

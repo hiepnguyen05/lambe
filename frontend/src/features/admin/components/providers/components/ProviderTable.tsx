@@ -1,10 +1,12 @@
 import {
   Building2,
   Eye,
+  LockKeyhole,
   LoaderCircle,
   MapPin,
   PauseCircle,
   PlayCircle,
+  UnlockKeyhole,
   UserRound,
 } from 'lucide-react';
 import type { AdminProvider } from '../../../hooks/useAdminProviders';
@@ -15,8 +17,10 @@ interface ProviderTableProps {
   isLoading: boolean;
   activeAction: string | null;
   canManage: boolean;
+  canManageAccounts: boolean;
   onView: (provider: AdminProvider) => void;
   onStatusChange: (provider: AdminProvider) => void;
+  onAccountStatusChange: (provider: AdminProvider) => void;
 }
 
 export function ProviderTable({
@@ -24,8 +28,10 @@ export function ProviderTable({
   isLoading,
   activeAction,
   canManage,
+  canManageAccounts,
   onView,
   onStatusChange,
+  onAccountStatusChange,
 }: ProviderTableProps) {
   const rows = Array.isArray(providers) ? providers : [];
 
@@ -39,8 +45,8 @@ export function ProviderTable({
               <th className="px-4 py-3.5">Phân loại</th>
               <th className="px-4 py-3.5">Khu vực phục vụ</th>
               <th className="px-4 py-3.5">Dịch vụ</th>
-              <th className="px-4 py-3.5">Trạng thái</th>
-              <th className="px-4 py-3.5 text-right">Tác vụ</th>
+              <th className="px-4 py-3.5">Vận hành</th>
+              <th className="min-w-64 px-4 py-3.5 text-right">Thao tác quản trị</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-sm">
@@ -59,7 +65,10 @@ export function ProviderTable({
               </tr>
             ) : (
               rows.map((provider) => {
-                const isActionLoading = activeAction?.endsWith(provider.id) ?? false;
+                const isActionLoading =
+                  activeAction?.endsWith(provider.id) ||
+                  activeAction?.endsWith(provider.user.id) ||
+                  false;
                 return (
                   <tr key={provider.id} className="transition hover:bg-slate-50/80">
                     <td className="px-4 py-4">
@@ -124,16 +133,26 @@ export function ProviderTable({
                           Đang trực tuyến
                         </span>
                       )}
+                      {provider.user.status === 'BLOCKED' && (
+                        <span className="mt-1.5 block text-xs font-semibold text-rose-700">
+                          Tài khoản bị khóa
+                        </span>
+                      )}
+                      {provider.user.status === 'INACTIVE' && (
+                        <span className="mt-1.5 block text-xs font-semibold text-amber-700">
+                          Tài khoản tạm vô hiệu
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex justify-end gap-1">
-                        {canManage && provider.status !== 'SETUP_REQUIRED' && (
+                      <div className="flex justify-end gap-1.5">
+                        {canManage && (
                           <button
                             type="button"
                             title={provider.status === 'SUSPENDED' ? 'Khôi phục hoạt động' : 'Đình chỉ hoạt động'}
                             disabled={isActionLoading}
                             onClick={() => onStatusChange(provider)}
-                            className={`inline-flex h-9 w-9 items-center justify-center rounded-md disabled:opacity-40 ${
+                            className={`inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold disabled:opacity-40 ${
                               provider.status === 'SUSPENDED'
                                 ? 'text-emerald-700 hover:bg-emerald-50'
                                 : 'text-rose-700 hover:bg-rose-50'
@@ -146,6 +165,29 @@ export function ProviderTable({
                             ) : (
                               <PauseCircle className="h-4 w-4" />
                             )}
+                            <span>
+                              {provider.status === 'SUSPENDED' ? 'Khôi phục' : 'Đình chỉ'}
+                            </span>
+                          </button>
+                        )}
+                        {canManageAccounts && (
+                          <button
+                            type="button"
+                            title={provider.user.status === 'BLOCKED' ? 'Mở khóa tài khoản' : 'Khóa tài khoản'}
+                            disabled={isActionLoading}
+                            onClick={() => onAccountStatusChange(provider)}
+                            className={`inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold disabled:opacity-40 ${
+                              provider.user.status === 'BLOCKED'
+                                ? 'text-emerald-700 hover:bg-emerald-50'
+                                : 'text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            {provider.user.status === 'BLOCKED' ? (
+                              <UnlockKeyhole className="h-4 w-4" />
+                            ) : (
+                              <LockKeyhole className="h-4 w-4" />
+                            )}
+                            {provider.user.status === 'BLOCKED' ? 'Mở khóa' : 'Khóa TK'}
                           </button>
                         )}
                         <button
@@ -175,12 +217,12 @@ function ProviderAvatar({ provider }: { provider: AdminProvider }) {
       <img
         src={provider.avatarUrl}
         alt={provider.displayName}
-        className="h-10 w-10 shrink-0 rounded-full border border-slate-200 object-cover"
+        className="h-12 w-12 shrink-0 rounded-full border-2 border-white object-cover shadow-sm ring-1 ring-slate-200"
       />
     );
   }
   return (
-    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-teal-50 font-bold text-teal-800 ring-1 ring-teal-100">
+    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal-50 text-base font-bold text-teal-800 ring-1 ring-teal-200">
       {provider.displayName.charAt(0).toUpperCase()}
     </span>
   );

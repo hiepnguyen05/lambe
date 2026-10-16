@@ -48,7 +48,6 @@ import type {
   ProviderApplicationService,
   ProviderServiceSuggestion,
   ProviderDocumentAccess,
-  ReviewStatus,
 } from "../../../hooks/useProviderApplications";
 
 export function ApplicationInfoSection({
@@ -58,7 +57,7 @@ export function ApplicationInfoSection({
 }) {
   return (
     <Panel title="Thông tin đăng ký" icon={<UserRound className="h-5 w-5" />}>
-      <div className="grid grid-cols-1 gap-x-8 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="flex flex-col">
         <InfoItem label="Tên pháp lý" value={application.legalFullName} />
         <InfoItem
           label="Loại hình"
@@ -112,12 +111,10 @@ export function ApplicationInfoSection({
             />
           </>
         )}
-        <div className="sm:col-span-2 lg:col-span-3">
-          <InfoItem
-            label="Giới thiệu kinh nghiệm"
-            value={application.biography}
-          />
-        </div>
+        <InfoItem
+          label="Giới thiệu kinh nghiệm"
+          value={application.biography}
+        />
       </div>
     </Panel>
   );

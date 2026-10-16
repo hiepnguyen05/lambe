@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   providerSearchExample,
@@ -26,17 +34,32 @@ export class ProviderDiscoveryController {
   constructor(private readonly discovery: ProviderDiscoveryService) {}
 
   @Post('discovery/providers/search')
+  @HttpCode(200)
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('user-token')
   @ApiOperation({
-    summary: 'Tìm nhà cung cấp đang online gần vị trí khách hàng',
+    summary: 'Tìm thợ cho đặt ngay hoặc đặt trước, kiểm tra bán kính và lịch',
     description:
-      'Dùng POST body để tránh ghi vị trí chính xác của khách vào query/access log. Response không trả tọa độ thật của nhà cung cấp.',
+      'ASAP dùng GPS online; SCHEDULED dùng tâm khu vực phục vụ. Dùng POST body để tránh ghi tọa độ khách vào query/access log. available và suggestedSlots chỉ là gợi ý, không giữ lịch. Không trả tọa độ thật của thợ.',
   })
   @ApiStandardOk({
     description: 'Danh sách nhà cung cấp phù hợp với dịch vụ và vị trí khách.',
-    data: providerSearchExample.data,
-    meta: providerSearchExample.meta,
+    data: providerSearchExample.data.map((item) => ({
+      ...item,
+      available: true,
+      reason: null,
+      expectedStartAt: '2026-10-14T07:00:00.000Z',
+      expectedEndAt: '2026-10-14T08:00:00.000Z',
+      suggestedSlots: [],
+      requiresProviderConfirmation: true,
+      estimateSource: 'CONSERVATIVE_DISTANCE',
+    })),
+    meta: {
+      ...providerSearchExample.meta,
+      bookingType: 'SCHEDULED',
+      candidateLimit: 300,
+      searchLimited: false,
+    },
   })
   @ApiAuthenticationErrors()
   @ApiValidationError()

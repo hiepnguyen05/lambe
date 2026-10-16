@@ -18,9 +18,24 @@ describe('validateEnvironment', () => {
       CLOUDINARY_ENABLED: 'false',
       MAIL_ENABLED: 'false',
       FIREBASE_ENABLED: 'false',
+      PROVIDER_MIN_RECEIVING_BALANCE: 50_000,
       TRUST_PROXY: 'false',
     });
   });
+
+  it.each(['0', '-1', '1.5', 'not-a-number'])(
+    'rejects an invalid provider minimum receiving balance: %s',
+    (PROVIDER_MIN_RECEIVING_BALANCE) => {
+      expect(() =>
+        validateEnvironment({
+          ...validEnvironment,
+          PROVIDER_MIN_RECEIVING_BALANCE,
+        }),
+      ).toThrow(
+        'PROVIDER_MIN_RECEIVING_BALANCE must be an integer between 1 and 1000000000',
+      );
+    },
+  );
 
   it('requires complete Cloudinary credentials only when uploads are enabled', () => {
     expect(() =>
@@ -133,6 +148,60 @@ describe('validateEnvironment', () => {
     ).toMatchObject({ FIREBASE_ENABLED: 'true' });
   });
 
+  it('requires official MoMo credentials and public HTTPS callbacks when enabled', () => {
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, MOMO_ENABLED: 'true' }),
+    ).toThrow('Missing required environment variable: MOMO_ENDPOINT');
+
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        MOMO_ENABLED: 'true',
+        MOMO_ENDPOINT: 'https://evil.example/api/create',
+      }),
+    ).toThrow('MOMO_ENDPOINT must use an official MoMo payment host');
+
+    expect(
+      validateEnvironment({
+        ...validEnvironment,
+        MOMO_ENABLED: 'true',
+        MOMO_ENDPOINT: 'https://test-payment.momo.vn/v2/gateway/api/create',
+        MOMO_PARTNER_CODE: 'partner',
+        MOMO_ACCESS_KEY: 'access',
+        MOMO_SECRET_KEY: 'secret',
+        MOMO_IPN_URL: 'https://lambe.ngrok-free.app/api/payments/momo/ipn',
+        MOMO_REDIRECT_URL:
+          'https://lambe.ngrok-free.app/api/payments/momo/return',
+      }),
+    ).toMatchObject({ MOMO_ENABLED: 'true' });
+  });
+
+  it('requires SePay sandbox credentials and public HTTPS endpoints when enabled', () => {
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, SEPAY_ENABLED: 'true' }),
+    ).toThrow('Missing required environment variable: SEPAY_ENVIRONMENT');
+
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        SEPAY_ENABLED: 'true',
+        SEPAY_ENVIRONMENT: 'invalid',
+      }),
+    ).toThrow('SEPAY_ENVIRONMENT must be sandbox or production');
+
+    expect(
+      validateEnvironment({
+        ...validEnvironment,
+        SEPAY_ENABLED: 'true',
+        SEPAY_ENVIRONMENT: 'sandbox',
+        SEPAY_MERCHANT_ID: 'merchant',
+        SEPAY_SECRET_KEY: 'secret',
+        SEPAY_PUBLIC_BASE_URL: 'https://lambe.ngrok-free.app',
+        SEPAY_IPN_URL: 'https://lambe.ngrok-free.app/api/payments/sepay/ipn',
+      }),
+    ).toMatchObject({ SEPAY_ENABLED: 'true' });
+  });
+
   it('requires the internal JWT secret outside production too', () => {
     const environmentWithoutInternalSecret = { ...validEnvironment };
     delete (
@@ -212,6 +281,8 @@ describe('validateEnvironment', () => {
       validateEnvironment({
         ...validEnvironment,
         NODE_ENV: 'production',
+        REDIS_ENABLED: 'true',
+        REDIS_URL: 'redis://redis:6379',
         CORS_ORIGIN: 'https://admin.lambe.vn',
         FIREBASE_ENABLED: 'true',
         FIREBASE_PROJECT_ID: 'lambe-f7213',
@@ -219,6 +290,20 @@ describe('validateEnvironment', () => {
         KYC_ENCRYPTION_KEY: kycEncryptionKey,
       }),
     ).toMatchObject({ NODE_ENV: 'production', PORT: 5000 });
+  });
+
+  it('requires shared Redis protection in production', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        CORS_ORIGIN: 'https://admin.lambe.vn',
+        FIREBASE_ENABLED: 'true',
+        FIREBASE_PROJECT_ID: 'lambe-f7213',
+        GOOGLE_APPLICATION_CREDENTIALS: '/run/secrets/firebase.json',
+        KYC_ENCRYPTION_KEY: kycEncryptionKey,
+      }),
+    ).toThrow('REDIS_ENABLED must be true in production');
   });
 
   it.each([

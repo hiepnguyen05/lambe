@@ -29,6 +29,10 @@ class ApiEndpoints {
   static const String categories = '/categories';
   static const String services = '/services';
 
+  // Discovery
+  static const String providerDiscoverySearch = '/discovery/providers/search';
+  static String publicProviderProfile(String id) => '/providers/$id/public';
+
   // Customer Addresses
   static const String meAddresses = '/me/addresses';
   static String meAddress(String id) => '$meAddresses/$id';
@@ -47,4 +51,46 @@ class ApiEndpoints {
       '${providerApplication(id)}/terms/accept';
   static String providerSubmit(String id) =>
       '${providerApplication(id)}/submit';
+
+  // Provider Wallet
+  static const String providerWallet = '/me/provider/wallet';
+  static const String providerWalletTransactions =
+      '/me/provider/wallet/transactions';
+  static const String providerMomoTopup = '/me/provider/wallet/top-ups/momo';
+  static const String providerSepayTopup = '/me/provider/wallet/top-ups/sepay';
+  static String providerTopUpDetail(String id) =>
+      '/me/provider/wallet/top-ups/$id';
+
+  // Provider Schedule & Working Hours
+  static const String providerSetup = '/me/provider/setup';
+  static const String providerCalendar = '/me/provider/calendar';
+  static const String providerTimeOff = '/me/provider/calendar/time-off';
+  static String providerTimeOffItem(String id) => '$providerTimeOff/$id';
+
+  // Booking & Orders
+  static const String ordersQuote = '/orders/quote';
+  static const String orders = '/orders';
+  static const String meOrders = '/me/orders';
+  static String meOrder(String id) => '$meOrders/$id';
+  static String cancelMeOrder(String id) => '${meOrder(id)}/cancel';
+  static String decideOrderCancellation(String id) =>
+      '${meOrder(id)}/cancellation/decision';
+  static String orderReview(String id) => '${meOrder(id)}/review';
+  static String orderEvidence(String orderId, String evidenceId) =>
+      '/orders/$orderId/evidence/$evidenceId';
+  static String providerAvailability(String providerId) =>
+      '/providers/$providerId/availability';
+  static String providerReviews(String providerId) =>
+      '/providers/$providerId/reviews';
+
+  // Provider Orders (Đối tác nhận đơn)
+  static const String meProviderOrders = '/me/provider/orders';
+  static String meProviderOrder(String id) => '$meProviderOrders/$id';
+  static String acceptProviderOrder(String id) => '${meProviderOrder(id)}/accept';
+  static String rejectProviderOrder(String id) => '${meProviderOrder(id)}/reject';
+  static String cancelProviderOrder(String id) => '${meProviderOrder(id)}/cancel';
+
+  // Notifications
+  static const String meNotifications = '/me/notifications';
+  static String markNotificationRead(String id) => '$meNotifications/$id/read';
 }

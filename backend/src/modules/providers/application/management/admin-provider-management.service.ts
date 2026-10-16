@@ -6,9 +6,11 @@ import {
 } from '@nestjs/common';
 import {
   Prisma,
+  ProviderDocumentType,
   ProviderProfileStatus,
   ProviderServiceStatus,
   ProviderType,
+  ReviewStatus,
 } from '@prisma/client';
 import type { RequestMetadata } from '../../../../common/http/types/request-metadata.type';
 import { AuditService } from '../../../../infrastructure/audit/audit.service';
@@ -17,6 +19,10 @@ import {
   type ProviderLocationStore,
 } from '../../../../infrastructure/location/provider-location.store';
 import { PrismaService } from '../../../../infrastructure/persistence/postgres/prisma.service';
+import {
+  MEDIA_STORAGE,
+  type MediaStorage,
+} from '../../../upload/application/media-storage.port';
 import {
   AdminProviderStatusAction,
   type AdminProviderQueryDto,
@@ -40,6 +46,7 @@ const providerListSelect = {
       id: true,
       fullName: true,
       phone: true,
+      avatarUrl: true,
       status: true,
     },
   },
@@ -97,6 +104,7 @@ export class AdminProviderManagementService {
     private readonly audit: AuditService,
     @Inject(PROVIDER_LOCATION_STORE)
     private readonly locations: ProviderLocationStore,
+    @Inject(MEDIA_STORAGE) private readonly mediaStorage: MediaStorage,
   ) {}
 
   async findAll(query: AdminProviderQueryDto) {
@@ -270,6 +278,157 @@ export class AdminProviderManagementService {
     };
   }
 
+  async syncAvatar(
+    providerId: string,
+    actorId: string | undefined,
+    request: RequestMetadata,
+  ) {
+    const provider = await this.prisma.providerProfile.findUnique({
+      where: { id: providerId },
+      select: {
+        id: true,
+        userId: true,
+        sourceApplicationId: true,
+        user: { select: { avatarPublicId: true } },
+        sourceApplication: {
+          select: {
+            documents: {
+              where: {
+                type: ProviderDocumentType.PORTRAIT,
+                status: ReviewStatus.VERIFIED,
+                isPublicCandidate: true,
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: {
+                id: true,
+                publicId: true,
+                fileFormat: true,
+                deliveryType: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!provider)
+      throw new NotFoundException('Không tìm thấy chuyên viên hoặc đối tác.');
+    const portrait = provider.sourceApplication.documents[0];
+    if (
+      !portrait?.publicId ||
+      !portrait.fileFormat ||
+      portrait.deliveryType !== 'authenticated'
+    ) {
+      throw new BadRequestException(
+        'Hồ sơ không có ảnh chân dung đã xác minh để đồng bộ.',
+      );
+    }
+
+    const avatar = await this.mediaStorage.publishPrivateImage(
+      portrait.publicId,
+      portrait.fileFormat,
+      `lambe/users/${provider.userId}/avatar`,
+    );
+
+    try {
+      const updated = await this.prisma.$transaction(async (transaction) => {
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "provider_profiles" WHERE "id" = ${providerId} FOR UPDATE`,
+        );
+        const currentPortrait =
+          await transaction.providerApplicationDocument.findFirst({
+            where: {
+              id: portrait.id,
+              applicationId: provider.sourceApplicationId,
+              publicId: portrait.publicId,
+              type: ProviderDocumentType.PORTRAIT,
+              status: ReviewStatus.VERIFIED,
+            },
+            select: { id: true },
+          });
+        if (!currentPortrait) {
+          throw new BadRequestException(
+            'Ảnh chân dung đã thay đổi và không thể đồng bộ.',
+          );
+        }
+
+        await transaction.user.update({
+          where: { id: provider.userId },
+          data: {
+            avatarUrl: avatar.secureUrl,
+            avatarPublicId: avatar.publicId,
+          },
+        });
+        const profile = await transaction.providerProfile.update({
+          where: { id: providerId },
+          data: { avatarUrl: avatar.secureUrl },
+          select: providerDetailSelect,
+        });
+        await this.audit.record(
+          {
+            actorInternalAccountId: actorId,
+            action: 'PROVIDER_PORTRAIT_PUBLISHED',
+            resourceType: 'ProviderProfile',
+            resourceId: providerId,
+            result: 'SUCCESS',
+            metadata: {
+              sourceDocumentId: portrait.id,
+              avatarPublicId: avatar.publicId,
+            },
+          },
+          request,
+          transaction,
+        );
+        return this.mapDetail(profile);
+      });
+
+      if (
+        provider.user.avatarPublicId &&
+        provider.user.avatarPublicId !== avatar.publicId
+      ) {
+        await this.mediaStorage
+          .deleteImage(provider.user.avatarPublicId)
+          .catch(() => undefined);
+      }
+      return {
+        success: true,
+        message: 'Đã đồng bộ ảnh chân dung thành ảnh đại diện.',
+        data: updated,
+      };
+    } catch (error: unknown) {
+      await this.mediaStorage
+        .deleteImage(avatar.publicId)
+        .catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async backfillMissingAvatars() {
+    const providers = await this.prisma.providerProfile.findMany({
+      where: {
+        OR: [{ avatarUrl: null }, { user: { is: { avatarUrl: null } } }],
+      },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    let updated = 0;
+    const failed: Array<{ providerId: string; reason: string }> = [];
+    for (const provider of providers) {
+      try {
+        await this.syncAvatar(provider.id, undefined, {
+          requestId: 'provider-avatar-backfill',
+        });
+        updated += 1;
+      } catch (error: unknown) {
+        failed.push({
+          providerId: provider.id,
+          reason: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+    return { scanned: providers.length, updated, failed };
+  }
+
   private buildWhere(
     query: Pick<AdminProviderQueryDto, 'search' | 'providerType' | 'status'>,
   ) {
@@ -299,6 +458,7 @@ export class AdminProviderManagementService {
     const { services, availabilitySessions, ...profile } = provider;
     return {
       ...profile,
+      avatarUrl: profile.avatarUrl ?? profile.user.avatarUrl,
       serviceCounts: {
         total: services.length,
         active: services.filter(
@@ -321,6 +481,7 @@ export class AdminProviderManagementService {
     const { availabilitySessions, ...profile } = provider;
     return {
       ...profile,
+      avatarUrl: profile.avatarUrl ?? profile.user.avatarUrl,
       isOnline: availabilitySessions.length > 0,
       lastHeartbeatAt: availabilitySessions[0]?.lastHeartbeatAt ?? null,
     };

@@ -117,14 +117,14 @@ class _PartnerTypeScreenState extends ConsumerState<PartnerTypeScreen> {
                     _buildTypeCard(
                       type: 'INDIVIDUAL',
                       title: 'Cá nhân tự do',
-                      description: 'Dành cho thợ trang điểm, thợ cắt tóc cá nhân cung cấp dịch vụ độc lập.',
+                      description: 'Dành cho chuyên viên trang điểm, chuyên viên làm tóc cá nhân cung cấp dịch vụ độc lập.',
                       icon: Icons.person_outline,
                     ),
                     const SizedBox(height: 20),
                     _buildTypeCard(
                       type: 'ORGANIZATION',
                       title: 'Tổ chức / Salon / Studio',
-                      description: 'Dành cho tiệm làm đẹp, salon có giấy phép đăng ký kinh doanh và có thợ nhân viên.',
+                      description: 'Dành cho tiệm làm đẹp, salon có giấy phép đăng ký kinh doanh và có đội ngũ chuyên viên.',
                       icon: Icons.storefront_outlined,
                     ),
 

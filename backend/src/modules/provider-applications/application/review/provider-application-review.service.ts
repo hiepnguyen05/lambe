@@ -1,4 +1,5 @@
 import {
+  Inject,
   BadRequestException,
   ConflictException,
   Injectable,
@@ -8,6 +9,7 @@ import {
   Prisma,
   ProviderApplicationSection,
   ProviderApplicationStatus,
+  ProviderDocumentType,
   ProviderServiceSuggestionStatus,
   ProviderType,
   ReviewStatus,
@@ -16,6 +18,10 @@ import {
 import type { RequestMetadata } from '../../../../common/http/types/request-metadata.type';
 import { AuditService } from '../../../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../../../infrastructure/persistence/postgres/prisma.service';
+import {
+  MEDIA_STORAGE,
+  type MediaStorage,
+} from '../../../upload/application/media-storage.port';
 import type {
   ProviderApplicationDecisionDto,
   ReviewItemDto,
@@ -36,6 +42,7 @@ export class ProviderApplicationReviewService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly notifications: ProviderApplicationNotificationService,
+    @Inject(MEDIA_STORAGE) private readonly mediaStorage: MediaStorage,
   ) {}
 
   async reviewCheck(
@@ -331,96 +338,186 @@ export class ProviderApplicationReviewService {
   }
 
   async approve(id: string, actorId: string, request: RequestMetadata) {
-    const provider = await this.prisma.$transaction(async (transaction) => {
-      const application = await this.assertPending(id, transaction, true);
-      assertProviderApprovable(application);
-      const verifiedServices = application.services.filter(
-        (item) => item.status === ReviewStatus.VERIFIED,
+    const candidate = await this.assertPending(id, this.prisma);
+    assertProviderApprovable(candidate);
+    const portrait = candidate.documents.find(
+      (document) =>
+        document.type === ProviderDocumentType.PORTRAIT &&
+        document.status === ReviewStatus.VERIFIED &&
+        document.isPublicCandidate,
+    );
+    if (
+      !portrait?.publicId ||
+      !portrait.fileFormat ||
+      portrait.deliveryType !== 'authenticated'
+    ) {
+      throw new BadRequestException(
+        'Ảnh chân dung đã xác minh không đủ điều kiện làm ảnh đại diện.',
       );
-      const displayName =
-        application.providerType === ProviderType.INDIVIDUAL
-          ? application.legalFullName
-          : application.organizationName;
-      if (!displayName) {
-        throw new BadRequestException('Hồ sơ thiếu tên hiển thị nhà cung cấp.');
-      }
+    }
 
-      const changed = await transaction.providerApplication.updateMany({
-        where: { id, status: ProviderApplicationStatus.PENDING_REVIEW },
-        data: {
-          status: ProviderApplicationStatus.APPROVED,
-          reviewedById: actorId,
-          reviewedAt: new Date(),
-          decisionReason: null,
-        },
-      });
-      if (changed.count !== 1) {
-        throw new ConflictException(
-          'Hồ sơ vừa được xử lý bởi một kiểm duyệt viên khác.',
+    const avatar = await this.mediaStorage.publishPrivateImage(
+      portrait.publicId,
+      portrait.fileFormat,
+      `lambe/users/${candidate.userId}/avatar`,
+    );
+
+    let approval: Awaited<
+      ReturnType<ProviderApplicationReviewService['createApprovedProvider']>
+    >;
+    try {
+      approval = await this.prisma.$transaction(async (transaction) => {
+        const application = await this.assertPending(id, transaction, true);
+        assertProviderApprovable(application);
+        const lockedPortrait = application.documents.find(
+          (document) =>
+            document.id === portrait.id &&
+            document.publicId === portrait.publicId &&
+            document.type === ProviderDocumentType.PORTRAIT &&
+            document.status === ReviewStatus.VERIFIED,
         );
-      }
-      await transaction.userRoleAssignment.upsert({
-        where: {
-          userId_role: { userId: application.userId, role: UserRole.PROVIDER },
-        },
-        create: {
-          userId: application.userId,
-          role: UserRole.PROVIDER,
-          sourceApplicationId: id,
-        },
-        update: { sourceApplicationId: id },
+        if (!lockedPortrait) {
+          throw new ConflictException(
+            'Ảnh chân dung vừa được thay đổi. Vui lòng tải lại hồ sơ.',
+          );
+        }
+        return this.createApprovedProvider(
+          id,
+          application,
+          actorId,
+          request,
+          avatar,
+          transaction,
+        );
       });
-      const created = await transaction.providerProfile.create({
-        data: {
-          userId: application.userId,
-          sourceApplicationId: id,
-          providerType: application.providerType,
-          displayName,
-          // KYC assets remain private. Publishing a portrait requires a separate,
-          // explicitly moderated copy into the public media namespace.
-          avatarUrl: null,
-          biography: application.biography,
-          experienceYears: application.experienceYears,
-          wallet: { create: {} },
-          services: {
-            create: verifiedServices.map((item) => ({
-              serviceId: item.serviceId,
-              sourceApplicationId: id,
-              priceAmount: item.proposedPriceAmount,
-              durationMinutes: item.durationMinutes,
-              description: item.description,
-            })),
-          },
-        },
-        include: { wallet: true, services: true },
-      });
-      await this.audit.record(
-        {
-          actorInternalAccountId: actorId,
-          action: 'PROVIDER_APPLICATION_APPROVED',
-          resourceType: 'ProviderApplication',
-          resourceId: id,
-          result: 'SUCCESS',
-          metadata: {
-            userId: application.userId,
-            providerProfileId: created.id,
-            approvedServiceCount: verifiedServices.length,
-          },
-        },
-        request,
-        transaction,
-      );
-      await this.notifications.notifyApproved(
-        this.toEmailRecipient(application),
-        transaction,
-      );
-      return created;
-    });
+    } catch (error: unknown) {
+      await this.mediaStorage
+        .deleteImage(avatar.publicId)
+        .catch(() => undefined);
+      throw error;
+    }
+
+    if (
+      approval.previousAvatarPublicId &&
+      approval.previousAvatarPublicId !== avatar.publicId
+    ) {
+      await this.mediaStorage
+        .deleteImage(approval.previousAvatarPublicId)
+        .catch(() => undefined);
+    }
     await this.notifications.flushPending('provider-application-approval');
     return {
       success: true,
       message: 'Đã duyệt hồ sơ và tạo tài khoản nhà cung cấp.',
-      data: provider,
+      data: approval.provider,
+    };
+  }
+
+  private async createApprovedProvider(
+    id: string,
+    application: Awaited<
+      ReturnType<ProviderApplicationReviewService['assertPending']>
+    >,
+    actorId: string,
+    request: RequestMetadata,
+    avatar: Awaited<ReturnType<MediaStorage['uploadImage']>>,
+    transaction: Prisma.TransactionClient,
+  ) {
+    const verifiedServices = application.services.filter(
+      (item) => item.status === ReviewStatus.VERIFIED,
+    );
+    const displayName =
+      application.providerType === ProviderType.INDIVIDUAL
+        ? application.legalFullName
+        : application.organizationName;
+    if (!displayName) {
+      throw new BadRequestException('Hồ sơ thiếu tên hiển thị nhà cung cấp.');
+    }
+
+    const user = await transaction.user.findUnique({
+      where: { id: application.userId },
+      select: { avatarPublicId: true },
+    });
+    if (!user) throw new NotFoundException('Không tìm thấy tài khoản đăng ký.');
+
+    const changed = await transaction.providerApplication.updateMany({
+      where: { id, status: ProviderApplicationStatus.PENDING_REVIEW },
+      data: {
+        status: ProviderApplicationStatus.APPROVED,
+        reviewedById: actorId,
+        reviewedAt: new Date(),
+        decisionReason: null,
+      },
+    });
+    if (changed.count !== 1) {
+      throw new ConflictException(
+        'Hồ sơ vừa được xử lý bởi một kiểm duyệt viên khác.',
+      );
+    }
+    await transaction.userRoleAssignment.upsert({
+      where: {
+        userId_role: { userId: application.userId, role: UserRole.PROVIDER },
+      },
+      create: {
+        userId: application.userId,
+        role: UserRole.PROVIDER,
+        sourceApplicationId: id,
+      },
+      update: { sourceApplicationId: id },
+    });
+    await transaction.user.update({
+      where: { id: application.userId },
+      data: {
+        avatarUrl: avatar.secureUrl,
+        avatarPublicId: avatar.publicId,
+      },
+    });
+    const created = await transaction.providerProfile.create({
+      data: {
+        userId: application.userId,
+        sourceApplicationId: id,
+        providerType: application.providerType,
+        displayName,
+        avatarUrl: avatar.secureUrl,
+        biography: application.biography,
+        experienceYears: application.experienceYears,
+        wallet: { create: {} },
+        services: {
+          create: verifiedServices.map((item) => ({
+            serviceId: item.serviceId,
+            sourceApplicationId: id,
+            priceAmount: item.proposedPriceAmount,
+            durationMinutes: item.durationMinutes,
+            description: item.description,
+          })),
+        },
+      },
+      include: { wallet: true, services: true },
+    });
+    await this.audit.record(
+      {
+        actorInternalAccountId: actorId,
+        action: 'PROVIDER_APPLICATION_APPROVED',
+        resourceType: 'ProviderApplication',
+        resourceId: id,
+        result: 'SUCCESS',
+        metadata: {
+          userId: application.userId,
+          providerProfileId: created.id,
+          approvedServiceCount: verifiedServices.length,
+          avatarPublicId: avatar.publicId,
+        },
+      },
+      request,
+      transaction,
+    );
+    await this.notifications.notifyApproved(
+      this.toEmailRecipient(application),
+      transaction,
+    );
+    return {
+      provider: created,
+      previousAvatarPublicId: user.avatarPublicId,
     };
   }
 

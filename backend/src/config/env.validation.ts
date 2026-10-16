@@ -81,6 +81,20 @@ function validateProductionCorsOrigins(value: string): void {
   }
 }
 
+function requireHttpsUrl(config: Record<string, unknown>, key: string): URL {
+  const value = requireValue(config, key);
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${key} must be a valid HTTPS URL`);
+  }
+  if (url.protocol !== 'https:' || url.username || url.password) {
+    throw new Error(`${key} must be a valid HTTPS URL`);
+  }
+  return url;
+}
+
 export function validateEnvironment(
   config: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -90,6 +104,8 @@ export function validateEnvironment(
   const cloudinaryEnabled = toStringValue(config.CLOUDINARY_ENABLED, 'false');
   const mailEnabled = toStringValue(config.MAIL_ENABLED, 'false');
   const firebaseEnabled = toStringValue(config.FIREBASE_ENABLED, 'false');
+  const momoEnabled = toStringValue(config.MOMO_ENABLED, 'false');
+  const sepayEnabled = toStringValue(config.SEPAY_ENABLED, 'false');
   const smtpSecure = toStringValue(config.SMTP_SECURE, 'true');
   const smtpPort = Number(config.SMTP_PORT ?? 465);
   const smtpConnectionTimeoutMs = Number(
@@ -100,6 +116,9 @@ export function validateEnvironment(
   );
   const providerLocationTtlSeconds = Number(
     config.PROVIDER_LOCATION_TTL_SECONDS ?? 120,
+  );
+  const providerMinReceivingBalance = Number(
+    config.PROVIDER_MIN_RECEIVING_BALANCE ?? 50_000,
   );
   const trustProxy = toStringValue(config.TRUST_PROXY, 'false').trim();
 
@@ -125,6 +144,14 @@ export function validateEnvironment(
 
   if (!['true', 'false'].includes(firebaseEnabled)) {
     throw new Error('FIREBASE_ENABLED must be true or false');
+  }
+
+  if (!['true', 'false'].includes(momoEnabled)) {
+    throw new Error('MOMO_ENABLED must be true or false');
+  }
+
+  if (!['true', 'false'].includes(sepayEnabled)) {
+    throw new Error('SEPAY_ENABLED must be true or false');
   }
 
   if (!['true', 'false'].includes(smtpSecure)) {
@@ -161,6 +188,16 @@ export function validateEnvironment(
     providerLocationTtlSeconds > 600
   ) {
     throw new Error('PROVIDER_LOCATION_TTL_SECONDS must be between 30 and 600');
+  }
+
+  if (
+    !Number.isInteger(providerMinReceivingBalance) ||
+    providerMinReceivingBalance < 1 ||
+    providerMinReceivingBalance > 1_000_000_000
+  ) {
+    throw new Error(
+      'PROVIDER_MIN_RECEIVING_BALANCE must be an integer between 1 and 1000000000',
+    );
   }
 
   if (
@@ -212,6 +249,35 @@ export function validateEnvironment(
     }
   }
 
+  if (momoEnabled === 'true') {
+    const endpoint = requireHttpsUrl(config, 'MOMO_ENDPOINT');
+    if (!['test-payment.momo.vn', 'payment.momo.vn'].includes(endpoint.host)) {
+      throw new Error('MOMO_ENDPOINT must use an official MoMo payment host');
+    }
+    requireValue(config, 'MOMO_PARTNER_CODE');
+    requireValue(config, 'MOMO_ACCESS_KEY');
+    requireValue(config, 'MOMO_SECRET_KEY');
+    requireHttpsUrl(config, 'MOMO_IPN_URL');
+    requireHttpsUrl(config, 'MOMO_REDIRECT_URL');
+  }
+
+  if (sepayEnabled === 'true') {
+    const environment = requireValue(config, 'SEPAY_ENVIRONMENT');
+    if (!['sandbox', 'production'].includes(environment)) {
+      throw new Error('SEPAY_ENVIRONMENT must be sandbox or production');
+    }
+    requireValue(config, 'SEPAY_MERCHANT_ID');
+    requireValue(config, 'SEPAY_SECRET_KEY');
+    requireHttpsUrl(config, 'SEPAY_PUBLIC_BASE_URL');
+    requireHttpsUrl(config, 'SEPAY_IPN_URL');
+  }
+
+  requirePositiveIntegerInRange(
+    config,
+    'USER_REFRESH_TOKEN_EXPIRES_DAYS',
+    30,
+    90,
+  );
   requirePositiveIntegerInRange(
     config,
     'INTERNAL_REFRESH_TOKEN_EXPIRES_DAYS',
@@ -245,6 +311,9 @@ export function validateEnvironment(
         'FIREBASE_AUTH_EMULATOR_HOST must be empty in production',
       );
     }
+    if (redisEnabled !== 'true') {
+      throw new Error('REDIS_ENABLED must be true in production');
+    }
   }
 
   return {
@@ -255,11 +324,14 @@ export function validateEnvironment(
     CLOUDINARY_ENABLED: cloudinaryEnabled,
     MAIL_ENABLED: mailEnabled,
     FIREBASE_ENABLED: firebaseEnabled,
+    MOMO_ENABLED: momoEnabled,
+    SEPAY_ENABLED: sepayEnabled,
     SMTP_PORT: smtpPort,
     SMTP_SECURE: smtpSecure,
     SMTP_CONNECTION_TIMEOUT_MS: smtpConnectionTimeoutMs,
     CLOUDINARY_PRIVATE_URL_TTL_SECONDS: privateUrlTtlSeconds,
     PROVIDER_LOCATION_TTL_SECONDS: providerLocationTtlSeconds,
+    PROVIDER_MIN_RECEIVING_BALANCE: providerMinReceivingBalance,
     TRUST_PROXY: trustProxy,
   };
 }

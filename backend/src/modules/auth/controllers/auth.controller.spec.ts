@@ -10,10 +10,13 @@ describe('AuthController', () => {
       updateCurrentUser: jest.fn().mockResolvedValue({ success: true }),
       uploadAvatar: jest.fn().mockResolvedValue({ success: true }),
       removeAvatar: jest.fn().mockResolvedValue({ success: true }),
+      refresh: jest.fn().mockResolvedValue({ success: true }),
+      logout: jest.fn().mockResolvedValue({ success: true }),
     };
 
     return {
       controller: new AuthController(
+        authService as never,
         authService as never,
         authService as never,
         authService as never,
@@ -26,10 +29,13 @@ describe('AuthController', () => {
     const { controller, authService } = createController();
     const dto = { idToken: 'firebase-id-token' };
 
-    await expect(controller.exchangeFirebaseToken(dto)).resolves.toEqual({
+    const request = { requestId: 'request-id' };
+    await expect(
+      controller.exchangeFirebaseToken(dto, request),
+    ).resolves.toEqual({
       success: true,
     });
-    expect(authService.exchangeIdToken).toHaveBeenCalledWith(dto);
+    expect(authService.exchangeIdToken).toHaveBeenCalledWith(dto, request);
   });
 
   it('forwards a Firebase phone-link pre-check to the auth service', async () => {
@@ -49,10 +55,28 @@ describe('AuthController', () => {
     const { controller, authService } = createController();
     const dto = { registrationToken: 'token', fullName: 'Nguyen Van A' };
 
-    await expect(controller.completeRegistration(dto)).resolves.toEqual({
+    const request = { requestId: 'request-id' };
+    await expect(
+      controller.completeRegistration(dto, request),
+    ).resolves.toEqual({
       success: true,
     });
-    expect(authService.completeRegistration).toHaveBeenCalledWith(dto);
+    expect(authService.completeRegistration).toHaveBeenCalledWith(dto, request);
+  });
+
+  it('rotates and revokes user refresh sessions', async () => {
+    const { controller, authService } = createController();
+    const dto = { refreshToken: 'x'.repeat(150) };
+    const request = { requestId: 'request-id' };
+
+    await expect(controller.refresh(dto, request)).resolves.toEqual({
+      success: true,
+    });
+    await expect(controller.logout(dto, request)).resolves.toEqual({
+      success: true,
+    });
+    expect(authService.refresh).toHaveBeenCalledWith(dto.refreshToken, request);
+    expect(authService.logout).toHaveBeenCalledWith(dto.refreshToken, request);
   });
 
   it('uses the authenticated user id to load the current user', async () => {

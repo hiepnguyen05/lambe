@@ -20,11 +20,13 @@
     "prisma:status": "prisma migrate status",
     "prisma:studio": "prisma studio",
     "admin:create": "ts-node scripts/create-admin.ts",
+    "provider:backfill-avatars": "node dist/src/scripts/backfill-provider-avatars.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:booking": "jest --config ./test/jest-booking.json --runInBand",
     "typecheck": "tsc --noEmit --incremental false -p tsconfig.build.json",
     "typecheck:test": "tsc --noEmit --incremental false -p tsconfig.spec.json",
     "check": "npm run typecheck && npm run typecheck:test && npm run lint && npm test -- --runInBand",
@@ -50,7 +52,8 @@
     "nodemailer": "^10.0.10",
     "redis": "^6.2.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "sepay-pg-node": "^1.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

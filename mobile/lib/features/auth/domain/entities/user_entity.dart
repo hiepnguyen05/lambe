@@ -5,6 +5,7 @@ class UserEntity {
   final String? avatarUrl;
   final String? gender;
   final String? onboardingStatus;
+  final List<String> roles;
 
   const UserEntity({
     required this.id,
@@ -13,6 +14,7 @@ class UserEntity {
     this.avatarUrl,
     this.gender,
     this.onboardingStatus,
+    this.roles = const [],
   });
 
   UserEntity copyWith({
@@ -22,6 +24,7 @@ class UserEntity {
     String? avatarUrl,
     String? gender,
     String? onboardingStatus,
+    List<String>? roles,
   }) {
     return UserEntity(
       id: id ?? this.id,
@@ -30,6 +33,7 @@ class UserEntity {
       avatarUrl: avatarUrl ?? this.avatarUrl,
       gender: gender ?? this.gender,
       onboardingStatus: onboardingStatus ?? this.onboardingStatus,
+      roles: roles ?? this.roles,
     );
   }
 }

@@ -27,6 +27,7 @@ describe('AdminProviderManagementService', () => {
         id: 'user-id',
         fullName: 'Nguyễn Văn An',
         phone: '0900000000',
+        avatarUrl: null,
         status: 'ACTIVE',
       },
       wallet: null,
@@ -59,11 +60,16 @@ describe('AdminProviderManagementService', () => {
     };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const locations = { remove: jest.fn().mockResolvedValue(undefined) };
+    const mediaStorage = {
+      publishPrivateImage: jest.fn(),
+      deleteImage: jest.fn(),
+    };
     return {
       service: new AdminProviderManagementService(
         prisma as never,
         audit as never,
         locations as never,
+        mediaStorage as never,
       ),
       transaction,
       audit,
@@ -85,6 +91,7 @@ describe('AdminProviderManagementService', () => {
       prisma as never,
       { record: jest.fn() } as never,
       { remove: jest.fn() } as never,
+      { publishPrivateImage: jest.fn(), deleteImage: jest.fn() } as never,
     );
 
     const result = await service.findAll({ page: 1, limit: 20 });

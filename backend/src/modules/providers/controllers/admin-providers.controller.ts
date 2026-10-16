@@ -5,6 +5,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -100,5 +101,24 @@ export class AdminProvidersController {
     @CurrentRequestMetadata() request: RequestMetadata,
   ) {
     return this.service.updateStatus(id, dto, account.accountId, request);
+  }
+
+  @Post(':id/avatar/sync')
+  @InternalRoles(InternalRole.ADMIN, InternalRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Xuất bản ảnh chân dung đã duyệt thành avatar provider',
+  })
+  @ApiStandardOk({
+    description: 'Đồng bộ avatar tài khoản và hồ sơ provider thành công.',
+    data: {},
+  })
+  @ApiInternalAuthorizationErrors()
+  @ApiNotFoundError('Nhà cung cấp')
+  syncAvatar(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentInternalAccount() account: AuthenticatedInternalAccount,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.service.syncAvatar(id, account.accountId, request);
   }
 }

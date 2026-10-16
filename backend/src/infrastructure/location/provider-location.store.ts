@@ -6,6 +6,9 @@ export interface ProviderLocationPoint {
 }
 
 export interface ProviderLocationStore {
+  getPosition(
+    providerId: string,
+  ): Promise<{ latitude: number; longitude: number } | null>;
   upsert(
     providerId: string,
     latitude: number,

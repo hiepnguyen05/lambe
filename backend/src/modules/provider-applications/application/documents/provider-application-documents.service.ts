@@ -420,8 +420,9 @@ export class ProviderApplicationDocumentsService {
     if (document.deliveryType === 'authenticated' && document.fileFormat) {
       return this.createAccessUrl(document);
     }
-    if (document.fileUrl) return document.fileUrl;
-    throw new ConflictException('Tài liệu không còn dữ liệu ảnh để kiểm duyệt.');
+    throw new ConflictException(
+      'Tài liệu KYC cũ chưa được chuyển sang kho lưu trữ riêng tư.',
+    );
   }
 
   private deliveryTypeOf(value: string): MediaDeliveryType {

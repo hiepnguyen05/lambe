@@ -13,14 +13,17 @@ describe('JwtAuthGuard', () => {
       verifyAsync: jest.fn().mockResolvedValue({
         sub: 'user-id',
         phone: '0363668951',
+        sessionId: 'session-id',
         purpose: 'access',
       }),
     };
     const prisma = {
-      user: {
+      userSession: {
         findUnique: jest.fn().mockResolvedValue({
-          phone: '0363668951',
-          status: 'ACTIVE',
+          userId: 'user-id',
+          expiresAt: new Date(Date.now() + 60_000),
+          revokedAt: null,
+          user: { phone: '0363668951', status: 'ACTIVE' },
         }),
       },
     };
@@ -54,9 +57,11 @@ describe('JwtAuthGuard', () => {
 
   it('rejects tokens belonging to inactive users', async () => {
     const { guard, context, prisma } = createGuard();
-    prisma.user.findUnique.mockResolvedValue({
-      phone: '0363668951',
-      status: 'INACTIVE',
+    prisma.userSession.findUnique.mockResolvedValue({
+      userId: 'user-id',
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: null,
+      user: { phone: '0363668951', status: 'INACTIVE' },
     });
 
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
@@ -87,11 +92,19 @@ describe('JwtAuthGuard', () => {
   });
 
   it.each([
-    ['missing user', null],
-    ['mismatched phone', { phone: '0987654321', status: 'ACTIVE' }],
-  ])('rejects a valid token for a %s', async (_caseName, databaseUser) => {
+    ['missing session', null],
+    [
+      'mismatched phone',
+      {
+        userId: 'user-id',
+        expiresAt: new Date(Date.now() + 60_000),
+        revokedAt: null,
+        user: { phone: '0987654321', status: 'ACTIVE' },
+      },
+    ],
+  ])('rejects a valid token for a %s', async (_caseName, databaseSession) => {
     const { guard, context, prisma } = createGuard();
-    prisma.user.findUnique.mockResolvedValue(databaseUser);
+    prisma.userSession.findUnique.mockResolvedValue(databaseSession);
 
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(
       UnauthorizedException,

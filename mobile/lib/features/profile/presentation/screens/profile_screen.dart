@@ -207,15 +207,26 @@ class ProfileScreen extends ConsumerWidget {
                 ProfileMenuGroup(
                   title: 'Hợp tác & Kinh doanh',
                   children: [
-                    ProfileMenuItem(
-                      icon: Icons.handshake_outlined,
-                      title: 'Đăng ký trở thành đối tác',
-                      subtitle: 'Dành cho thợ cắt tóc, salon',
-                      iconColor: const Color(0xFFD97706), // Orange
-                      onTap: () {
-                        context.push('/partner/intro');
-                      },
-                    ),
+                    if (user.roles.contains('PROVIDER'))
+                      ProfileMenuItem(
+                        icon: Icons.storefront_outlined,
+                        title: 'Chuyển sang chế độ Đối tác',
+                        subtitle: 'Không gian làm việc & nhận đơn',
+                        iconColor: const Color(0xFF005C55),
+                        onTap: () {
+                          context.go('/provider/home');
+                        },
+                      )
+                    else
+                      ProfileMenuItem(
+                        icon: Icons.handshake_outlined,
+                        title: 'Đăng ký trở thành đối tác',
+                        subtitle: 'Dành cho chuyên viên, salon',
+                        iconColor: const Color(0xFFD97706),
+                        onTap: () {
+                          context.push('/partner/intro');
+                        },
+                      ),
                   ],
                 ),
                 const SizedBox(height: 24),

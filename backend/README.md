@@ -133,7 +133,10 @@ Không thêm `-v` vào lệnh trên nếu muốn giữ volume PostgreSQL và Red
 
 ```text
 POST /api/auth/firebase
+POST /api/auth/firebase/phone-link-check
 POST /api/auth/complete-registration
+POST /api/auth/refresh
+POST /api/auth/logout
 GET  /api/auth/me
 ```
 
@@ -148,10 +151,18 @@ Luồng hiện tại:
    và chỉ chấp nhận provider `phone`, `google.com` hoặc `facebook.com`.
 4. Nếu token Google/Facebook chưa có số điện thoại, backend yêu cầu frontend liên
    kết và xác minh số qua Firebase Phone Authentication trước khi tiếp tục.
-5. Nếu số đã có tài khoản, backend trả access token Lambe.
+5. Nếu số đã có tài khoản, backend trả access token ngắn hạn và refresh token
+   Lambe gắn với một phiên đăng nhập trong database.
 6. Nếu là số mới, backend trả `registrationToken` có hạn 5 phút.
 7. Frontend gửi `registrationToken` và `fullName` để hoàn tất đăng ký.
 8. Gửi access token theo dạng `Authorization: Bearer <token>` để gọi `/auth/me`.
+9. Khi access token hết hạn, gửi refresh token tới `POST /api/auth/refresh`.
+   Mỗi lần refresh thành công sẽ thay thế refresh token cũ; tái sử dụng token cũ
+   sẽ thu hồi phiên.
+10. Gửi refresh token tới `POST /api/auth/logout` để thu hồi phiên hiện tại.
+
+Access token mặc định có hạn 15 phút. Refresh token mặc định có hạn 30 ngày và
+phải được mobile lưu bằng secure storage; không ghi token vào log hoặc analytics.
 
 Backend không tạo hoặc lưu OTP. Hạn mức gửi, thời gian hiệu lực và chống lạm
 dụng OTP thuộc trách nhiệm của Firebase; rate limit tại endpoint đổi token vẫn
@@ -493,10 +504,11 @@ Lịch theo giờ Việt Nam; 0 là Chủ nhật, 1-6 là Thứ hai-Thứ bảy.
 tối đa 21 khung giờ không chồng lấn và ít nhất một dịch vụ đủ điều kiện. Không
 được dùng thiết lập để bỏ đình chỉ hồ sơ/dịch vụ. Cấu hình hợp lệ chuyển hồ sơ
 từ `SETUP_REQUIRED` sang `ACTIVE`, nhưng **không tự bật nhận đơn**.
-`serviceAreaName` là nhãn hiển thị; tọa độ tâm và bán kính xác định vùng phục vụ.
-Sau đó thợ phải chủ động bật trạng thái online và gửi heartbeat vị trí. API khám
-phá chỉ trả về thợ đang online, đúng dịch vụ và còn nằm trong vùng phục vụ đã
-đăng ký. Kiểm tra số dư ví sẽ được bổ sung tại bước thợ nhận đơn.
+`serviceAreaName` là nhãn hiển thị. Tọa độ tâm khu vực được dùng cho đơn đặt
+lịch; bán kính được dùng cho cả đặt ngay và đặt lịch. Sau đó thợ phải chủ động
+bật trạng thái online và gửi heartbeat vị trí. Với tìm kiếm đặt ngay, vị trí GPS
+online trong Redis là tâm tính khoảng cách; API chỉ trả về thợ đúng dịch vụ và
+nằm trong bán kính nhận đơn đã cấu hình.
 
 Chưa bật tự động xóa KYC của hồ sơ cũ: cần chốt thời hạn lưu trữ, ngoại lệ khiếu
 nại và quy trình xóa Cloudinary trước. Các thử nghiệm tự động dùng dữ liệu giả,
@@ -555,7 +567,10 @@ Schema được triển khai bởi migration:
 20261003100000_expand_customer_addresses
 ```
 
-Nhà cung cấp đã duyệt và hoàn tất setup có thể bật online. Vị trí hiện tại chỉ
+Nhà cung cấp đã duyệt và hoàn tất setup có thể bật online khi có ít nhất một
+khung giờ làm việc, một dịch vụ thực sự hoạt động và số dư ví khả dụng đạt mức
+tối thiểu. `availableAmount = balanceAmount - heldAmount`; mức mặc định là
+50.000 VND, cấu hình bằng `PROVIDER_MIN_RECEIVING_BALANCE`. Vị trí hiện tại chỉ
 lưu trong Redis GEO, hết heartbeat mặc định sau 120 giây và không được trả công
 khai cho khách hàng. PostgreSQL chỉ giữ phiên online để truy vết.
 
@@ -588,6 +603,243 @@ GET  /api/providers/:id/public
 khoảng 30-600 giây, mặc định 120 giây. Redis là thành phần bắt buộc đối với bật
 online và tìm kiếm theo vị trí; các API dữ liệu PostgreSQL vẫn hoạt động nếu
 Redis tạm thời không khả dụng.
+
+Response trạng thái online có `receivingEligibility` gồm `eligible`,
+`blockerCode`, `availableBalance` và `minimumBalance`. Nếu heartbeat phát hiện
+hồ sơ, dịch vụ, lịch hoặc ví không còn hợp lệ, backend đóng phiên online và xóa
+vị trí Redis. Discovery, tạo đơn và nhận đơn đều kiểm tra lại điều kiện
+`availableAmount >= max(PROVIDER_MIN_RECEIVING_BALANCE, commissionAmount)`.
+
+## Service Orders
+
+Đơn hỗ trợ `ASAP` và `SCHEDULED`. Đặt ngay yêu cầu thợ đang online và dùng vị
+trí Redis hiện tại làm tâm bán kính. Đặt lịch yêu cầu thời điểm cách hiện tại từ
+60 phút đến 30 ngày, đồng thời kiểm tra tâm khu vực, bán kính riêng của thợ,
+giờ làm việc, lịch giữ chỗ, lịch đã nhận và khoảng đệm di chuyển giữa hai khách.
+
+```text
+POST /api/orders/quote
+POST /api/orders
+GET  /api/me/orders
+GET  /api/me/orders/:id
+POST /api/me/orders/:id/cancel
+POST /api/me/orders/:id/cancellation/decision
+POST /api/me/orders/:id/review
+
+GET  /api/me/provider/orders
+GET  /api/me/provider/orders/:id
+POST /api/me/provider/orders/:id/accept
+POST /api/me/provider/orders/:id/reject
+POST /api/me/provider/orders/:id/cancel
+POST /api/me/provider/orders/:id/en-route
+POST /api/me/provider/orders/:id/arrive
+POST /api/me/provider/orders/:id/start
+POST /api/me/provider/orders/:id/complete
+POST /api/me/provider/orders/:id/evidence/:type
+POST /api/me/provider/orders/:id/contact-attempt
+POST /api/me/provider/orders/:id/cancellation-request
+
+GET   /api/orders/:id/evidence/:evidenceId
+GET   /api/me/notifications
+PATCH /api/me/notifications/:id/read
+GET   /api/providers/:id/reviews
+
+GET  /api/admin/orders/cancellation-requests
+GET  /api/admin/orders/cancellation-requests/:id
+GET  /api/admin/orders/cancellation-requests/:id/evidence/:evidenceId
+POST /api/admin/orders/cancellation-requests/:id/decision
+
+GET    /api/providers/:id/availability
+GET    /api/me/provider/calendar
+POST   /api/me/provider/calendar/time-off
+DELETE /api/me/provider/calendar/time-off/:id
+```
+
+`POST /api/orders` bắt buộc header `Idempotency-Key` (8-128 ký tự chữ/số/_/-).
+Đơn có thể dùng địa chỉ đã lưu hoặc `inlineAddress` nhập riêng tại thời điểm đặt.
+Retry cùng nội dung và key trả lại đơn cũ; đổi nội dung phải dùng key mới.
+Quote và availability không giữ chỗ. Chỉ tạo đơn thành công mới giữ lịch tạm:
+5 phút cho ASAP, tối đa 30 phút cho SCHEDULED. Một khách tối đa 3 yêu cầu chờ.
+
+Khi nhận đơn, hệ thống khóa hồ sơ thợ, đơn và ví trong một transaction, kiểm tra số dư khả
+dụng rồi tạo `HOLD`. Khách hủy đơn hợp lệ sẽ giải phóng khoản giữ. Thợ chỉ gọi
+`complete` với body `{ "cashReceived": true }` sau khi đã thu đủ tiền mặt; khi
+đó `HOLD` được chuyển thành giao dịch `COMMISSION`. Địa chỉ và số điện thoại
+khách chỉ được trả cho thợ sau khi nhận đơn, không hiển thị với đơn bị từ chối,
+hết hạn hoặc hủy.
+
+Yêu cầu `PENDING_PROVIDER` quá `providerResponseDeadlineAt` được tác vụ bảo trì
+chuyển sang `EXPIRED` mỗi phút và ghi `OrderStatusHistory`. API chỉ cho chuyển
+tuần tự `ACCEPTED -> EN_ROUTE -> ARRIVED -> IN_PROGRESS -> COMPLETED`; thao tác
+không còn hợp lệ trả `409 Conflict`.
+Các bước đến nơi/bắt đầu/hoàn thành yêu cầu ảnh riêng tư tương ứng. Sau khi đã
+khởi hành, thợ gửi yêu cầu hủy để khách duyệt hoặc chuyển hỗ trợ; yêu cầu chưa
+được quyết định vẫn giữ lịch và khoản HOLD. Thông báo hiện lưu trong PostgreSQL
+để client tải định kỳ, chưa phát push. Khách đánh giá một lần sau khi hoàn thành.
+
+Schema được triển khai bởi migration:
+
+```text
+20261009100000_orders_and_wallet_holds
+20261012120000_booking_calendar
+20261012123000_booking_pending_index
+20261013140000_order_workflow
+20261013143000_order_contact_attempts
+```
+
+PostgreSQL dùng exclusion constraint GiST ngăn các khoảng lịch active chồng nhau;
+Redis chỉ cung cấp vị trí/heartbeat, không quyết định việc giữ lịch hay trừ ví.
+Discovery lấy tối đa 300 ứng viên, lọc bán kính từng thợ và đọc lịch theo batch.
+Đặt trước dùng PostgreSQL point GiST; đặt ngay dùng Redis GEO. Đây chưa phải
+cam kết chịu tải production. Giờ di chuyển là ước lượng bảo thủ, chưa có routing
+API/traffic. Một hồ sơ thợ hiện chỉ có năng lực phục vụ một đơn cùng lúc.
+
+Contract, ví dụ request/response, giới hạn và cách chạy test PostgreSQL thật:
+[Booking API](docs/booking-api.md). Swagger tương ứng tại `/docs`.
+
+## Provider Wallet, MoMo And SePay Sandbox
+
+The provider-wallet API is implemented for authenticated user accounts that
+already own an approved provider profile and wallet. Every `/me/provider/wallet`
+route requires `Authorization: Bearer <user_access_token>`.
+
+```text
+GET  /api/me/provider/wallet
+GET  /api/me/provider/wallet/transactions
+POST /api/me/provider/wallet/top-ups/momo
+POST /api/me/provider/wallet/top-ups/sepay
+GET  /api/me/provider/wallet/top-ups
+GET  /api/me/provider/wallet/top-ups/:id
+
+POST /api/payments/momo/ipn
+GET  /api/payments/momo/return
+
+POST /api/payments/sepay/ipn
+GET  /api/payments/sepay/checkout/:id
+GET  /api/payments/sepay/success
+GET  /api/payments/sepay/error
+GET  /api/payments/sepay/cancel
+```
+
+Supported queries:
+
+```text
+GET /api/me/provider/wallet/transactions?type=TOP_UP&limit=20
+GET /api/me/provider/wallet/top-ups?status=SUCCEEDED&limit=20
+```
+
+`limit` is optional and accepts `1..50` (default `20`). Transaction types are
+`TOP_UP`, `HOLD`, `RELEASE`, `COMMISSION`, `ADJUSTMENT`, and `REFUND`. Top-up
+statuses are `CREATED`, `PENDING_PAYMENT`, `SUCCEEDED`, `FAILED`, and `EXPIRED`.
+The wallet summary exposes `balanceAmount`, `heldAmount`, and
+`availableAmount = balanceAmount - heldAmount`; order eligibility must use the
+available amount.
+
+`POST top-ups/momo` nhận `{ "amount": 100000 }` trong khoảng 1.000 đến
+50.000.000 VND và trả `payUrl`, `deeplink`, `qrCodeUrl`. Số dư chỉ được cộng từ
+IPN có chữ ký HMAC-SHA256 hợp lệ và khớp toàn bộ partner/order/request/amount.
+Transaction khóa yêu cầu nạp và ví, sau đó tạo một giao dịch `TOP_UP` có
+idempotency key; callback lặp không cộng tiền lần hai. Redirect không được dùng
+để xác nhận thanh toán.
+
+Cấu hình sandbox:
+
+```env
+MOMO_ENABLED="true"
+MOMO_ENDPOINT="https://test-payment.momo.vn/v2/gateway/api/create"
+MOMO_PARTNER_CODE="..."
+MOMO_ACCESS_KEY="..."
+MOMO_SECRET_KEY="..."
+MOMO_IPN_URL="https://<ngrok-domain>/api/payments/momo/ipn"
+MOMO_REDIRECT_URL="https://<ngrok-domain>/api/payments/momo/return"
+```
+
+Chạy tunnel giới hạn route bằng policy đã lưu trong repo:
+
+```powershell
+ngrok http 5000 --traffic-policy-file .\ngrok-momo-policy.yml
+```
+
+Policy chỉ công khai hai endpoint MoMo; các API còn lại trả `404`. Yêu cầu nạp
+chưa hoàn tất hết hạn sau 30 phút. Migration tương ứng:
+
+```text
+20261009160000_momo_wallet_top_ups
+```
+
+`MOMO_ENABLED=false` disables only payment creation and is the safe default
+until valid sandbox credentials are configured. It does not disable wallet
+summary or history endpoints. Sandbox still requires sandbox-specific Partner
+Code, Access Key, and Secret Key; ngrok only supplies public HTTPS callback
+URLs and does not replace those credentials.
+
+SePay uses the official `sepay-pg-node` SDK. Creating a SePay top-up returns a
+Lambe `payUrl`; opening it submits the signed one-time payment form to SePay.
+Only a paid IPN that passes authentication and matches the stored invoice,
+amount, currency, captured order status and approved payment status can credit
+the wallet. The success/error/cancel callbacks are navigation signals only.
+
+```env
+SEPAY_ENABLED="true"
+SEPAY_ENVIRONMENT="sandbox"
+SEPAY_MERCHANT_ID="..."
+SEPAY_SECRET_KEY="..."
+SEPAY_PUBLIC_BASE_URL="https://<ngrok-domain>"
+SEPAY_IPN_URL="https://<ngrok-domain>/api/payments/sepay/ipn"
+```
+
+Configure the same `SEPAY_IPN_URL` in SePay Payment Gateway. The IPN endpoint
+expects SePay's `X-Secret-Key` header and returns HTTP `200` after successful
+processing. Migration: `20261009190000_sepay_wallet_top_ups`.
+
+The SePay dashboard connectivity test sends a mock `PAYMENT_SUCCESS/CAPTURE`
+payload without `X-Secret-Key`. Lambe accepts that specific request only when
+both `custom_data.test_mode` and `custom_data.webhook_test` are `true` and the
+invoice does not match any stored top-up. This path never mutates wallet data.
+Every IPN that can match or settle a real top-up still requires the configured
+secret.
+
+For local Docker development, expose port `5000` and use the generated HTTPS
+domain as both `SEPAY_PUBLIC_BASE_URL` and the base of `SEPAY_IPN_URL`:
+
+```powershell
+ngrok http 5000
+docker compose up -d --build lambe_server
+```
+
+Configure the dashboard IPN URL as:
+
+```text
+https://<ngrok-domain>/api/payments/sepay/ipn
+```
+
+The free ngrok domain may change after restarting the tunnel. When it changes,
+update `.env`, update the SePay dashboard, then rebuild/restart the backend
+container so the new values are loaded.
+
+### SePay API flow
+
+1. Call `POST /api/me/provider/wallet/top-ups/sepay` with a provider user access
+   token and `{ "amount": 100000 }`.
+2. Open the returned `payUrl`. Never expose merchant credentials to clients.
+3. SePay sends the server-to-server IPN. Lambe settles the top-up atomically and
+   idempotently.
+4. Query `GET /api/me/provider/wallet/top-ups/:id` after checkout navigation.
+   Treat only `SUCCEEDED` as paid.
+
+Supported top-up statuses are `CREATED`, `PENDING_PAYMENT`, `SUCCEEDED`,
+`FAILED`, and `EXPIRED`. A redirect to the success URL is not payment proof.
+
+Troubleshooting:
+
+- `404` from ngrok: verify the tunnel targets host port `5000` and the URL ends
+  with `/api/payments/sepay/ipn`.
+- `400`: the dashboard payload does not match the accepted SePay schema.
+- `401`: a real IPN is missing or has an invalid `X-Secret-Key`.
+- `404` for a real invoice: `invoice_no` does not match a stored top-up.
+- `409`: amount, currency, or payment state does not match the pending top-up.
+- A dashboard test returning `200` never means money was added. Verify a real
+  sandbox payment through the top-up status and wallet transaction.
 
 ## Scripts
 

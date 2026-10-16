@@ -116,12 +116,14 @@ export function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <header className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 text-slate-800 sm:px-5">
-        <span className="text-teal-700">{icon}</span>
-        <h2 className="font-bold">{title}</h2>
+    <section className="mb-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <header className="flex items-center gap-2.5 border-b border-slate-100 px-5 py-4">
+        <span className="text-slate-400">{icon}</span>
+        <h2 className="text-base font-bold text-slate-900">{title}</h2>
       </header>
-      {children}
+      <div className="px-1 sm:px-2">
+        {children}
+      </div>
     </section>
   );
 }
@@ -138,17 +140,17 @@ export function InfoItem({
   sensitive?: boolean;
 }) {
   return (
-    <div>
-      <dt className="flex items-center gap-1.5 text-xs font-semibold uppercase text-slate-500">
+    <div className="grid grid-cols-1 gap-1 border-b border-slate-100 py-3 last:border-0 sm:grid-cols-3 sm:gap-4 px-4 sm:px-5">
+      <dt className="flex items-center gap-1.5 text-sm font-medium text-slate-500">
         {icon}
         {label}
       </dt>
       <dd
-        className={`mt-1 break-words text-sm font-semibold text-slate-900 ${
-          sensitive ? "font-mono" : ""
+        className={`text-sm text-slate-900 sm:col-span-2 ${
+          sensitive ? "font-mono font-medium tracking-wide" : ""
         }`}
       >
-        {value || "Chưa cập nhật"}
+        {value || <span className="italic text-slate-400">Chưa cập nhật</span>}
       </dd>
     </div>
   );

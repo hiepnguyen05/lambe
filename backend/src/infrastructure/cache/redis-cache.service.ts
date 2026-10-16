@@ -16,6 +16,13 @@ import type {
 const PROVIDER_GEO_KEY = 'lambe:providers:online:geo';
 const PROVIDER_HEARTBEAT_KEY = 'lambe:providers:online:heartbeat';
 
+export interface RateLimitRecord {
+  totalHits: number;
+  timeToExpire: number;
+  isBlocked: boolean;
+  timeToBlockExpire: number;
+}
+
 @Injectable()
 export class RedisCacheService
   implements CacheStore, ProviderLocationStore, OnModuleInit, OnModuleDestroy
@@ -167,6 +174,23 @@ export class RedisCacheService
     limit: number,
   ): Promise<ProviderLocationPoint[]> {
     const client = this.requireRealtimeClient();
+    // Atomic cleanup avoids deleting a location refreshed concurrently by a heartbeat.
+    await client.eval(
+      `
+      local ids = redis.call('ZRANGEBYSCORE', KEYS[2], '-inf', ARGV[1], 'LIMIT', 0, 1000)
+      for _, id in ipairs(ids) do
+        redis.call('ZREM', KEYS[1], id)
+        redis.call('ZREM', KEYS[2], id)
+      end
+      return #ids
+    `,
+      {
+        keys: [PROVIDER_GEO_KEY, PROVIDER_HEARTBEAT_KEY],
+        arguments: [
+          String(Date.now() - this.providerLocationTtlSeconds * 1000),
+        ],
+      },
+    );
     const candidates = await client.geoSearchWith(
       PROVIDER_GEO_KEY,
       { latitude, longitude },
@@ -202,6 +226,81 @@ export class RedisCacheService
       );
     }
     return this.client;
+  }
+
+  async getPosition(
+    providerId: string,
+  ): Promise<{ latitude: number; longitude: number } | null> {
+    const client = this.requireRealtimeClient();
+    const result: unknown = await client.eval(
+      `
+      local heartbeat = redis.call('ZSCORE', KEYS[2], ARGV[1])
+      if not heartbeat or tonumber(heartbeat) < tonumber(ARGV[2]) then return nil end
+      return redis.call('GEOPOS', KEYS[1], ARGV[1])[1]
+    `,
+      {
+        keys: [PROVIDER_GEO_KEY, PROVIDER_HEARTBEAT_KEY],
+        arguments: [
+          providerId,
+          String(Date.now() - this.providerLocationTtlSeconds * 1000),
+        ],
+      },
+    );
+    if (!Array.isArray(result) || result.length !== 2) return null;
+    return { longitude: Number(result[0]), latitude: Number(result[1]) };
+  }
+
+  async incrementRateLimit(
+    key: string,
+    ttl: number,
+    limit: number,
+    blockDuration: number,
+    throttlerName: string,
+  ): Promise<RateLimitRecord> {
+    const client = this.requireRealtimeClient();
+    const namespace = `lambe:throttle:${throttlerName}:${key}`;
+    const result: unknown = await client.eval(
+      `
+      local blockTtl = redis.call('PTTL', KEYS[2])
+      if blockTtl > 0 then
+        local current = tonumber(redis.call('GET', KEYS[1]) or ARGV[2])
+        local counterTtl = redis.call('PTTL', KEYS[1])
+        return {current, counterTtl, 1, blockTtl}
+      end
+
+      local hits = redis.call('INCR', KEYS[1])
+      if hits == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end
+      local counterTtl = redis.call('PTTL', KEYS[1])
+      if hits > tonumber(ARGV[2]) then
+        redis.call('SET', KEYS[2], '1', 'PX', ARGV[3])
+        return {hits, counterTtl, 1, tonumber(ARGV[3])}
+      end
+      return {hits, counterTtl, 0, 0}
+    `,
+      {
+        keys: [`${namespace}:count`, `${namespace}:block`],
+        arguments: [String(ttl), String(limit), String(blockDuration)],
+      },
+    );
+    if (!Array.isArray(result) || result.length !== 4) {
+      throw new ServiceUnavailableException(
+        'Redis trả về kết quả giới hạn truy cập không hợp lệ.',
+      );
+    }
+
+    const [totalHits, timeToExpireMs, blocked, timeToBlockExpireMs] =
+      result.map(Number);
+    return {
+      totalHits,
+      timeToExpire: this.toSeconds(timeToExpireMs, ttl),
+      isBlocked: blocked === 1,
+      timeToBlockExpire: this.toSeconds(timeToBlockExpireMs, blockDuration),
+    };
+  }
+
+  private toSeconds(milliseconds: number, fallback: number): number {
+    const value = milliseconds > 0 ? milliseconds : fallback;
+    return Math.max(1, Math.ceil(value / 1000));
   }
 
   private logOperationFailure(

@@ -92,6 +92,7 @@ export function createCategoriesTestContext() {
       deliveryType: 'upload' as const,
     }),
     uploadPrivateImage: jest.fn(),
+    publishPrivateImage: jest.fn(),
     createPrivateDownloadUrl: jest.fn(),
     deleteImage: jest.fn().mockResolvedValue(true),
   };

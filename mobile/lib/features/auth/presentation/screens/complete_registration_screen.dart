@@ -49,7 +49,11 @@ class _CompleteRegistrationScreenState
         final user = state.value!;
         if (user.onboardingStatus == 'COMPLETED' ||
             user.onboardingStatus == 'SKIPPED') {
-          context.go('/home');
+          if (user.roles.contains('PROVIDER')) {
+            context.go('/provider/home');
+          } else {
+            context.go('/home');
+          }
         } else {
           context.go('/onboarding');
         }

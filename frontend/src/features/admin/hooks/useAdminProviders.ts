@@ -22,6 +22,7 @@ export interface AdminProvider {
     id: string;
     fullName: string | null;
     phone: string;
+    avatarUrl: string | null;
     status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED';
   };
   serviceCounts: {
@@ -192,6 +193,44 @@ export function useAdminProviders() {
     }
   };
 
+  const updateProviderAccountStatus = async (
+    userId: string,
+    nextStatus: 'ACTIVE' | 'BLOCKED',
+    reason: string,
+  ) => {
+    if (!token) throw new Error('Phiên đăng nhập không hợp lệ.');
+    setActiveAction(`account:${userId}`);
+    try {
+      await apiRequest(`/admin/customers/${userId}/status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: nextStatus, reason }),
+      });
+      await fetchProviders();
+      return nextStatus;
+    } finally {
+      setActiveAction(null);
+    }
+  };
+
+  const syncProviderAvatar = async (providerId: string) => {
+    if (!token) throw new Error('Phiên đăng nhập không hợp lệ.');
+    setActiveAction(`avatar:${providerId}`);
+    try {
+      const response = await apiRequest<{ data: AdminProviderDetail }>(
+        `/admin/providers/${providerId}/avatar/sync`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      await fetchProviders();
+      return response.data;
+    } finally {
+      setActiveAction(null);
+    }
+  };
+
   return {
     providers,
     summary,
@@ -209,6 +248,8 @@ export function useAdminProviders() {
     refetch: fetchProviders,
     fetchProviderDetail,
     updateProviderStatus,
+    updateProviderAccountStatus,
+    syncProviderAvatar,
   };
 }
 

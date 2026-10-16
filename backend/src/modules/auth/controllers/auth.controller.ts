@@ -44,11 +44,13 @@ import type { RequestMetadata } from '../../../common/http/types/request-metadat
 import { FirebaseAuthenticationService } from '../application/firebase-authentication.service';
 import { UserProfileService } from '../application/user-profile.service';
 import { UserRegistrationService } from '../application/user-registration.service';
+import { UserSessionService } from '../application/user-session.service';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { CheckFirebasePhoneLinkDto } from '../dto/check-firebase-phone-link.dto';
 import { CompleteRegistrationDto } from '../dto/complete-registration.dto';
 import { ExchangeFirebaseTokenDto } from '../dto/exchange-firebase-token.dto';
 import { UpdateCurrentUserProfileDto } from '../dto/update-current-user-profile.dto';
+import { UserRefreshTokenDto } from '../dto/user-refresh-token.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../types/authenticated-user.type';
 
@@ -59,6 +61,7 @@ export class AuthController {
     private readonly firebaseAuthentication: FirebaseAuthenticationService,
     private readonly registration: UserRegistrationService,
     private readonly userProfile: UserProfileService,
+    private readonly sessions: UserSessionService,
   ) {}
 
   @Post('firebase')
@@ -79,8 +82,11 @@ export class AuthController {
   })
   @ApiValidationError()
   @ApiRateLimitError()
-  async exchangeFirebaseToken(@Body() dto: ExchangeFirebaseTokenDto) {
-    return this.firebaseAuthentication.exchangeIdToken(dto);
+  async exchangeFirebaseToken(
+    @Body() dto: ExchangeFirebaseTokenDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.firebaseAuthentication.exchangeIdToken(dto, request);
   }
 
   @Post('firebase/phone-link-check')
@@ -117,8 +123,45 @@ export class AuthController {
   })
   @ApiValidationError()
   @ApiConflictError('Số điện thoại đã tồn tại.')
-  async completeRegistration(@Body() dto: CompleteRegistrationDto) {
-    return this.registration.completeRegistration(dto);
+  async completeRegistration(
+    @Body() dto: CompleteRegistrationDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.registration.completeRegistration(dto, request);
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  @Throttle({ medium: { limit: 30, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Rotate a user refresh session' })
+  @ApiStandardOk({
+    description: 'Xoay refresh token và cấp access token ngắn hạn mới.',
+    data: userAuthExample,
+  })
+  @ApiAuthenticationErrors()
+  @ApiRateLimitError()
+  refresh(
+    @Body() dto: UserRefreshTokenDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.sessions.refresh(dto.refreshToken, request);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  @ApiOperation({ summary: 'Revoke the current user refresh session' })
+  @ApiStandardOk({
+    description: 'Thu hồi phiên đăng nhập hiện tại.',
+    message: 'Đăng xuất thành công.',
+    data: null,
+  })
+  logout(
+    @Body() dto: UserRefreshTokenDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.sessions.logout(dto.refreshToken, request);
   }
 
   @Get('me')

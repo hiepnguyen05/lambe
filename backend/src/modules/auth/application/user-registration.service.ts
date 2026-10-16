@@ -4,15 +4,21 @@ import { PrismaService } from '../../../infrastructure/persistence/postgres/pris
 import type { CompleteRegistrationDto } from '../dto/complete-registration.dto';
 import { toPublicUser } from './user.model';
 import { UserTokenService } from './user-token.service';
+import { UserSessionService } from './user-session.service';
+import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 
 @Injectable()
 export class UserRegistrationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokenService: UserTokenService,
+    private readonly sessions: UserSessionService,
   ) {}
 
-  async completeRegistration(dto: CompleteRegistrationDto) {
+  async completeRegistration(
+    dto: CompleteRegistrationDto,
+    request: RequestMetadata = {},
+  ) {
     const identity = await this.tokenService.verifyRegistrationToken(
       dto.registrationToken,
     );
@@ -29,14 +35,16 @@ export class UserRegistrationService {
         include: { roles: true, customerProfile: true },
       });
 
+      const session = await this.sessions.create(
+        newUser.id,
+        newUser.phone,
+        request,
+      );
       return {
         success: true,
         message: 'Đăng ký tài khoản thành công.',
         data: {
-          accessToken: this.tokenService.generateAccessToken(
-            newUser.id,
-            newUser.phone,
-          ),
+          ...session,
           user: toPublicUser(newUser),
         },
       };

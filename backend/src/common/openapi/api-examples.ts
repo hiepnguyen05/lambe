@@ -18,12 +18,12 @@ export const userExample = {
 
 export const userAuthExample = {
   accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+  refreshToken: 'v1.session-id.random-value.signature',
   user: userExample,
 };
 
 export const phoneLinkCheckExample = {
-  canLink: true,
-  existingUserId: null,
+  verificationRequired: true,
 };
 
 export const internalAccountExample = {
@@ -378,11 +378,23 @@ export const availabilityStatusExample = {
     lastHeartbeatAt: isoDateExample,
   },
   heartbeatTtlSeconds: 120,
+  receivingEligibility: {
+    eligible: true,
+    blockerCode: null,
+    availableBalance: 100000,
+    minimumBalance: 50000,
+  },
 };
 
 export const availabilityHeartbeatExample = {
   online: true,
   lastHeartbeatAt: isoDateExample,
+  receivingEligibility: {
+    eligible: true,
+    blockerCode: null,
+    availableBalance: 100000,
+    minimumBalance: 50000,
+  },
 };
 
 export const providerSearchExample = {

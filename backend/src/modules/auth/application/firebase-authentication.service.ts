@@ -14,6 +14,8 @@ import {
 } from './firebase-identity-verifier.port';
 import { toPublicUser } from './user.model';
 import { UserTokenService } from './user-token.service';
+import { UserSessionService } from './user-session.service';
+import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 
 @Injectable()
 export class FirebaseAuthenticationService {
@@ -22,9 +24,13 @@ export class FirebaseAuthenticationService {
     @Inject(FIREBASE_IDENTITY_VERIFIER)
     private readonly firebaseIdentityVerifier: FirebaseIdentityVerifier,
     private readonly tokenService: UserTokenService,
+    private readonly sessions: UserSessionService,
   ) {}
 
-  async exchangeIdToken(dto: ExchangeFirebaseTokenDto) {
+  async exchangeIdToken(
+    dto: ExchangeFirebaseTokenDto,
+    request: RequestMetadata = {},
+  ) {
     const identity = await this.firebaseIdentityVerifier.verifyIdToken(
       dto.idToken,
     );
@@ -64,6 +70,7 @@ export class FirebaseAuthenticationService {
         create: { userId: linkedUser.id },
         select: { onboardingStatus: true },
       });
+      const session = await this.sessions.create(linkedUser.id, phone, request);
 
       return {
         success: true,
@@ -71,10 +78,7 @@ export class FirebaseAuthenticationService {
         data: {
           requiresPhoneVerification: false as const,
           isNewUser: false as const,
-          accessToken: this.tokenService.generateAccessToken(
-            linkedUser.id,
-            phone,
-          ),
+          ...session,
           user: toPublicUser({ ...linkedUser, customerProfile }),
         },
       };
@@ -106,22 +110,11 @@ export class FirebaseAuthenticationService {
       );
     }
 
-    const existingUser = await this.prisma.user.findUnique({
-      where: { phone: dto.phone },
-      select: { id: true },
-    });
-
-    if (existingUser) {
-      throw new ForbiddenException(
-        'Số điện thoại này đã có tài khoản Lambe. Hãy đăng nhập bằng số điện thoại trước, sau đó liên kết Google hoặc Facebook trong hồ sơ.',
-      );
-    }
-
     return {
       success: true,
-      message: 'Số điện thoại có thể dùng để liên kết.',
+      message: 'Yêu cầu liên kết số điện thoại đã được tiếp nhận.',
       data: {
-        canLink: true,
+        verificationRequired: true,
       },
     };
   }

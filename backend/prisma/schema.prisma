@@ -76,6 +76,19 @@ enum ProviderServiceStatus {
   SUSPENDED
 }
 
+enum ChatMessageKind {
+  TEXT
+  SERVICE_CARD
+  ORDER_EVENT
+}
+
+enum ChatReportReason {
+  SPAM
+  ABUSE
+  OFF_PLATFORM
+  OTHER
+}
+
 enum InternalAccountStatus {
   INVITED
   ACTIVE
@@ -135,6 +148,74 @@ enum CustomerAddressType {
   OTHER
 }
 
+enum BookingType {
+  ASAP
+  SCHEDULED
+}
+
+enum ServiceOrderStatus {
+  PENDING_PROVIDER
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CANCELLED
+  EN_ROUTE
+  ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  PAYMENT_DISPUTE
+  DISPUTED
+}
+
+enum OrderEvidenceType {
+  ARRIVAL
+  BEFORE_WORK
+  AFTER_WORK
+  INCIDENT
+}
+
+enum OrderCancellationStatus {
+  PENDING_CUSTOMER
+  SUPPORT_REVIEW
+  APPROVED
+  DENIED
+}
+
+enum OrderCancellationReason {
+  TRANSPORT_ISSUE
+  CUSTOMER_UNREACHABLE
+  LOCATION_INACCESSIBLE
+  UNSAFE_CONDITIONS
+  OTHER
+}
+
+enum PaymentMethod {
+  CASH
+}
+
+enum WalletHoldStatus {
+  ACTIVE
+  RELEASED
+  CAPTURED
+}
+
+enum WalletTransactionType {
+  HOLD
+  RELEASE
+  COMMISSION
+  ADJUSTMENT
+  TOP_UP
+  REFUND
+}
+
+enum WalletTopUpStatus {
+  CREATED
+  PENDING_PAYMENT
+  SUCCEEDED
+  FAILED
+  EXPIRED
+}
+
 model User {
   id                     String                  @id @default(uuid())
   phone                  String                  @unique
@@ -152,9 +233,37 @@ model User {
   providerIdentityClaims ProviderIdentityClaim[]
   customerProfile        CustomerProfile?
   customerAddresses      CustomerAddress[]
+  customerOrders         ServiceOrder[]          @relation("CustomerOrders")
+  orderNotifications     OrderNotification[]
+  orderReviews           OrderReview[]
   auditLogs              AuditLog[]
+  sessions               UserSession[]
+  customerChats          ChatConversation[]      @relation("CustomerChats")
+  sentChatMessages       ChatMessage[]           @relation("ChatSender")
+  chatParticipantStates  ChatParticipantState[]
+  chatReports            ChatReport[]
 
   @@map("users")
+}
+
+model UserSession {
+  id               String    @id @default(uuid())
+  userId           String
+  refreshTokenHash String    @unique
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  lastUsedAt       DateTime?
+  revokedAt        DateTime?
+  revokeReason     String?
+  rotationCount    Int       @default(0)
+  createdAt        DateTime  @default(now())
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@map("user_sessions")
 }
 
 model UserRoleAssignment {
@@ -412,6 +521,7 @@ model CustomerAddress {
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders         ServiceOrder[]
 
   @@index([userId, isDefault])
   @@map("customer_addresses")
@@ -640,6 +750,10 @@ model ProviderProfile {
   sourceApplication    ProviderApplication           @relation(fields: [sourceApplicationId], references: [id], onDelete: Restrict)
   wallet               ProviderWallet?
   services             ProviderService[]
+  orders               ServiceOrder[]
+  orderReviews         OrderReview[]
+  calendarBlocks       ProviderCalendarBlock[]
+  chatConversations    ChatConversation[]
 
   @@index([status])
   @@map("provider_profiles")
@@ -672,16 +786,48 @@ model ProviderWorkingHour {
 }
 
 model ProviderWallet {
-  id            String          @id @default(uuid())
-  providerId    String          @unique
-  balanceAmount Int             @default(0)
-  heldAmount    Int             @default(0)
-  currencyCode  String          @default("VND")
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  provider      ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  id            String               @id @default(uuid())
+  providerId    String               @unique
+  balanceAmount Int                  @default(0)
+  heldAmount    Int                  @default(0)
+  currencyCode  String               @default("VND")
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  provider      ProviderProfile      @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  holds         WalletHold[]
+  transactions  WalletTransaction[]
+  topUps        WalletTopUpRequest[]
 
   @@map("provider_wallets")
+}
+
+model WalletTopUpRequest {
+  id            String            @id @default(uuid())
+  walletId      String
+  amount        Int
+  status        WalletTopUpStatus @default(CREATED)
+  provider      String            @default("MOMO")
+  orderId       String            @unique
+  requestId     String            @unique
+  orderInfo     String
+  extraData     String            @default("")
+  payUrl        String?
+  deeplink      String?
+  qrCodeUrl     String?
+  momoTransId   String?           @unique
+  sepayTransId  String?           @unique
+  checkoutData  Json?
+  resultCode    Int?
+  resultMessage String?
+  paidAt        DateTime?
+  expiresAt     DateTime
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  wallet        ProviderWallet    @relation(fields: [walletId], references: [id], onDelete: Restrict)
+
+  @@index([walletId, createdAt])
+  @@index([status, expiresAt])
+  @@map("wallet_top_up_requests")
 }
 
 model ProviderService {
@@ -698,9 +844,302 @@ model ProviderService {
   provider            ProviderProfile       @relation(fields: [providerId], references: [id], onDelete: Cascade)
   service             Service               @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   sourceApplication   ProviderApplication   @relation(fields: [sourceApplicationId], references: [id], onDelete: Restrict)
+  orders              ServiceOrder[]
+  chatMessages        ChatMessage[]
 
   @@unique([providerId, serviceId])
   @@index([serviceId, status])
   @@index([sourceApplicationId])
   @@map("provider_services")
+}
+
+model ServiceOrder {
+  id                         String                    @id @default(uuid())
+  customerId                 String
+  providerId                 String
+  providerServiceId          String
+  conversationId             String?
+  customerAddressId          String?
+  bookingType                BookingType
+  scheduledAt                DateTime?
+  expectedStartAt            DateTime
+  expectedEndAt              DateTime
+  clientRequestId            String?
+  requestHash                String?
+  status                     ServiceOrderStatus        @default(PENDING_PROVIDER)
+  paymentMethod              PaymentMethod             @default(CASH)
+  serviceName                String
+  servicePriceAmount         Int
+  travelFeeAmount            Int                       @default(0)
+  totalAmount                Int
+  currencyCode               String                    @default("VND")
+  durationMinutes            Int
+  commissionRateBps          Int
+  commissionAmount           Int
+  addressLabel               String
+  addressLine                String
+  addressProvinceName        String?
+  addressDistrictName        String?
+  addressWardName            String?
+  addressStreetLine          String?
+  addressLatitude            Float
+  addressLongitude           Float
+  contactName                String?
+  contactPhone               String?
+  addressNote                String?
+  customerNote               String?
+  providerResponseDeadlineAt DateTime
+  acceptedAt                 DateTime?
+  enRouteAt                  DateTime?
+  arrivedAt                  DateTime?
+  startedAt                  DateTime?
+  completedAt                DateTime?
+  rejectedAt                 DateTime?
+  rejectionReason            String?
+  cancelledAt                DateTime?
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  customer                   User                      @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: Restrict)
+  provider                   ProviderProfile           @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  providerService            ProviderService           @relation(fields: [providerServiceId], references: [id], onDelete: Restrict)
+  customerAddress            CustomerAddress?          @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
+  statusHistory              OrderStatusHistory[]
+  walletHold                 WalletHold?
+  calendarBlock              ProviderCalendarBlock?
+  walletTransactions         WalletTransaction[]
+  evidence                   OrderEvidence[]
+  cancellationRequest        OrderCancellationRequest?
+  review                     OrderReview?
+  notifications              OrderNotification[]
+  contactAttempts            OrderContactAttempt[]
+  conversation               ChatConversation?         @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  chatMessages               ChatMessage[]
+
+  @@unique([customerId, clientRequestId])
+  @@index([customerId, createdAt])
+  @@index([customerId, status, providerResponseDeadlineAt])
+  @@index([providerId, status, scheduledAt])
+  @@index([conversationId, createdAt])
+  @@index([status, providerResponseDeadlineAt])
+  @@map("service_orders")
+}
+
+model ChatConversation {
+  id             String                 @id @default(uuid())
+  customerId     String
+  providerId     String
+  lastSequence   Int                    @default(0)
+  lastMessageAt  DateTime               @default(now())
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  customer       User                   @relation("CustomerChats", fields: [customerId], references: [id], onDelete: Restrict)
+  provider       ProviderProfile        @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  messages       ChatMessage[]
+  participants   ChatParticipantState[]
+  reports        ChatReport[]
+  orders         ServiceOrder[]
+
+  @@unique([customerId, providerId])
+  @@index([customerId, lastMessageAt])
+  @@index([providerId, lastMessageAt])
+  @@map("chat_conversations")
+}
+
+model ChatMessage {
+  id                String           @id @default(uuid())
+  conversationId    String
+  sequence          Int
+  senderUserId      String?
+  kind              ChatMessageKind
+  text              String?
+  providerServiceId String?
+  orderId           String?
+  eventKey          String?          @unique
+  payload           Json?
+  clientMessageId   String?
+  requestHash       String?
+  createdAt         DateTime         @default(now())
+  conversation      ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  sender            User?            @relation("ChatSender", fields: [senderUserId], references: [id], onDelete: Restrict)
+  providerService   ProviderService? @relation(fields: [providerServiceId], references: [id], onDelete: Restrict)
+  order             ServiceOrder?    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  reports           ChatReport[]
+
+  @@unique([conversationId, sequence])
+  @@unique([conversationId, senderUserId, clientMessageId])
+  @@index([conversationId, sequence(sort: Desc)])
+  @@map("chat_messages")
+}
+
+model ChatParticipantState {
+  conversationId   String
+  userId           String
+  lastReadSequence Int              @default(0)
+  blockedAt        DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  conversation     ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([conversationId, userId])
+  @@map("chat_participant_states")
+}
+
+model ChatReport {
+  id             String           @id @default(uuid())
+  conversationId String
+  messageId      String?
+  reporterUserId String
+  reason         ChatReportReason
+  detail         String?
+  createdAt      DateTime         @default(now())
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  message        ChatMessage?     @relation(fields: [messageId], references: [id], onDelete: Restrict)
+  reporter       User             @relation(fields: [reporterUserId], references: [id], onDelete: Restrict)
+
+  @@index([conversationId, createdAt])
+  @@index([reporterUserId, createdAt])
+  @@map("chat_reports")
+}
+
+model OrderEvidence {
+  id         String            @id @default(uuid())
+  orderId    String
+  type       OrderEvidenceType
+  publicId   String            @unique
+  fileFormat String
+  latitude   Float?
+  longitude  Float?
+  capturedAt DateTime          @default(now())
+  order      ServiceOrder      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, type])
+  @@map("order_evidence")
+}
+
+model OrderCancellationRequest {
+  id           String                  @id @default(uuid())
+  orderId      String                  @unique
+  reason       OrderCancellationReason
+  detail       String
+  status       OrderCancellationStatus @default(PENDING_CUSTOMER)
+  requestedAt  DateTime                @default(now())
+  decidedAt    DateTime?
+  decisionNote String?
+  order        ServiceOrder            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([status, requestedAt])
+  @@map("order_cancellation_requests")
+}
+
+model OrderReview {
+  id         String          @id @default(uuid())
+  orderId    String          @unique
+  customerId String
+  providerId String
+  rating     Int
+  comment    String?
+  createdAt  DateTime        @default(now())
+  order      ServiceOrder    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  customer   User            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  provider   ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Restrict)
+
+  @@index([providerId, createdAt])
+  @@map("order_reviews")
+}
+
+model OrderNotification {
+  id        String       @id @default(uuid())
+  userId    String
+  orderId   String
+  event     String
+  readAt    DateTime?
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order     ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt, createdAt])
+  @@map("order_notifications")
+}
+
+model OrderContactAttempt {
+  id          String       @id @default(uuid())
+  orderId     String
+  attemptedAt DateTime     @default(now())
+  order       ServiceOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId, attemptedAt])
+  @@map("order_contact_attempts")
+}
+
+model ProviderCalendarBlock {
+  id               String          @id @default(uuid())
+  providerId       String
+  orderId          String?         @unique
+  startAt          DateTime
+  endAt            DateTime
+  addressLatitude  Float?
+  addressLongitude Float?
+  active           Boolean         @default(true)
+  holdExpiresAt    DateTime?
+  reason           String?
+  createdAt        DateTime        @default(now())
+  provider         ProviderProfile @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  order            ServiceOrder?   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([providerId, active, startAt])
+  @@index([active, holdExpiresAt])
+  @@map("provider_calendar_blocks")
+}
+
+model OrderStatusHistory {
+  id          String              @id @default(uuid())
+  orderId     String
+  fromStatus  ServiceOrderStatus?
+  toStatus    ServiceOrderStatus
+  actorUserId String?
+  reason      String?
+  createdAt   DateTime            @default(now())
+  order       ServiceOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+  @@map("order_status_history")
+}
+
+model WalletHold {
+  id         String           @id @default(uuid())
+  walletId   String
+  orderId    String           @unique
+  amount     Int
+  status     WalletHoldStatus @default(ACTIVE)
+  createdAt  DateTime         @default(now())
+  releasedAt DateTime?
+  capturedAt DateTime?
+  wallet     ProviderWallet   @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  order      ServiceOrder     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([walletId, status])
+  @@map("wallet_holds")
+}
+
+model WalletTransaction {
+  id                  String                @id @default(uuid())
+  walletId            String
+  orderId             String?
+  type                WalletTransactionType
+  amount              Int
+  balanceBeforeAmount Int
+  balanceAfterAmount  Int
+  heldBeforeAmount    Int
+  heldAfterAmount     Int
+  idempotencyKey      String                @unique
+  reason              String?
+  createdAt           DateTime              @default(now())
+  wallet              ProviderWallet        @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  order               ServiceOrder?         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([walletId, createdAt])
+  @@index([orderId])
+  @@map("wallet_transactions")
 }

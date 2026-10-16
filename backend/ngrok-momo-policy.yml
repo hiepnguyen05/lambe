@@ -1,0 +1,18 @@
+on_http_request:
+  - name: Block non-payment-callback routes
+    expressions:
+      - >-
+        req.url.path != '/api/payments/momo/ipn'
+        && req.url.path != '/api/payments/momo/return'
+        && req.url.path != '/api/payments/sepay/ipn'
+        && req.url.path != '/api/payments/sepay/success'
+        && req.url.path != '/api/payments/sepay/error'
+        && req.url.path != '/api/payments/sepay/cancel'
+        && !req.url.path.startsWith('/api/payments/sepay/checkout/')
+    actions:
+      - type: custom-response
+        config:
+          status_code: 404
+          content: Not Found
+          headers:
+            content-type: text/plain; charset=utf-8

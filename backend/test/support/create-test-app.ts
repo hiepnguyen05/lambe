@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import { App } from 'supertest/types';
 import { AppModule } from '../../src/app.module';
@@ -23,6 +24,7 @@ export interface TestAppContext {
   mediaStorage: {
     uploadImage: jest.Mock;
     uploadPrivateImage: jest.Mock;
+    publishPrivateImage: jest.Mock;
     createPrivateDownloadUrl: jest.Mock;
     deleteImage: jest.Mock;
   };
@@ -42,6 +44,15 @@ export async function createTestApp(): Promise<TestAppContext> {
       .mockImplementation(() => Promise.resolve(verifiedIdentity)),
   };
   const mediaStorage = {
+    publishPrivateImage: jest.fn().mockImplementation(() =>
+      Promise.resolve({
+        url: 'http://example.test/portrait.webp',
+        secureUrl: 'https://example.test/portrait.webp',
+        publicId: `lambe/users/e2e/avatar/${randomUUID()}`,
+        format: 'webp',
+        resourceType: 'image',
+      }),
+    ),
     uploadPrivateImage: jest
       .fn()
       .mockImplementation((_buffer: Buffer, folder: string) =>

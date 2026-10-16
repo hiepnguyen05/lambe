@@ -15,7 +15,7 @@ class PriceStepWidget extends ConsumerWidget {
 
     return OnboardingPageWrapper(
       title: 'Mức giá ưu tiên',
-      subtitle: 'Giúp lọc kết quả thợ làm đẹp phù hợp với túi tiền',
+      subtitle: 'Giúp lọc kết quả chuyên viên làm đẹp phù hợp với túi tiền',
       child: Column(
         children: [
           SelectionTile(

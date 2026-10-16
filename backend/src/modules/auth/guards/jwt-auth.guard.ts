@@ -12,6 +12,7 @@ import { AuthenticatedUser } from '../types/authenticated-user.type';
 interface AccessTokenPayload {
   sub: string;
   phone: string;
+  sessionId: string;
   purpose: 'access';
 }
 
@@ -36,16 +37,33 @@ export class JwtAuthGuard implements CanActivate {
       const payload =
         await this.jwtService.verifyAsync<AccessTokenPayload>(token);
 
-      if (payload.purpose !== 'access' || !payload.sub || !payload.phone) {
+      if (
+        payload.purpose !== 'access' ||
+        !payload.sub ||
+        !payload.phone ||
+        !payload.sessionId
+      ) {
         throw new UnauthorizedException('Access token không hợp lệ.');
       }
 
-      const user = await this.prisma.user.findUnique({
-        where: { id: payload.sub },
-        select: { phone: true, status: true },
+      const session = await this.prisma.userSession.findUnique({
+        where: { id: payload.sessionId },
+        select: {
+          userId: true,
+          expiresAt: true,
+          revokedAt: true,
+          user: { select: { phone: true, status: true } },
+        },
       });
 
-      if (!user || user.status !== 'ACTIVE' || user.phone !== payload.phone) {
+      if (
+        !session ||
+        session.userId !== payload.sub ||
+        session.revokedAt ||
+        session.expiresAt <= new Date() ||
+        session.user.status !== 'ACTIVE' ||
+        session.user.phone !== payload.phone
+      ) {
         throw new UnauthorizedException('Tài khoản hiện không hoạt động.');
       }
 

@@ -20,6 +20,8 @@ interface CloudinaryDestroyResponse {
   result?: string;
 }
 
+const MAX_PUBLISHED_IMAGE_BYTES = 10 * 1024 * 1024;
+
 @Injectable()
 export class CloudinaryService implements MediaStorage {
   private readonly logger = new Logger(CloudinaryService.name);
@@ -66,6 +68,38 @@ export class CloudinaryService implements MediaStorage {
     folder: string,
   ): Promise<UploadResult> {
     return this.upload(buffer, folder, this.kycUploadPreset, 'authenticated');
+  }
+
+  async publishPrivateImage(
+    publicId: string,
+    format: string,
+    folder: string,
+  ): Promise<UploadResult> {
+    const privateUrl = this.createPrivateDownloadUrl(publicId, format);
+    try {
+      const response = await fetch(privateUrl, {
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok)
+        throw new Error(`download failed with ${response.status}`);
+      const contentLength = Number(response.headers.get('content-length') ?? 0);
+      if (contentLength > MAX_PUBLISHED_IMAGE_BYTES) {
+        throw new Error('private image exceeds publication limit');
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length === 0 || buffer.length > MAX_PUBLISHED_IMAGE_BYTES) {
+        throw new Error('private image has invalid size');
+      }
+      return await this.uploadImage(buffer, folder);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'unknown error';
+      this.logger.error(
+        `Cloudinary private image publication failed: ${message}`,
+      );
+      throw new ServiceUnavailableException(
+        'Image storage is temporarily unavailable',
+      );
+    }
   }
 
   createPrivateDownloadUrl(publicId: string, format: string): string {

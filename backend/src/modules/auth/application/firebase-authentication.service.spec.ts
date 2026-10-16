@@ -5,7 +5,7 @@ describe('FirebaseAuthenticationService', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('logs in an active user after Firebase verifies the phone token', async () => {
-    const { firebaseAuthentication, prisma, jwtService } =
+    const { firebaseAuthentication, prisma, sessions } =
       createAuthTestContext();
     prisma.user.findUnique.mockResolvedValue(TEST_USER);
 
@@ -17,16 +17,17 @@ describe('FirebaseAuthenticationService', () => {
       where: { phone: TEST_USER.phone },
       include: { roles: true, customerProfile: true },
     });
-    expect(jwtService.sign).toHaveBeenCalledWith({
-      sub: TEST_USER.id,
-      phone: TEST_USER.phone,
-      purpose: 'access',
-    });
+    expect(sessions.create).toHaveBeenCalledWith(
+      TEST_USER.id,
+      TEST_USER.phone,
+      {},
+    );
     expect(result).toMatchObject({
       data: {
         requiresPhoneVerification: false,
         isNewUser: false,
         accessToken: 'access-token',
+        refreshToken: 'refresh-token',
       },
     });
   });
@@ -141,7 +142,7 @@ describe('FirebaseAuthenticationService', () => {
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 
-  it('allows a social identity to pre-check an unused phone before linking', async () => {
+  it('accepts a phone-link request without disclosing account existence', async () => {
     const { firebaseAuthentication, prisma, firebaseIdentityVerifier } =
       createAuthTestContext();
     firebaseIdentityVerifier.verifyIdToken.mockResolvedValue({
@@ -150,41 +151,17 @@ describe('FirebaseAuthenticationService', () => {
       email: 'customer@example.com',
       displayName: 'Nguyen Van B',
     });
-    prisma.user.findUnique.mockResolvedValue(null);
-
     const result = await firebaseAuthentication.checkPhoneLink({
       idToken: 'google-id-token',
       phone: TEST_USER.phone,
     });
 
-    expect(prisma.user.findUnique).toHaveBeenCalledWith({
-      where: { phone: TEST_USER.phone },
-      select: { id: true },
-    });
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
     expect(result).toEqual({
       success: true,
-      message: 'Số điện thoại có thể dùng để liên kết.',
-      data: { canLink: true },
+      message: 'Yêu cầu liên kết số điện thoại đã được tiếp nhận.',
+      data: { verificationRequired: true },
     });
-  });
-
-  it('blocks linking a social identity to a phone that already has an account', async () => {
-    const { firebaseAuthentication, prisma, firebaseIdentityVerifier } =
-      createAuthTestContext();
-    firebaseIdentityVerifier.verifyIdToken.mockResolvedValue({
-      uid: 'google-firebase-user',
-      signInProvider: 'google.com',
-      email: 'customer@example.com',
-      displayName: 'Nguyen Van B',
-    });
-    prisma.user.findUnique.mockResolvedValue({ id: TEST_USER.id });
-
-    await expect(
-      firebaseAuthentication.checkPhoneLink({
-        idToken: 'google-id-token',
-        phone: TEST_USER.phone,
-      }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('rejects phone-link pre-check when the Firebase identity already has a phone', async () => {

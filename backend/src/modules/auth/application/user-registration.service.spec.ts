@@ -6,7 +6,8 @@ describe('UserRegistrationService', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('creates a user only from a valid registration token', async () => {
-    const { registration, prisma, jwtService } = createAuthTestContext();
+    const { registration, prisma, jwtService, sessions } =
+      createAuthTestContext();
     jwtService.verifyAsync.mockResolvedValue({
       sub: 'registration',
       phone: TEST_USER.phone,
@@ -30,6 +31,11 @@ describe('UserRegistrationService', () => {
       include: { roles: true, customerProfile: true },
     });
     expect(result).toMatchObject({ data: { accessToken: 'access-token' } });
+    expect(sessions.create).toHaveBeenCalledWith(
+      TEST_USER.id,
+      TEST_USER.phone,
+      {},
+    );
   });
 
   it('rejects an invalid registration token', async () => {

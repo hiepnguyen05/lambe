@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { BookingType } from '@prisma/client';
 import {
   IsInt,
   IsLatitude,
@@ -8,9 +9,30 @@ import {
   IsUUID,
   Max,
   Min,
+  IsEnum,
+  IsDateString,
+  ValidateIf,
+  Matches,
 } from 'class-validator';
 
 export class ProviderSearchDto {
+  @ApiPropertyOptional({ enum: BookingType, default: BookingType.ASAP })
+  @IsOptional()
+  @IsEnum(BookingType)
+  bookingType?: BookingType;
+
+  @ApiPropertyOptional({
+    format: 'date-time',
+    description: 'Required with SCHEDULED. Include timezone.',
+  })
+  @ValidateIf(
+    (dto: ProviderSearchDto) =>
+      dto.bookingType === BookingType.SCHEDULED ||
+      dto.scheduledAt !== undefined,
+  )
+  @IsDateString({ strict: true })
+  @Matches(/(Z|[+-]\d{2}:\d{2})$/)
+  scheduledAt?: string;
   @ApiProperty({ format: 'uuid' })
   @IsUUID('4')
   serviceId: string;

@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Upload, Trash2, ChevronDown } from 'lucide-react';
 import type { AdminCategory } from '../../hooks/useAdminCategories';
+import {
+  commonCatalogIcons,
+  generateCatalogCode,
+  generateCatalogSlug,
+} from '../../utils/catalog-form';
 
 interface CategoryFormModalProps {
   isOpen: boolean;
@@ -10,45 +15,6 @@ interface CategoryFormModalProps {
   isLoading?: boolean;
   nextSortOrder?: number;
 }
-
-const COMMON_ICONS = [
-  { name: 'content_cut', label: 'Cắt tóc' },
-  { name: 'spa', label: 'Spa & Massage' },
-  { name: 'face', label: 'Chăm sóc da' },
-  { name: 'face_retouching_natural', label: 'Trang điểm' },
-  { name: 'brush', label: 'Làm móng / Cọ' },
-  { name: 'palette', label: 'Nhuộm / Màu' },
-  { name: 'wash', label: 'Gội đầu' },
-  { name: 'healing', label: 'Trị liệu' },
-  { name: 'local_florist', label: 'Thảo mộc' },
-  { name: 'clean_hands', label: 'Vệ sinh' },
-  { name: 'health_and_safety', label: 'Phòng khám' },
-  { name: 'self_improvement', label: 'Thư giãn' },
-  { name: 'favorite', label: 'Yêu thích' },
-  { name: 'star', label: 'Nổi bật' },
-  { name: 'category', label: 'Mặc định' }
-];
-
-const generateSlug = (text: string) => {
-  return text.toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[đĐ]/g, 'd')
-    .replace(/([^0-9a-z-\s])/g, '')
-    .replace(/(\s+)/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '');
-};
-
-const generateCode = (text: string) => {
-  return text.toUpperCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[Đ]/g, 'D')
-    .replace(/([^0-9A-Z_\s])/g, '')
-    .replace(/(\s+)/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_|_$/g, '')
-    .substring(0, 50); // max length
-};
 
 export function CategoryFormModal({ isOpen, onClose, onSubmit, initialData, isLoading, nextSortOrder = 1 }: CategoryFormModalProps) {
   const [formData, setFormData] = useState({
@@ -113,14 +79,14 @@ export function CategoryFormModal({ isOpen, onClose, onSubmit, initialData, isLo
       // Auto-generate code and slug if name changes
       if (name === 'name' && !initialData) {
         // Only update code/slug if they are empty or still match the auto-generated version of the old name
-        const oldCode = generateCode(prev.name);
-        const oldSlug = generateSlug(prev.name);
+        const oldCode = generateCatalogCode(prev.name);
+        const oldSlug = generateCatalogSlug(prev.name);
         
         if (!prev.code || prev.code === oldCode) {
-          updates.code = generateCode(value);
+          updates.code = generateCatalogCode(value);
         }
         if (!prev.slug || prev.slug === oldSlug) {
-          updates.slug = generateSlug(value);
+          updates.slug = generateCatalogSlug(value);
         }
       }
       
@@ -141,8 +107,8 @@ export function CategoryFormModal({ isOpen, onClose, onSubmit, initialData, isLo
     await onSubmit(formData, selectedFile);
   };
 
-  const filteredIcons = COMMON_ICONS.filter(icon => 
-    icon.name.toLowerCase().includes(iconSearch.toLowerCase()) || 
+  const filteredIcons = commonCatalogIcons.filter(icon =>
+    icon.name.toLowerCase().includes(iconSearch.toLowerCase()) ||
     icon.label.toLowerCase().includes(iconSearch.toLowerCase())
   );
 

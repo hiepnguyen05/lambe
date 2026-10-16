@@ -144,6 +144,40 @@ describe('CloudinaryService', () => {
     );
   });
 
+  it('publishes a verified private image as a separate public asset', async () => {
+    privateDownloadUrl.mockReturnValue('https://private.example.test/file');
+    const service = createService(true);
+    const published = {
+      url: 'http://example.test/avatar.webp',
+      secureUrl: 'https://example.test/avatar.webp',
+      publicId: 'lambe/users/user-id/avatar/image',
+      format: 'webp',
+      resourceType: 'image',
+      deliveryType: 'upload' as const,
+    };
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(Buffer.from('portrait'), {
+        status: 200,
+        headers: { 'content-length': '8' },
+      }),
+    );
+    const uploadImage = jest
+      .spyOn(service, 'uploadImage')
+      .mockResolvedValue(published);
+
+    await expect(
+      service.publishPrivateImage(
+        'lambe/provider-applications/portrait',
+        'webp',
+        'lambe/users/user-id/avatar',
+      ),
+    ).resolves.toEqual(published);
+    expect(uploadImage).toHaveBeenCalledWith(
+      Buffer.from('portrait'),
+      'lambe/users/user-id/avatar',
+    );
+  });
+
   it('hides Cloudinary upload failures from API clients', async () => {
     uploadStream.mockImplementation(
       (_options: unknown, callback: (error: { message: string }) => void) => {

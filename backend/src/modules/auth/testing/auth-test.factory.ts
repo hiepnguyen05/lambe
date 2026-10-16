@@ -55,6 +55,7 @@ export function createAuthTestContext() {
       deliveryType: 'upload' as const,
     }),
     uploadPrivateImage: jest.fn(),
+    publishPrivateImage: jest.fn(),
     createPrivateDownloadUrl: jest.fn(),
     deleteImage: jest.fn().mockResolvedValue(true),
   };
@@ -71,17 +72,34 @@ export function createAuthTestContext() {
     ),
     verifyAsync: jest.fn(),
   };
-  const tokenService = new UserTokenService(jwtService as never);
+  const configService = {
+    get: jest.fn((_key: string, fallback: unknown) => fallback),
+    getOrThrow: jest
+      .fn()
+      .mockReturnValue('test-user-jwt-secret-that-is-at-least-32-characters'),
+  };
+  const tokenService = new UserTokenService(
+    jwtService as never,
+    configService as never,
+  );
+  const sessions = {
+    create: jest.fn().mockResolvedValue({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+    }),
+  };
 
   return {
     firebaseAuthentication: new FirebaseAuthenticationService(
       prismaWithTransaction as never,
       firebaseIdentityVerifier,
       tokenService,
+      sessions as never,
     ),
     registration: new UserRegistrationService(
       prismaWithTransaction as never,
       tokenService,
+      sessions as never,
     ),
     userProfile: new UserProfileService(
       prismaWithTransaction as never,
@@ -93,5 +111,6 @@ export function createAuthTestContext() {
     mediaStorage,
     firebaseIdentityVerifier,
     jwtService,
+    sessions,
   };
 }

@@ -10,24 +10,11 @@ import {
 } from "lucide-react";
 import type { AdminService } from "../../hooks/useAdminServices";
 import { useAdminCategories } from "../../hooks/useAdminCategories";
-
-const COMMON_ICONS = [
-  { name: "content_cut", label: "Cắt tóc" },
-  { name: "spa", label: "Spa & Massage" },
-  { name: "face", label: "Chăm sóc da" },
-  { name: "face_retouching_natural", label: "Trang điểm" },
-  { name: "brush", label: "Làm móng / Cọ" },
-  { name: "palette", label: "Nhuộm / Màu" },
-  { name: "wash", label: "Gội đầu" },
-  { name: "healing", label: "Trị liệu" },
-  { name: "local_florist", label: "Thảo mộc" },
-  { name: "clean_hands", label: "Vệ sinh" },
-  { name: "health_and_safety", label: "Phòng khám" },
-  { name: "self_improvement", label: "Thư giãn" },
-  { name: "favorite", label: "Yêu thích" },
-  { name: "star", label: "Nổi bật" },
-  { name: "category", label: "Mặc định" },
-];
+import {
+  commonCatalogIcons,
+  generateCatalogCode,
+  generateCatalogSlug,
+} from "../../utils/catalog-form";
 
 export interface ServiceFormValues {
   categoryId: string;
@@ -194,26 +181,8 @@ export function ServiceFormModal({
     }
 
     const name = val;
-    const slug = name
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/đ/g, "d")
-      .replace(/Đ/g, "D")
-      .replace(/[^a-z0-9\s-]/g, "")
-      .trim()
-      .replace(/\s+/g, "-");
-
-    // Auto generate uppercase code separated by underscore
-    const code = name
-      .toUpperCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/Đ/g, "D")
-      .replace(/[^A-Z0-9\s_]/g, "")
-      .trim()
-      .replace(/\s+/g, "_")
-      .substring(0, 50);
+    const slug = generateCatalogSlug(name);
+    const code = generateCatalogCode(name);
 
     setFormData((prev) => ({ ...prev, name, slug, code }));
   };
@@ -477,7 +446,7 @@ export function ServiceFormModal({
                   {showIconPicker && (
                     <div className="absolute z-10 w-full mt-2 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
                       <div className="p-3 max-h-60 overflow-y-auto grid grid-cols-4 md:grid-cols-5 gap-2 custom-scrollbar">
-                        {COMMON_ICONS.filter(
+                        {commonCatalogIcons.filter(
                           (icon) =>
                             icon.name
                               .toLowerCase()
@@ -486,7 +455,7 @@ export function ServiceFormModal({
                               .toLowerCase()
                               .includes(iconSearch.toLowerCase()),
                         ).length > 0 ? (
-                          COMMON_ICONS.filter(
+                          commonCatalogIcons.filter(
                             (icon) =>
                               icon.name
                                 .toLowerCase()

@@ -7,6 +7,7 @@ class UserModel {
   final String? avatarUrl;
   final String? gender;
   final String? onboardingStatus;
+  final List<String> roles;
 
   const UserModel({
     required this.id,
@@ -15,6 +16,7 @@ class UserModel {
     this.avatarUrl,
     this.gender,
     this.onboardingStatus,
+    this.roles = const [],
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -25,6 +27,7 @@ class UserModel {
       avatarUrl: json['avatarUrl'] as String?,
       gender: json['gender'] as String?,
       onboardingStatus: json['onboardingStatus'] as String?,
+      roles: (json['roles'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? ['CUSTOMER'],
     );
   }
 
@@ -36,6 +39,7 @@ class UserModel {
       avatarUrl: avatarUrl,
       gender: gender,
       onboardingStatus: onboardingStatus,
+      roles: roles,
     );
   }
 }

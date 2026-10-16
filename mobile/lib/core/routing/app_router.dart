@@ -11,6 +11,12 @@ import '../../features/auth/presentation/screens/auth_screen.dart';
 import '../../features/auth/presentation/screens/complete_registration_screen.dart';
 import '../../features/auth/presentation/screens/link_phone_screen.dart';
 import '../../features/auth/presentation/screens/otp_screen.dart';
+import '../../features/booking/presentation/screens/booking_config_screen.dart';
+import '../../features/booking/presentation/screens/booking_confirmation_screen.dart';
+import '../../features/booking/presentation/screens/select_provider_screen.dart';
+import '../../features/catalog/domain/entities/service_item_entity.dart';
+import '../../features/catalog/presentation/screens/service_detail_screen.dart';
+import '../../features/catalog/presentation/screens/services_list_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../../features/partner/presentation/screens/partner_expertise_screen.dart';
@@ -23,22 +29,36 @@ import '../../features/partner/presentation/screens/partner_submit_screen.dart';
 import '../../features/partner/presentation/screens/partner_type_screen.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
+import '../../features/provider_workspace/presentation/screens/provider_home_screen.dart';
+import '../../features/provider_workspace/presentation/screens/provider_main_screen.dart';
+import '../../features/provider_workspace/presentation/screens/placeholders/provider_orders_screen.dart';
+import '../../features/provider_workspace/presentation/screens/placeholders/provider_reviews_screen.dart';
+import '../../features/provider_workspace/presentation/screens/placeholders/provider_account_screen.dart';
+import '../../features/provider_income/presentation/screens/provider_income_screen.dart';
+import '../../features/provider_schedule/presentation/screens/provider_schedule_screen.dart';
+import '../../features/splash/presentation/screens/splash_screen.dart';
 import 'page_transitions.dart';
 
 final goRouterProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
     initialLocation: '/splash',
     redirect: (context, state) {
+      final location = state.matchedLocation;
+      final isSplash = location == '/splash';
+
+      // 1. Màn hình Splash tự đảm nhiệm kiểm tra phiên, vị trí, vai trò và điều hướng
+      if (isSplash) {
+        return null;
+      }
+
       final auth = ref.read(authNotifierProvider);
       if (auth.isLoading || auth.hasError) {
         return null;
       }
 
       final user = auth.value;
-      final location = state.matchedLocation;
       final isAuthRoute = location == '/auth' || location.startsWith('/auth/');
       final isOnboarding = location == '/onboarding';
-      final isSplash = location == '/splash';
 
       if (user == null) {
         return isAuthRoute ? null : '/auth';
@@ -52,7 +72,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         return isOnboarding ? null : '/onboarding';
       }
 
-      if (isSplash || isAuthRoute || isOnboarding) {
+      if (isAuthRoute || isOnboarding) {
+        if (user.roles.contains('PROVIDER')) {
+          return '/provider/home';
+        }
         return '/home';
       }
       return null;
@@ -60,7 +83,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: '/splash',
-        builder: (context, state) => const _SessionGateScreen(),
+        builder: (context, state) => const SplashScreen(),
       ),
       GoRoute(path: '/auth', builder: (context, state) => const AuthScreen()),
       GoRoute(
@@ -111,6 +134,139 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => PageTransitions.fadeTransition(
           key: state.pageKey,
           child: const HomeScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/services',
+        pageBuilder: (context, state) {
+          final categorySlug = state.uri.queryParameters['categorySlug'];
+          final categoryName = state.uri.queryParameters['categoryName'];
+          return PageTransitions.slideRightToLeft(
+            key: state.pageKey,
+            child: ServicesListScreen(
+              initialCategorySlug: categorySlug,
+              initialCategoryName: categoryName,
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/services/detail',
+        pageBuilder: (context, state) {
+          final service = state.extra as ServiceItemEntity?;
+          final slug = state.uri.queryParameters['slug'] ?? service?.slug ?? '';
+          return PageTransitions.slideRightToLeft(
+            key: state.pageKey,
+            child: ServiceDetailScreen(
+              initialService: service,
+              serviceSlug: slug,
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/booking/config',
+        pageBuilder: (context, state) {
+          final service = state.extra as ServiceItemEntity?;
+          if (service == null) {
+            return PageTransitions.slideRightToLeft(
+              key: state.pageKey,
+              child: const Scaffold(
+                body: Center(child: Text('Không tìm thấy thông tin dịch vụ')),
+              ),
+            );
+          }
+          return PageTransitions.slideRightToLeft(
+            key: state.pageKey,
+            child: BookingConfigScreen(service: service),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/booking/providers',
+        pageBuilder: (context, state) => PageTransitions.slideRightToLeft(
+          key: state.pageKey,
+          child: const SelectProviderScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/booking/confirm',
+        pageBuilder: (context, state) => PageTransitions.slideRightToLeft(
+          key: state.pageKey,
+          child: const BookingConfirmationScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/provider',
+        redirect: (context, state) => '/provider/home',
+      ),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          return ProviderMainScreen(navigationShell: navigationShell);
+        },
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/provider/home',
+                pageBuilder: (context, state) => PageTransitions.fadeTransition(
+                  key: state.pageKey,
+                  child: const ProviderHomeScreen(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/provider/orders',
+                pageBuilder: (context, state) => PageTransitions.fadeTransition(
+                  key: state.pageKey,
+                  child: const ProviderOrdersScreen(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/provider/income',
+                pageBuilder: (context, state) => PageTransitions.fadeTransition(
+                  key: state.pageKey,
+                  child: const ProviderIncomeScreen(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/provider/reviews',
+                pageBuilder: (context, state) => PageTransitions.fadeTransition(
+                  key: state.pageKey,
+                  child: const ProviderReviewsScreen(),
+                ),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/provider/account',
+                pageBuilder: (context, state) => PageTransitions.fadeTransition(
+                  key: state.pageKey,
+                  child: const ProviderAccountScreen(),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/provider/schedule',
+        pageBuilder: (context, state) => PageTransitions.slideRightToLeft(
+          key: state.pageKey,
+          child: const ProviderScheduleScreen(),
         ),
       ),
       GoRoute(
@@ -226,56 +382,3 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   ref.onDispose(router.dispose);
   return router;
 });
-
-class _SessionGateScreen extends ConsumerWidget {
-  const _SessionGateScreen();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authNotifierProvider);
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FB),
-      body: Center(
-        child: auth.hasError
-            ? Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.cloud_off_outlined,
-                      size: 44,
-                      color: Color(0xFF0F766E),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Không thể kiểm tra phiên đăng nhập',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      auth.error.toString(),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Color(0xFF6E7977)),
-                    ),
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: () => ref
-                          .read(authNotifierProvider.notifier)
-                          .refreshSession(),
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Thử lại'),
-                    ),
-                  ],
-                ),
-              )
-            : const CircularProgressIndicator(color: Color(0xFF0F766E)),
-      ),
-    );
-  }
-}

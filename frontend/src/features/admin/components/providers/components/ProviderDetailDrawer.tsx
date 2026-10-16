@@ -4,11 +4,14 @@ import {
   Building2,
   CalendarDays,
   ExternalLink,
+  ImageUp,
+  LockKeyhole,
   LoaderCircle,
   MapPin,
   PauseCircle,
   Phone,
   PlayCircle,
+  UnlockKeyhole,
   UserRound,
   WalletCards,
   X,
@@ -21,9 +24,12 @@ interface ProviderDetailDrawerProps {
   isLoading: boolean;
   error: string;
   canManage: boolean;
+  canManageAccounts: boolean;
   actionLoading: boolean;
   onClose: () => void;
   onStatusChange: (provider: AdminProviderDetail) => void;
+  onAccountStatusChange: (provider: AdminProviderDetail) => void;
+  onSyncAvatar: (provider: AdminProviderDetail) => void;
 }
 
 export function ProviderDetailDrawer({
@@ -31,9 +37,12 @@ export function ProviderDetailDrawer({
   isLoading,
   error,
   canManage,
+  canManageAccounts,
   actionLoading,
   onClose,
   onStatusChange,
+  onAccountStatusChange,
+  onSyncAvatar,
 }: ProviderDetailDrawerProps) {
   const [tab, setTab] = useState<'OVERVIEW' | 'OPERATIONS'>('OVERVIEW');
 
@@ -44,7 +53,7 @@ export function ProviderDetailDrawer({
         role="dialog"
         aria-modal="true"
         aria-label="Chi tiết chuyên viên hoặc đối tác"
-        className="relative flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl"
+        className="relative flex h-full w-full max-w-2xl flex-col border-t-4 border-teal-700 bg-white shadow-2xl"
       >
         <header className="flex min-h-16 items-center justify-between border-b border-slate-200 px-5">
           <div>
@@ -101,6 +110,11 @@ export function ProviderDetailDrawer({
                   <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-600">
                     <Phone className="h-4 w-4" /> {provider.user.phone}
                   </p>
+                  {provider.user.status !== 'ACTIVE' && (
+                    <span className="mt-2 inline-flex rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700">
+                      Tài khoản {provider.user.status === 'BLOCKED' ? 'đang bị khóa' : 'đang tạm vô hiệu'}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -118,34 +132,60 @@ export function ProviderDetailDrawer({
               {tab === 'OVERVIEW' ? <Overview provider={provider} /> : <Operations provider={provider} />}
             </div>
 
-            <footer className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
+            <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
               <Link
                 to={`/admin/provider-applications/${provider.sourceApplicationId}`}
                 className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-800 hover:underline"
               >
                 Hồ sơ đăng ký gốc <ExternalLink className="h-3.5 w-3.5" />
               </Link>
-              {canManage && provider.status !== 'SETUP_REQUIRED' && (
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={() => onStatusChange(provider)}
-                  className={`inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold text-white disabled:opacity-50 ${
-                    provider.status === 'SUSPENDED'
-                      ? 'bg-emerald-700 hover:bg-emerald-800'
-                      : 'bg-rose-700 hover:bg-rose-800'
-                  }`}
-                >
-                  {actionLoading ? (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                  ) : provider.status === 'SUSPENDED' ? (
-                    <PlayCircle className="h-4 w-4" />
-                  ) : (
-                    <PauseCircle className="h-4 w-4" />
-                  )}
-                  {provider.status === 'SUSPENDED' ? 'Khôi phục' : 'Đình chỉ'}
-                </button>
-              )}
+              <div className="flex flex-wrap justify-end gap-2">
+                {canManage && !provider.avatarUrl && (
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={() => onSyncAvatar(provider)}
+                    className="inline-flex h-9 items-center gap-2 rounded-md border border-teal-200 bg-white px-3 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:opacity-50"
+                  >
+                    <ImageUp className="h-4 w-4" />
+                    Đồng bộ chân dung
+                  </button>
+                )}
+                {canManage && (
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={() => onStatusChange(provider)}
+                    className={`inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-semibold disabled:opacity-50 ${
+                      provider.status === 'SUSPENDED'
+                        ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                        : 'border-rose-200 text-rose-700 hover:bg-rose-50'
+                    }`}
+                  >
+                    {provider.status === 'SUSPENDED' ? (
+                      <PlayCircle className="h-4 w-4" />
+                    ) : (
+                      <PauseCircle className="h-4 w-4" />
+                    )}
+                    {provider.status === 'SUSPENDED' ? 'Khôi phục hoạt động' : 'Đình chỉ hoạt động'}
+                  </button>
+                )}
+                {canManageAccounts && (
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={() => onAccountStatusChange(provider)}
+                    className="inline-flex h-9 items-center gap-2 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {provider.user.status === 'BLOCKED' ? (
+                      <UnlockKeyhole className="h-4 w-4" />
+                    ) : (
+                      <LockKeyhole className="h-4 w-4" />
+                    )}
+                    {provider.user.status === 'BLOCKED' ? 'Mở khóa tài khoản' : 'Khóa tài khoản'}
+                  </button>
+                )}
+              </div>
             </footer>
           </>
         )}

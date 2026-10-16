@@ -43,7 +43,9 @@ function createContext() {
         id: 'portrait-id',
         type: ProviderDocumentType.PORTRAIT,
         status: ReviewStatus.VERIFIED,
+        isPublicCandidate: true,
         fileUrl: 'https://example.test/portrait.webp',
+        publicId: 'lambe/provider-applications/portrait',
         deliveryType: 'authenticated',
         fileFormat: 'webp',
       },
@@ -86,6 +88,10 @@ function createContext() {
     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
   };
   const userRoleAssignment = { upsert: jest.fn().mockResolvedValue({}) };
+  const user = {
+    findUnique: jest.fn().mockResolvedValue({ avatarPublicId: null }),
+    update: jest.fn().mockResolvedValue({}),
+  };
   const providerProfile = {
     create: jest.fn().mockResolvedValue({
       id: 'provider-id',
@@ -107,6 +113,7 @@ function createContext() {
   const transaction = {
     $queryRaw: jest.fn().mockResolvedValue([{ id: applicationId }]),
     providerApplication,
+    user,
     userRoleAssignment,
     providerProfile,
     providerApplicationCheck,
@@ -131,16 +138,33 @@ function createContext() {
     notifyChangesRequested: jest.fn().mockResolvedValue(undefined),
     flushPending: jest.fn().mockResolvedValue(undefined),
   };
+  const mediaStorage = {
+    uploadImage: jest.fn(),
+    uploadPrivateImage: jest.fn(),
+    publishPrivateImage: jest.fn().mockResolvedValue({
+      url: 'http://example.test/public-avatar.webp',
+      secureUrl: 'https://example.test/public-avatar.webp',
+      publicId: `lambe/users/${userId}/avatar/public`,
+      format: 'webp',
+      resourceType: 'image',
+      deliveryType: 'upload' as const,
+    }),
+    createPrivateDownloadUrl: jest.fn(),
+    deleteImage: jest.fn().mockResolvedValue(true),
+  };
   return {
     review: new ProviderApplicationReviewService(
       prisma as never,
       audit as never,
       notifications as never,
+      mediaStorage,
     ),
     application,
     providerProfile,
     userRoleAssignment,
     notifications,
+    mediaStorage,
+    user,
     providerApplicationCheck,
     providerApplicationDocument,
     providerApplicationService,
@@ -171,8 +195,14 @@ describe('ProviderApplicationReviewService', () => {
   });
 
   it('grants provider role, wallet and approved services atomically', async () => {
-    const { review, providerProfile, userRoleAssignment, notifications } =
-      createContext();
+    const {
+      review,
+      providerProfile,
+      userRoleAssignment,
+      notifications,
+      mediaStorage,
+      user,
+    } = createContext();
 
     const result = await review.approve(applicationId, actorId, {});
 
@@ -181,6 +211,25 @@ describe('ProviderApplicationReviewService', () => {
       UserRole.PROVIDER,
     );
     expect(providerProfile.create).toHaveBeenCalled();
+    expect(mediaStorage.publishPrivateImage).toHaveBeenCalledWith(
+      'lambe/provider-applications/portrait',
+      'webp',
+      `lambe/users/${userId}/avatar`,
+    );
+    expect(user.update).toHaveBeenCalledWith({
+      where: { id: userId },
+      data: {
+        avatarUrl: 'https://example.test/public-avatar.webp',
+        avatarPublicId: `lambe/users/${userId}/avatar/public`,
+      },
+    });
+    expect(providerProfile.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          avatarUrl: 'https://example.test/public-avatar.webp',
+        }) as object,
+      }),
+    );
     expect(JSON.stringify(providerProfile.create.mock.calls)).toContain(
       '"priceAmount":150000',
     );

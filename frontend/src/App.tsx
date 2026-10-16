@@ -73,17 +73,12 @@ function AppContent() {
   );
 }
 
-import { ProviderRegistrationApp } from './features/provider-registration';
-
 function App() {
   return (
     <Router>
       <DialogProvider>
         <AdminAuthProvider>
           <Routes>
-            {/* User/Provider Routes that don't need Admin Layout */}
-            <Route path={ROUTES.PROVIDER.REGISTER} element={<ProviderRegistrationApp />} />
-            
             {/* All other routes go through AppContent which has AdminLayout */}
             <Route path="*" element={<AppContent />} />
           </Routes>

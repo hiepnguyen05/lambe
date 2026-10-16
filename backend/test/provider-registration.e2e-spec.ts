@@ -185,7 +185,6 @@ describe('Provider registration upgrade (e2e)', () => {
         legalFullName: 'Provider Test',
         birthDate: '1995-08-20',
         nationalIdNumber: nationalId,
-        email: `${marker}@example.com`,
         experienceYears: 3,
       })
       .expect(200);
@@ -227,6 +226,7 @@ describe('Provider registration upgrade (e2e)', () => {
           publicId: `${marker}/${type}`,
           fileFormat: 'webp',
           deliveryType: 'authenticated',
+          isPublicCandidate: type === ProviderDocumentType.PORTRAIT,
         },
       });
       documentId = document.id;
@@ -248,6 +248,11 @@ describe('Provider registration upgrade (e2e)', () => {
       .set('Authorization', userHeader())
       .send({ emailVerifiedAt: new Date().toISOString() })
       .expect(400);
+    await userRequest()
+      .patch(`/api/provider-applications/${applicationId}`)
+      .set('Authorization', userHeader())
+      .send({ email: `${marker}@example.com` })
+      .expect(200);
     await userRequest()
       .post(`/api/provider-applications/${applicationId}/submit`)
       .set('Authorization', userHeader())

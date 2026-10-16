@@ -50,7 +50,7 @@ describe('ServicesCommandService', () => {
       }),
     );
     expect(auditLog.create).toHaveBeenCalled();
-    expect(cache.delete).toHaveBeenCalledWith('services:active:v1');
+    expect(cache.delete).toHaveBeenCalledWith('services:active:v2');
   });
 
   it('rejects an inverted price range', async () => {
@@ -240,7 +240,7 @@ describe('ServicesCommandService', () => {
     expect(JSON.stringify(service.update.mock.calls)).toContain(
       `"categoryId":"${destinationId}"`,
     );
-    expect(cache.delete).toHaveBeenCalledWith('services:active:v1');
+    expect(cache.delete).toHaveBeenCalledWith('services:active:v2');
   });
 
   it('rejects a duplicate name in the destination category', async () => {
