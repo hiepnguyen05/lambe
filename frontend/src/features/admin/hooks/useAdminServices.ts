@@ -1,6 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { apiRequest } from '../../../lib/api-client';
 import { useAdminAuth } from './useAdminAuth';
+import { useDebounce } from './useDebounce';
 
 export interface AdminService {
   id: string;
@@ -34,6 +35,7 @@ export interface AdminService {
 export function useAdminServices() {
   const [services, setServices] = useState<AdminService[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(searchQuery.trim(), 350);
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [targetAudienceFilter, setTargetAudienceFilter] = useState("all");
@@ -41,11 +43,36 @@ export function useAdminServices() {
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeRequestIdRef = useRef(0);
 
   const { token } = useAdminAuth();
 
+  const changeSearch = useCallback((val: string) => {
+    setSearchQuery(val);
+  }, []);
+
+  useEffect(() => {
+    setPagination(prev => prev.page === 1 ? prev : { ...prev, page: 1 });
+  }, [debouncedSearch]);
+
+  const changeStatus = useCallback((val: string) => {
+    setStatusFilter(val);
+    setPagination(prev => prev.page === 1 ? prev : { ...prev, page: 1 });
+  }, []);
+
+  const changeCategory = useCallback((val: string) => {
+    setCategoryFilter(val);
+    setPagination(prev => prev.page === 1 ? prev : { ...prev, page: 1 });
+  }, []);
+
+  const changeTargetAudience = useCallback((val: string) => {
+    setTargetAudienceFilter(val);
+    setPagination(prev => prev.page === 1 ? prev : { ...prev, page: 1 });
+  }, []);
+
   const fetchServices = useCallback(async () => {
     if (!token) return;
+    const currentRequestId = ++activeRequestIdRef.current;
     setIsLoading(true);
     setError(null);
     try {
@@ -53,42 +80,49 @@ export function useAdminServices() {
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
       });
-      if (searchQuery) params.append('search', searchQuery);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (categoryFilter !== 'all') params.append('categoryId', categoryFilter);
       if (targetAudienceFilter !== 'all') params.append('targetAudience', targetAudienceFilter);
 
-      const res = await apiRequest<{ data: AdminService[], meta: { total: number } }>(`/admin/services?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      setServices(res.data || []);
-      setTotalCount(res.meta?.total || 0);
-    } catch (err: any) {
-      setError(err.message || 'Lỗi khi tải danh sách dịch vụ');
+      const res = await apiRequest<{ data: AdminService[], meta: { total: number } }>(`/admin/services?${params.toString()}`);
+      if (currentRequestId === activeRequestIdRef.current) {
+        setServices(res.data || []);
+        setTotalCount(res.meta?.total || 0);
+      }
+    } catch (err: unknown) {
+      if (currentRequestId === activeRequestIdRef.current) {
+        setError(err instanceof Error ? err.message : 'Lỗi khi tải danh sách dịch vụ');
+      }
     } finally {
-      setIsLoading(false);
+      if (currentRequestId === activeRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, [token, pagination.page, pagination.limit, searchQuery, statusFilter, categoryFilter, targetAudienceFilter]);
+  }, [token, pagination.page, pagination.limit, debouncedSearch, statusFilter, categoryFilter, targetAudienceFilter]);
 
   useEffect(() => {
-    fetchServices();
+    // eslint-disable-next-line react/set-state-in-effect
+    void fetchServices();
   }, [fetchServices]);
 
-  const createService = async (data: any) => {
+  const getService = async (id: string) => {
+    const res = await apiRequest<{ data: AdminService }>(`/admin/services/${id}`);
+    return res.data;
+  };
+
+  const createService = async (data: Partial<AdminService>) => {
     const res = await apiRequest<{ data: AdminService }>('/admin/services', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     await fetchServices();
     return res.data;
   };
 
-  const updateService = async (id: string, data: any) => {
+  const updateService = async (id: string, data: Partial<AdminService>) => {
     const res = await apiRequest<{ data: AdminService }>(`/admin/services/${id}`, {
       method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
     await fetchServices();
@@ -98,7 +132,6 @@ export function useAdminServices() {
   const updateStatus = async (id: string, status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED') => {
     const res = await apiRequest<{ data: AdminService }>(`/admin/services/${id}/status`, {
       method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })
     });
     await fetchServices();
@@ -111,7 +144,6 @@ export function useAdminServices() {
     
     const res = await apiRequest<{ data: AdminService }>(`/admin/services/${id}/cover-image`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
       body: formData
     });
     await fetchServices();
@@ -121,27 +153,36 @@ export function useAdminServices() {
   const removeCoverImage = async (id: string) => {
     const res = await apiRequest<{ data: AdminService }>(`/admin/services/${id}/cover-image`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` }
     });
     await fetchServices();
     return res.data;
   };
 
+  const reorderServices = async (categoryId: string, items: Array<{ id: string; sortOrder: number }>) => {
+    await apiRequest(`/admin/categories/${categoryId}/services/reorder`, {
+      method: 'PATCH',
+      body: JSON.stringify({ items }),
+    });
+    await fetchServices();
+  };
+
   return {
     services,
     totalCount,
-    searchQuery, setSearchQuery,
-    statusFilter, setStatusFilter,
-    categoryFilter, setCategoryFilter,
-    targetAudienceFilter, setTargetAudienceFilter,
+    searchQuery, setSearchQuery: changeSearch,
+    statusFilter, setStatusFilter: changeStatus,
+    categoryFilter, setCategoryFilter: changeCategory,
+    targetAudienceFilter, setTargetAudienceFilter: changeTargetAudience,
     pagination, setPagination,
     isLoading,
     error,
     refetch: fetchServices,
     createService,
+    getService,
     updateService,
     updateStatus,
     uploadCoverImage,
-    removeCoverImage
+    removeCoverImage,
+    reorderServices
   };
 }

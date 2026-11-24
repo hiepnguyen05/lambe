@@ -6,6 +6,7 @@ import { ServiceStats } from './components/ServiceStats';
 import { ServiceFilters } from './components/ServiceFilters';
 import { ServiceTable } from './components/ServiceTable';
 import { ServiceFormModal } from './ServiceFormModal';
+import { useDialog } from '../../../../components/ui/dialog-context';
 
 export function AdminServiceList() {
   const {
@@ -17,21 +18,37 @@ export function AdminServiceList() {
     targetAudienceFilter, setTargetAudienceFilter,
     pagination, setPagination,
     isLoading, error, refetch,
-    createService, updateService, updateStatus,
-    uploadCoverImage, removeCoverImage
+    createService, getService, updateService, updateStatus,
+    uploadCoverImage, removeCoverImage, reorderServices
   } = useAdminServices();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<AdminService | undefined>();
+  const { showDialog } = useDialog();
 
   const handleCreateNew = () => {
     setEditingService(undefined);
     setIsModalOpen(true);
   };
 
-  const handleEdit = (service: AdminService) => {
-    setEditingService(service);
-    setIsModalOpen(true);
+  const handleEdit = async (service: AdminService) => {
+    try {
+      setEditingService(await getService(service.id));
+      setIsModalOpen(true);
+    } catch (error) {
+      showDialog({ title: 'Không thể tải dịch vụ', message: error instanceof Error ? error.message : 'Có lỗi xảy ra.', type: 'error' });
+    }
+  };
+
+  const handleMove = async (service: AdminService, direction: -1 | 1) => {
+    const sameCategory = services.filter((item) => item.categoryId === service.categoryId);
+    const index = sameCategory.findIndex((item) => item.id === service.id);
+    const target = sameCategory[index + direction];
+    if (!target) return;
+    await reorderServices(service.categoryId, [
+      { id: service.id, sortOrder: target.sortOrder },
+      { id: target.id, sortOrder: service.sortOrder },
+    ]);
   };
 
   const handleSuccess = async () => {
@@ -104,6 +121,7 @@ export function AdminServiceList() {
         isLoading={isLoading}
         onEdit={handleEdit}
         onStatusChange={updateStatus}
+        onMove={handleMove}
       />
 
       {/* Pagination */}

@@ -352,6 +352,7 @@ export function ServicesSection({
   services,
   documents,
   experienceYears,
+  providerType,
   canReviewServices,
   canEdit,
   activeAction,
@@ -360,6 +361,7 @@ export function ServicesSection({
   services: ProviderApplicationService[];
   documents: ProviderDocument[];
   experienceYears: number | null;
+  providerType?: string | null;
   canReviewServices: boolean;
   canEdit: boolean;
   activeAction: string | null;
@@ -381,7 +383,8 @@ export function ServicesSection({
             const verificationIssue = getServiceVerificationIssue(
               item,
               documents,
-              experienceYears
+              experienceYears,
+              providerType
             );
             return (
               <div key={item.id} className="p-4 sm:p-5">
@@ -424,10 +427,15 @@ export function ServicesSection({
                       </p>
                     )}
                     {verificationIssue && item.status === "PENDING" && (
-                      <p className="mt-2 flex items-start gap-1.5 text-sm text-amber-800">
-                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                        Chưa thể xác minh: {verificationIssue}
-                      </p>
+                      <div className="mt-2 text-sm text-amber-800">
+                        <p className="flex items-start gap-1.5 font-medium">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                          Chưa thể xác minh: {verificationIssue}
+                        </p>
+                        <p className="mt-0.5 text-xs text-amber-750">
+                          (Bấm biểu tượng <strong>Cấm đỏ (Không đạt)</strong> bên phải để loại trừ dịch vụ này nếu muốn duyệt các dịch vụ còn lại)
+                        </p>
+                      </div>
                     )}
                   </div>
                   {canReviewServices && (

@@ -5,21 +5,36 @@ interface CustomerFiltersProps {
   setSearchQuery: (val: string) => void;
   statusFilter: string;
   setStatusFilter: (val: string) => void;
+  genderFilter: string;
+  setGenderFilter: (val: string) => void;
+  onboardingFilter: string;
+  setOnboardingFilter: (val: string) => void;
+  providerStatusFilter: string;
+  setProviderStatusFilter: (val: string) => void;
+  createdFrom: string;
+  setCreatedFrom: (val: string) => void;
+  createdTo: string;
+  setCreatedTo: (val: string) => void;
   limit: number;
   setLimit: (val: number) => void;
   setPage: (val: number) => void;
 }
 
 export function CustomerFilters(props: CustomerFiltersProps) {
-  const { searchQuery, setSearchQuery, statusFilter, setStatusFilter, limit, setLimit, setPage } = props;
+  const { searchQuery, setSearchQuery, statusFilter, setStatusFilter, genderFilter, setGenderFilter, onboardingFilter, setOnboardingFilter, providerStatusFilter, setProviderStatusFilter, createdFrom, setCreatedFrom, createdTo, setCreatedTo, limit, setLimit, setPage } = props;
 
   const handleClearFilters = () => {
     setSearchQuery("");
     setStatusFilter("all");
+    setGenderFilter("all");
+    setOnboardingFilter("all");
+    setProviderStatusFilter("all");
+    setCreatedFrom("");
+    setCreatedTo("");
     setPage(1);
   };
 
-  const hasFilters = searchQuery || statusFilter !== "all";
+  const hasFilters = searchQuery || statusFilter !== "all" || genderFilter !== "all" || onboardingFilter !== "all" || providerStatusFilter !== "all" || createdFrom || createdTo;
 
   return (
     <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-card space-y-3">
@@ -29,6 +44,18 @@ export function CustomerFilters(props: CustomerFiltersProps) {
           <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
             <Search className="w-4 h-4" />
           </div>
+
+          <select value={genderFilter} onChange={(e) => { setGenderFilter(e.target.value); setPage(1); }} className="py-2 px-3 border border-slate-200 bg-slate-50/70 rounded-xl text-xs font-semibold text-slate-700">
+            <option value="all">Mọi giới tính</option><option value="MALE">Nam</option><option value="FEMALE">Nữ</option><option value="OTHER">Khác</option>
+          </select>
+          <select value={onboardingFilter} onChange={(e) => { setOnboardingFilter(e.target.value); setPage(1); }} className="py-2 px-3 border border-slate-200 bg-slate-50/70 rounded-xl text-xs font-semibold text-slate-700">
+            <option value="all">Mọi onboarding</option><option value="NOT_STARTED">Chưa bắt đầu</option><option value="IN_PROGRESS">Đang thực hiện</option><option value="COMPLETED">Hoàn tất</option><option value="SKIPPED">Bỏ qua</option>
+          </select>
+          <select value={providerStatusFilter} onChange={(e) => { setProviderStatusFilter(e.target.value); setPage(1); }} className="py-2 px-3 border border-slate-200 bg-slate-50/70 rounded-xl text-xs font-semibold text-slate-700">
+            <option value="all">Mọi trạng thái provider</option><option value="SETUP_REQUIRED">Cần thiết lập</option><option value="ACTIVE">Provider hoạt động</option><option value="SUSPENDED">Provider đình chỉ</option>
+          </select>
+          <input type="date" value={createdFrom} onChange={(e) => { setCreatedFrom(e.target.value); setPage(1); }} title="Đăng ký từ ngày" className="py-2 px-3 border border-slate-200 bg-slate-50/70 rounded-xl text-xs text-slate-700" />
+          <input type="date" value={createdTo} onChange={(e) => { setCreatedTo(e.target.value); setPage(1); }} title="Đăng ký đến ngày" className="py-2 px-3 border border-slate-200 bg-slate-50/70 rounded-xl text-xs text-slate-700" />
           <input
             type="text"
             value={searchQuery}

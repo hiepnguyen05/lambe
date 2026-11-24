@@ -14,6 +14,7 @@ interface ServiceSuggestionServiceFormProps {
   suggestion: ProviderServiceSuggestion | null;
   isSubmitting: boolean;
   experienceYears: number | null;
+  providerType?: string | null;
   documents: ProviderDocument[];
   onClose: () => void;
   onSubmit: (input: ApproveServiceSuggestionInput) => Promise<{ id: string }>;
@@ -35,6 +36,7 @@ export function ServiceSuggestionServiceForm({
   suggestion,
   isSubmitting,
   experienceYears,
+  providerType,
   documents,
   onClose,
   onSubmit,
@@ -73,10 +75,12 @@ export function ServiceSuggestionServiceForm({
         const availableDocuments = documents.filter(
           (document) => document.status !== "REJECTED",
         );
-        if (values.minExperienceYears > (experienceYears ?? 0)) {
+        const isOrg = providerType === "ORGANIZATION";
+        if (!isOrg && values.minExperienceYears > (experienceYears ?? 0)) {
           return `Hồ sơ có ${experienceYears ?? 0} năm kinh nghiệm, thấp hơn yêu cầu ${values.minExperienceYears} năm của dịch vụ.`;
         }
         if (
+          !isOrg &&
           values.requiresCertificate &&
           !availableDocuments.some(
             (document) => document.type === "PROFESSIONAL_CERTIFICATE",
@@ -84,11 +88,13 @@ export function ServiceSuggestionServiceForm({
         ) {
           return "Dịch vụ yêu cầu chứng chỉ nghề nhưng hồ sơ chưa tải chứng chỉ hợp lệ.";
         }
-        const portfolioCount = availableDocuments.filter(
-          (document) => document.type === "PORTFOLIO",
-        ).length;
-        if (values.minPortfolioImages > portfolioCount) {
-          return `Dịch vụ yêu cầu ${values.minPortfolioImages} ảnh portfolio nhưng hồ sơ hiện có ${portfolioCount} ảnh hợp lệ.`;
+        if (!isOrg) {
+          const portfolioCount = availableDocuments.filter(
+            (document) => document.type === "PORTFOLIO",
+          ).length;
+          if (values.minPortfolioImages > portfolioCount) {
+            return `Dịch vụ yêu cầu ${values.minPortfolioImages} ảnh portfolio nhưng hồ sơ hiện có ${portfolioCount} ảnh hợp lệ.`;
+          }
         }
         return null;
       }}

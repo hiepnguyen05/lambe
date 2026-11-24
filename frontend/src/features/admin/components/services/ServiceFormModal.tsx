@@ -1,3 +1,4 @@
+/* eslint-disable react/set-state-in-effect -- Opening a record intentionally resets the modal draft. */
 import { useState, useEffect, useRef } from "react";
 import {
   X,
@@ -7,6 +8,7 @@ import {
   Image as ImageIcon,
   ChevronDown,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import type { AdminService } from "../../hooks/useAdminServices";
 import { useAdminCategories } from "../../hooks/useAdminCategories";
@@ -14,7 +16,11 @@ import {
   commonCatalogIcons,
   generateCatalogCode,
   generateCatalogSlug,
+  parseIconValue,
+  buildIconValue,
 } from "../../utils/catalog-form";
+import { LambeIcon } from "../../../../components/ui/LambeIcon";
+import { uploadAdminImage } from "../../utils/admin-upload";
 
 export interface ServiceFormValues {
   categoryId: string;
@@ -105,8 +111,12 @@ export function ServiceFormModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  const [iconCode, setIconCode] = useState("scissors");
+  const [iconImageUrl, setIconImageUrl] = useState("");
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [iconSearch, setIconSearch] = useState("");
+  const [isUploadingIcon, setIsUploadingIcon] = useState(false);
+  const [uploadIconError, setUploadIconError] = useState<string | null>(null);
   const iconPickerRef = useRef<HTMLDivElement>(null);
   const formContentRef = useRef<HTMLDivElement>(null);
 
@@ -126,6 +136,12 @@ export function ServiceFormModal({
   // Setup initial data
   useEffect(() => {
     if (isOpen) {
+      const rawIcon = initialData?.iconUrl ?? initialValues?.iconUrl;
+      const parsedIcon = parseIconValue(rawIcon);
+      setIconCode(parsedIcon.iconCode || "scissors");
+      setIconImageUrl(parsedIcon.iconImageUrl);
+      setIconSearch(parsedIcon.iconCode || "scissors");
+
       if (initialData) {
         // The modal intentionally resets its draft when a different service is opened.
         // eslint-disable-next-line react/set-state-in-effect
@@ -169,7 +185,8 @@ export function ServiceFormModal({
       setCoverImage(null);
       setError("");
       setShowIconPicker(false);
-      setIconSearch("");
+      setIsUploadingIcon(false);
+      setUploadIconError(null);
     }
   }, [isOpen, initialData, initialValues, categories, nextSortOrder]);
 
@@ -187,15 +204,29 @@ export function ServiceFormModal({
     setFormData((prev) => ({ ...prev, name, slug, code }));
   };
 
+  useEffect(() => {
+    return () => {
+      if (coverImagePreview && coverImagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(coverImagePreview);
+      }
+    };
+  }, [coverImagePreview]);
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      if (coverImagePreview && coverImagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(coverImagePreview);
+      }
       setCoverImage(file);
       setCoverImagePreview(URL.createObjectURL(file));
     }
   };
 
   const handleDeleteImage = async () => {
+    if (coverImagePreview && coverImagePreview.startsWith('blob:')) {
+      URL.revokeObjectURL(coverImagePreview);
+    }
     if (
       isEditing &&
       initialData?.coverImageUrl &&
@@ -206,8 +237,8 @@ export function ServiceFormModal({
         setIsSubmitting(true);
         await removeCoverImage(initialData.id);
         setCoverImagePreview(null);
-      } catch (err: any) {
-        setError(err.message || "Lỗi khi xóa ảnh");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Lỗi khi xóa ảnh");
       } finally {
         setIsSubmitting(false);
       }
@@ -216,6 +247,30 @@ export function ServiceFormModal({
       setCoverImagePreview(initialData?.coverImageUrl || null);
     }
   };
+
+  const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    e.target.value = '';
+    setIsUploadingIcon(true);
+    setUploadIconError(null);
+    try {
+      const uploaded = await uploadAdminImage(file, 'services');
+      setIconImageUrl(uploaded.secureUrl);
+      setShowIconPicker(false);
+    } catch (err: unknown) {
+      setUploadIconError(err instanceof Error ? err.message : 'Lỗi khi tải ảnh icon lên.');
+    } finally {
+      setIsUploadingIcon(false);
+    }
+  };
+
+  const filteredIcons = commonCatalogIcons.filter(
+    (icon) =>
+      icon.name.toLowerCase().includes(iconSearch.toLowerCase()) ||
+      icon.label.toLowerCase().includes(iconSearch.toLowerCase()),
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -241,13 +296,14 @@ export function ServiceFormModal({
       )
         throw new Error("Thời gian thực hiện phải từ 15 đến 720 phút.");
 
+      const finalIconUrl = buildIconValue(iconCode, iconImageUrl);
       const payload: ServiceFormPayload = {
         ...formData,
         name: formData.name.trim(),
         code: formData.code.trim().toUpperCase(),
         slug: formData.slug.trim().toLowerCase(),
         description: formData.description.trim() || null,
-        iconUrl: formData.iconUrl.trim() || null,
+        iconUrl: finalIconUrl ? finalIconUrl.trim() : null,
       };
       const validationError = validateBeforeSubmit?.(payload);
       if (validationError) throw new Error(validationError);
@@ -272,8 +328,8 @@ export function ServiceFormModal({
       }
 
       onSuccess();
-    } catch (err: any) {
-      setError(err.message || "Có lỗi xảy ra khi lưu dịch vụ.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra khi lưu dịch vụ.");
       requestAnimationFrame(() => {
         formContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
       });
@@ -406,106 +462,183 @@ export function ServiceFormModal({
                   </select>
                 </div>
 
-                <div className="space-y-1.5 relative" ref={iconPickerRef}>
-                  <label className="text-sm font-semibold text-slate-700">
-                    Mã Icon (Material Symbols)
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      {formData.iconUrl ? (
-                        <span className="material-symbols-outlined text-[#0f766e] text-xl leading-none">
-                          {formData.iconUrl}
-                        </span>
-                      ) : (
-                        <span className="w-5 h-5 rounded border border-slate-300 border-dashed inline-block bg-slate-100"></span>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      value={formData.iconUrl}
-                      onChange={(e) => {
-                        setFormData({ ...formData, iconUrl: e.target.value });
-                        setIconSearch(e.target.value);
-                        setShowIconPicker(true);
-                      }}
-                      onFocus={() => setShowIconPicker(true)}
-                      placeholder="VD: scissors, spa, face_retouching_natural"
-                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0f766e] transition"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowIconPicker(!showIconPicker)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
-                    >
-                      <ChevronDown
-                        className={`w-4 h-4 transition-transform ${showIconPicker ? "rotate-180" : ""}`}
-                      />
-                    </button>
+                <div
+                  className="space-y-3 relative p-4 rounded-xl bg-slate-50 border border-slate-200 md:col-span-2"
+                  ref={iconPickerRef}
+                >
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-bold text-slate-800">
+                      Cấu hình Icon dịch vụ
+                    </label>
+                    {iconImageUrl && (
+                      <span className="text-[11px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                        Đang dùng ảnh tùy chỉnh
+                      </span>
+                    )}
                   </div>
 
-                  {showIconPicker && (
-                    <div className="absolute z-10 w-full mt-2 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
-                      <div className="p-3 max-h-60 overflow-y-auto grid grid-cols-4 md:grid-cols-5 gap-2 custom-scrollbar">
-                        {commonCatalogIcons.filter(
-                          (icon) =>
-                            icon.name
-                              .toLowerCase()
-                              .includes(iconSearch.toLowerCase()) ||
-                            icon.label
-                              .toLowerCase()
-                              .includes(iconSearch.toLowerCase()),
-                        ).length > 0 ? (
-                          commonCatalogIcons.filter(
-                            (icon) =>
-                              icon.name
-                                .toLowerCase()
-                                .includes(iconSearch.toLowerCase()) ||
-                              icon.label
-                                .toLowerCase()
-                                .includes(iconSearch.toLowerCase()),
-                          ).map((icon) => (
-                            <button
-                              key={icon.name}
-                              type="button"
-                              onClick={() => {
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  iconUrl: icon.name,
-                                }));
-                                setIconSearch(icon.name);
-                                setShowIconPicker(false);
-                              }}
-                              className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all ${formData.iconUrl === icon.name ? "bg-teal-50 border border-[#0f766e] text-[#0f766e]" : "bg-slate-50 border border-slate-100 text-slate-600 hover:bg-slate-100 hover:border-slate-300"}`}
-                              title={icon.label}
-                            >
-                              <span className="material-symbols-outlined text-2xl mb-1">
-                                {icon.name}
-                              </span>
-                              <span className="text-[10px] text-center line-clamp-1 opacity-70 font-medium w-full">
-                                {icon.label}
-                              </span>
-                            </button>
-                          ))
-                        ) : (
-                          <div className="col-span-full py-4 text-center text-sm text-slate-500">
-                            Sử dụng icon tuỳ chỉnh:{" "}
-                            <strong>{iconSearch}</strong>
-                          </div>
-                        )}
+                  {/* 1. Mã Icon Vector dự phòng */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-600 block">
+                      1. Mã Icon Vector dự phòng <span className="text-slate-400 font-normal">(dùng khi chưa có ảnh hoặc khi ảnh lỗi mạng)</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <LambeIcon nameOrUrl={iconCode} className="w-5 h-5 text-[#0f766e]" />
                       </div>
-                      <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                        <span>Mã Google Material Symbols</span>
-                        <a
-                          href="https://fonts.google.com/icons?icon.set=Material+Symbols"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[#0f766e] hover:underline font-semibold"
-                        >
-                          Tìm thêm icon tại đây
-                        </a>
-                      </div>
+                      <input
+                        type="text"
+                        value={iconCode}
+                        onChange={(e) => {
+                          setIconCode(e.target.value);
+                          setIconSearch(e.target.value);
+                          setShowIconPicker(true);
+                        }}
+                        onFocus={() => setShowIconPicker(true)}
+                        placeholder="Chọn mã icon (VD: scissors, flame, flower-2)..."
+                        className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 text-slate-700 text-sm rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0f766e]/20 focus:border-[#0f766e] transition-all font-medium"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowIconPicker(!showIconPicker)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                      >
+                        <ChevronDown
+                          className={`w-4 h-4 transition-transform ${showIconPicker ? "rotate-180" : ""}`}
+                        />
+                      </button>
                     </div>
-                  )}
+
+                    {/* Popup cho phép chọn Icon */}
+                    {showIconPicker && (
+                      <div className="absolute z-20 w-full mt-1 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                        <div className="p-3 max-h-56 overflow-y-auto grid grid-cols-4 md:grid-cols-5 gap-2 custom-scrollbar">
+                          {filteredIcons.length > 0 ? (
+                            filteredIcons.map((icon) => (
+                              <button
+                                key={icon.name}
+                                type="button"
+                                onClick={() => {
+                                  setIconCode(icon.name);
+                                  setIconSearch(icon.name);
+                                  setShowIconPicker(false);
+                                }}
+                                className={`flex flex-col items-center justify-center p-2.5 rounded-xl transition-all ${
+                                  iconCode === icon.name
+                                    ? "bg-teal-50 border border-[#0f766e] text-[#0f766e]"
+                                    : "bg-slate-50 border border-slate-100 text-slate-600 hover:bg-slate-100 hover:border-slate-300"
+                                }`}
+                                title={icon.label}
+                              >
+                                <LambeIcon nameOrUrl={icon.name} className="w-5 h-5 mb-1" />
+                                <span className="text-[10px] text-center line-clamp-1 opacity-70 font-medium w-full">
+                                  {icon.label}
+                                </span>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="col-span-full py-3 text-center text-xs text-slate-500">
+                              Sử dụng icon tùy chỉnh: <strong>{iconSearch}</strong>
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                          <span>Chuẩn Vector Lucide</span>
+                          <a
+                            href="https://lucide.dev/icons"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[#0f766e] hover:underline font-semibold"
+                          >
+                            Tra cứu mã icon
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. Ảnh Icon Tùy chỉnh (Ưu tiên hiển thị) */}
+                  <div className="space-y-1.5 pt-2.5 border-t border-slate-200/80">
+                    <label className="text-xs font-semibold text-slate-600 block">
+                      2. Ảnh Icon tùy chỉnh <span className="text-slate-400 font-normal">(ưu tiên hiển thị cao nhất nếu có)</span>
+                    </label>
+
+                    {iconImageUrl ? (
+                      <div className="flex items-center justify-between p-2.5 bg-white border border-teal-200 rounded-xl shadow-2xs">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-12 h-12 rounded-xl overflow-hidden border border-teal-200 bg-slate-50 flex-shrink-0 flex items-center justify-center shadow-2xs">
+                            <img
+                              src={iconImageUrl}
+                              alt="Icon preview"
+                              className="w-full h-full object-cover block"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-700 truncate">Ảnh icon đang dùng</p>
+                            <p className="text-[11px] text-teal-600">
+                              Fallback dự phòng: <span className="font-semibold">{iconCode}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <label
+                            className={`cursor-pointer px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-[#0f766e] bg-slate-50 hover:bg-teal-50 border border-slate-200 rounded-lg transition ${
+                              isUploadingIcon ? "opacity-50 pointer-events-none" : ""
+                            }`}
+                          >
+                            {isUploadingIcon ? "Đang đổi..." : "Đổi ảnh"}
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                              className="hidden"
+                              disabled={isUploadingIcon}
+                              onChange={handleIconUpload}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setIconImageUrl("")}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                            title="Gỡ ảnh icon, dùng lại icon vector"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <label
+                          className={`cursor-pointer w-full py-2.5 px-3 border border-dashed border-slate-300 hover:border-[#0f766e] hover:bg-teal-50/40 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold text-slate-600 hover:text-[#0f766e] transition ${
+                            isUploadingIcon ? "opacity-50 pointer-events-none" : ""
+                          }`}
+                        >
+                          {isUploadingIcon ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-[#0f766e]" />
+                          ) : (
+                            <Upload className="w-4 h-4" />
+                          )}
+                          <span>{isUploadingIcon ? "Đang tải ảnh..." : "Tải lên ảnh icon (JPG, PNG, WebP, SVG)"}</span>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                            className="hidden"
+                            disabled={isUploadingIcon}
+                            onChange={handleIconUpload}
+                          />
+                        </label>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          Hệ thống lưu trữ ảnh và tự động kích hoạt mã icon vector dự phòng nếu gặp sự cố kết nối hoặc lỗi ảnh.
+                        </p>
+                      </div>
+                    )}
+
+                    {uploadIconError && (
+                      <p className="text-xs text-rose-500 font-medium">
+                        {uploadIconError}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-1.5 md:col-span-2">
@@ -654,7 +787,7 @@ export function ServiceFormModal({
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        targetAudience: e.target.value as any,
+                        targetAudience: e.target.value as ServiceFormValues['targetAudience'],
                       })
                     }
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0f766e] transition cursor-pointer"

@@ -3,6 +3,8 @@ import type { ReviewDecisionStatus } from "../components/provider-applications/c
 import type {
   ProviderDocument,
   ProviderDocumentAccess,
+  ProviderApplicationSection,
+  BulkReviewResult,
 } from "./useProviderApplications";
 import { documentLabels } from "../components/provider-applications/components/providerApplicationFormatters";
 
@@ -19,12 +21,12 @@ export interface PendingDialog {
 export function useApplicationReviewActions(actions: {
   accessDocument: (id: string) => Promise<ProviderDocumentAccess>;
   updateDocumentReview: (id: string, status: ReviewDecisionStatus, note?: string) => Promise<void>;
-  updateSectionCheck: (section: any, status: ReviewDecisionStatus, note?: string) => Promise<void>;
+  updateSectionCheck: (section: ProviderApplicationSection, status: ReviewDecisionStatus, note?: string) => Promise<void>;
   updateServiceReview: (id: string, status: ReviewDecisionStatus, note?: string) => Promise<void>;
   approveApplication: () => Promise<void>;
   requestChanges: (note: string) => Promise<void>;
   rejectApplication: (note: string) => Promise<void>;
-  reviewAllEligible: () => Promise<any>;
+  reviewAllEligible: () => Promise<BulkReviewResult>;
   rejectServiceSuggestion: (id: string, note: string) => Promise<void>;
 }) {
   const [pendingDialog, setPendingDialog] = useState<PendingDialog | null>(null);

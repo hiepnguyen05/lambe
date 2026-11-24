@@ -1,15 +1,36 @@
 import { Users, UserCheck, ShieldAlert, Sparkles } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '../../../../../lib/api-client';
 
-interface CustomerStatsProps {
-  totalCount: number;
+interface CountResponse {
+  meta?: { total?: number };
 }
 
-export function CustomerStats({ totalCount }: CustomerStatsProps) {
-  // Vì backend chưa có API trả về các thống kê chi tiết (chưa được phát triển), 
-  // các dữ liệu như tăng trưởng, số khách hoạt động, bị khóa dưới đây được tính tương đối hoặc mock tạm thời
-  // để hoàn thiện giao diện dựa trên tổng số thực tế.
-  const activeEstimate = Math.floor(totalCount * 0.93);
-  const blockedEstimate = Math.floor(totalCount * 0.02);
+export function CustomerStats() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-customer-summary'],
+    queryFn: async () => {
+      const paths = [
+        '/admin/customers?page=1&limit=1',
+        '/admin/customers?status=ACTIVE&page=1&limit=1',
+        '/admin/customers?status=BLOCKED&page=1&limit=1',
+        '/admin/customers?status=INACTIVE&page=1&limit=1',
+      ];
+      const [total, active, blocked, inactive] = await Promise.all(
+        paths.map((path) => apiRequest<CountResponse>(path)),
+      );
+      return {
+        total: total.meta?.total ?? 0,
+        active: active.meta?.total ?? 0,
+        blocked: blocked.meta?.total ?? 0,
+        inactive: inactive.meta?.total ?? 0,
+      };
+    },
+    staleTime: 30_000,
+  });
+
+  const value = (key: keyof NonNullable<typeof data>) =>
+    isLoading || !data ? '—' : data[key].toLocaleString('vi-VN');
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -22,7 +43,7 @@ export function CustomerStats({ totalCount }: CustomerStatsProps) {
           <div>
             <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Tổng khách hàng</div>
             <div className="text-lg font-extrabold text-slate-900 leading-tight">
-              {totalCount.toLocaleString('vi-VN')}
+              {value('total')}
             </div>
           </div>
         </div>
@@ -37,7 +58,7 @@ export function CustomerStats({ totalCount }: CustomerStatsProps) {
           <div>
             <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Đang hoạt động</div>
             <div className="text-lg font-extrabold text-slate-900 leading-tight">
-              {activeEstimate.toLocaleString('vi-VN')}
+              {value('active')}
             </div>
           </div>
         </div>
@@ -52,7 +73,7 @@ export function CustomerStats({ totalCount }: CustomerStatsProps) {
           <div>
             <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Tài khoản khóa</div>
             <div className="text-lg font-extrabold text-rose-600 leading-tight">
-              {blockedEstimate.toLocaleString('vi-VN')}
+              {value('blocked')}
             </div>
           </div>
         </div>
@@ -65,8 +86,8 @@ export function CustomerStats({ totalCount }: CustomerStatsProps) {
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Khách mới HN</div>
-            <div className="text-lg font-extrabold text-[#0f766e] leading-tight">+0</div>
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Tạm vô hiệu</div>
+            <div className="text-lg font-extrabold text-[#0f766e] leading-tight">{value('inactive')}</div>
           </div>
         </div>
       </div>

@@ -30,6 +30,7 @@ interface ProviderDetailDrawerProps {
   onStatusChange: (provider: AdminProviderDetail) => void;
   onAccountStatusChange: (provider: AdminProviderDetail) => void;
   onSyncAvatar: (provider: AdminProviderDetail) => void;
+  onServiceStatusChange: (provider: AdminProviderDetail, service: AdminProviderDetail['services'][number]) => void;
 }
 
 export function ProviderDetailDrawer({
@@ -43,6 +44,7 @@ export function ProviderDetailDrawer({
   onStatusChange,
   onAccountStatusChange,
   onSyncAvatar,
+  onServiceStatusChange,
 }: ProviderDetailDrawerProps) {
   const [tab, setTab] = useState<'OVERVIEW' | 'OPERATIONS'>('OVERVIEW');
 
@@ -129,7 +131,7 @@ export function ProviderDetailDrawer({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-              {tab === 'OVERVIEW' ? <Overview provider={provider} /> : <Operations provider={provider} />}
+              {tab === 'OVERVIEW' ? <Overview provider={provider} /> : <Operations provider={provider} canManage={canManage} actionLoading={actionLoading} onServiceStatusChange={onServiceStatusChange} />}
             </div>
 
             <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">
@@ -233,7 +235,7 @@ function Overview({ provider }: { provider: AdminProviderDetail }) {
   );
 }
 
-function Operations({ provider }: { provider: AdminProviderDetail }) {
+function Operations({ provider, canManage, actionLoading, onServiceStatusChange }: { provider: AdminProviderDetail; canManage: boolean; actionLoading: boolean; onServiceStatusChange: ProviderDetailDrawerProps['onServiceStatusChange'] }) {
   return (
     <div className="space-y-6">
       <section>
@@ -251,11 +253,18 @@ function Operations({ provider }: { provider: AdminProviderDetail }) {
                   <p className="font-semibold text-slate-900">{item.service.name}</p>
                   <p className="mt-0.5 text-xs text-slate-500">{item.service.category.name} · {item.service.code}</p>
                 </div>
-                <div className="text-right">
+                <div className="flex items-center gap-3 text-right">
+                  <div>
                   <p className="font-semibold text-slate-900">{formatMoney(item.priceAmount)}</p>
                   <p className={`mt-0.5 text-xs font-semibold ${serviceStatusColor(item.status)}`}>
                     {serviceStatusLabel(item.status)}
                   </p>
+                  </div>
+                  {canManage && item.status !== 'INACTIVE' && (
+                    <button type="button" disabled={actionLoading} onClick={() => onServiceStatusChange(provider, item)} className={`rounded-md border px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50 ${item.status === 'SUSPENDED' ? 'border-emerald-200 text-emerald-700' : 'border-rose-200 text-rose-700'}`}>
+                      {item.status === 'SUSPENDED' ? 'Khôi phục' : 'Đình chỉ'}
+                    </button>
+                  )}
                 </div>
               </div>
             ))

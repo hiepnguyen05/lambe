@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { apiRequest } from '../../../lib/api-client';
 import { useAdminAuth } from './useAdminAuth';
 
@@ -16,43 +16,52 @@ export interface AdminCategory {
   updatedAt: string;
 }
 
-export function useAdminCategories() {
-  const [categories, setCategories] = useState<AdminCategory[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export const ADMIN_CATEGORIES_QUERY_KEY = ['admin-categories'];
+
+interface CategoryQuery {
+  search?: string;
+  status?: AdminCategory['status'];
+  page: number;
+  limit: number;
+}
+
+interface CategoryListResponse {
+  data: AdminCategory[];
+  meta?: { total?: number; totalPages?: number };
+}
+
+const errorText = (error: unknown, fallback: string) => error instanceof Error ? error.message : fallback;
+
+export function useAdminCategories(query: CategoryQuery = { page: 1, limit: 100 }) {
   const { token } = useAdminAuth();
+  const queryClient = useQueryClient();
 
-  const fetchCategories = useCallback(async () => {
-    if (!token) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const res = await apiRequest<{ data: AdminCategory[] }>('/admin/categories', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setCategories(res.data || []);
-    } catch (err: any) {
-      setError(err.message || 'Lỗi khi tải danh sách danh mục');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [token]);
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: [...ADMIN_CATEGORIES_QUERY_KEY, query],
+    queryFn: async () => {
+      const params = new URLSearchParams({ page: String(query.page), limit: String(query.limit) });
+      if (query.search) params.set('search', query.search);
+      if (query.status) params.set('status', query.status);
+      return apiRequest<CategoryListResponse>(`/admin/categories?${params.toString()}`);
+    },
+    enabled: !!token,
+    staleTime: 60000,
+    placeholderData: keepPreviousData,
+  });
 
-  useEffect(() => {
-    fetchCategories();
-  }, [fetchCategories]);
+  const categories = data?.data ?? [];
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ADMIN_CATEGORIES_QUERY_KEY });
 
   const updateStatus = async (id: string, status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED') => {
     try {
       await apiRequest(`/admin/categories/${id}/status`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status })
       });
-      setCategories(prev => prev.map(c => c.id === id ? { ...c, status } : c));
+      await invalidate();
       return true;
-    } catch (err: any) {
-      throw new Error(err.message || 'Lỗi khi cập nhật trạng thái');
+    } catch (err: unknown) {
+      throw new Error(errorText(err, 'Lỗi khi cập nhật trạng thái'));
     }
   };
 
@@ -60,13 +69,12 @@ export function useAdminCategories() {
     try {
       const res = await apiRequest<{ data: AdminCategory }>('/admin/categories', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
         body: JSON.stringify(data)
       });
-      setCategories(prev => [res.data, ...prev]);
+      await invalidate();
       return res.data;
-    } catch (err: any) {
-      throw new Error(err.message || 'Lỗi khi tạo danh mục');
+    } catch (err: unknown) {
+      throw new Error(errorText(err, 'Lỗi khi tạo danh mục'));
     }
   };
 
@@ -74,13 +82,12 @@ export function useAdminCategories() {
     try {
       const res = await apiRequest<{ data: AdminCategory }>(`/admin/categories/${id}`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}` },
         body: JSON.stringify(data)
       });
-      setCategories(prev => prev.map(c => c.id === id ? res.data : c));
+      await invalidate();
       return res.data;
-    } catch (err: any) {
-      throw new Error(err.message || 'Lỗi khi cập nhật danh mục');
+    } catch (err: unknown) {
+      throw new Error(errorText(err, 'Lỗi khi cập nhật danh mục'));
     }
   };
 
@@ -90,25 +97,44 @@ export function useAdminCategories() {
       formData.append('file', file);
       const res = await apiRequest<{ data: AdminCategory }>(`/admin/categories/${id}/cover-image`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        // Do NOT set Content-Type header to allow browser to generate boundary for multipart/form-data
         body: formData
       });
-      setCategories(prev => prev.map(c => c.id === id ? res.data : c));
+      await invalidate();
       return res.data;
-    } catch (err: any) {
-      throw new Error(err.message || 'Lỗi khi tải ảnh lên');
+    } catch (err: unknown) {
+      throw new Error(errorText(err, 'Lỗi khi tải ảnh lên'));
     }
+  };
+
+  const removeCoverImage = async (id: string) => {
+    const res = await apiRequest<{ data: AdminCategory }>(`/admin/categories/${id}/cover-image`, {
+      method: 'DELETE',
+    });
+    await invalidate();
+    return res.data;
+  };
+
+  const reorderCategories = async (items: Array<{ id: string; sortOrder: number }>) => {
+    await apiRequest('/admin/categories/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify({ items }),
+    });
+    await invalidate();
   };
 
   return {
     categories,
+    totalCount: data?.meta?.total ?? 0,
+    totalPages: data?.meta?.totalPages ?? 1,
     isLoading,
-    error,
-    refetch: fetchCategories,
+    isFetching,
+    error: error instanceof Error ? error.message : (error ? String(error) : null),
+    refetch,
     updateStatus,
     createCategory,
     updateCategory,
-    uploadCoverImage
+    uploadCoverImage,
+    removeCoverImage,
+    reorderCategories,
   };
 }

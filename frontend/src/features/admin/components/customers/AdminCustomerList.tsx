@@ -6,7 +6,7 @@ import { CustomerTable } from './components/CustomerTable';
 import { CustomerDetailModal } from './components/CustomerDetailModal';
 import { useState } from 'react';
 import type { AdminCustomer } from '../../hooks/useCustomers';
-import { useDialog } from '../../../../components/ui/DialogProvider';
+import { useDialog } from '../../../../components/ui/dialog-context';
 
 export function AdminCustomerList() {
   const [detailCustomer, setDetailCustomer] = useState<AdminCustomer | null>(null);
@@ -15,6 +15,11 @@ export function AdminCustomerList() {
     totalCount,
     searchQuery, setSearchQuery,
     statusFilter, setStatusFilter,
+    genderFilter, setGenderFilter,
+    onboardingFilter, setOnboardingFilter,
+    providerStatusFilter, setProviderStatusFilter,
+    createdFrom, setCreatedFrom,
+    createdTo, setCreatedTo,
     pagination, setPagination,
     selectedRowIds, handleSelectAll, handleSelectRow,
     isLoading, refetch, error, updateCustomerStatus
@@ -30,7 +35,10 @@ export function AdminCustomerList() {
       message: `Bạn đang chọn khóa ${selectedRowIds.length} khách hàng. Vui lòng nhập lý do khóa:`,
       type: 'warning',
       withInput: true,
-      inputPlaceholder: 'Nhập lý do khóa...',
+      inputRequired: true,
+      inputMinLength: 10,
+      inputMaxLength: 500,
+      inputPlaceholder: 'Nhập lý do khóa (tối thiểu 10 ký tự)...',
       inputDefaultValue: '',
       inputSuggestions: [
         'Vi phạm chính sách cộng đồng',
@@ -40,17 +48,34 @@ export function AdminCustomerList() {
       ],
       confirmText: 'Khóa hàng loạt',
       onConfirm: async (reason) => {
-        if (!reason || reason.trim().length < 10) {
-          showDialog({ title: 'Lỗi', message: 'Lý do khóa tài khoản phải dài ít nhất 10 ký tự.', type: 'error' });
-          return;
-        }
+        if (!reason || reason.trim().length < 10) return false;
 
-        try {
-          await Promise.all(selectedRowIds.map(id => updateCustomerStatus(id, 'BLOCKED', reason.trim())));
-          handleSelectAll(false);
-          showDialog({ title: 'Thành công', message: `Đã khóa thành công ${selectedRowIds.length} khách hàng.`, type: 'success' });
-        } catch (err: any) {
-          showDialog({ title: 'Lỗi', message: err.message || 'Có lỗi xảy ra khi khóa hàng loạt', type: 'error' });
+        const results = await Promise.all(selectedRowIds.map(async (id) => {
+          try {
+            await updateCustomerStatus(id, 'BLOCKED', reason.trim());
+            return { id, success: true as const };
+          } catch (error) {
+            return { id, success: false as const, message: error instanceof Error ? error.message : 'Không thể cập nhật' };
+          }
+        }));
+        const succeeded = results.filter((result) => result.success).length;
+        const failures = results.filter((result) => !result.success);
+
+        handleSelectAll(false);
+        await refetch();
+
+        if (failures.length === 0) {
+          showDialog({
+            title: 'Thành công',
+            message: `Đã khóa thành công ${succeeded} khách hàng.`,
+            type: 'success'
+          });
+        } else {
+          showDialog({
+            title: 'Hoàn tất một phần',
+            message: `Đã khóa ${succeeded} khách hàng. Không thể khóa: ${failures.map((item) => `#${item.id.slice(0, 8)} (${item.message})`).join('; ')}.`,
+            type: 'warning'
+          });
         }
       }
     });
@@ -86,7 +111,7 @@ export function AdminCustomerList() {
         </div>
       </div>
 
-      <CustomerStats totalCount={totalCount} />
+      <CustomerStats />
 
       {error && (
         <div className="bg-rose-50 text-rose-700 p-4 rounded-xl border border-rose-200 text-sm font-medium">
@@ -99,6 +124,16 @@ export function AdminCustomerList() {
         setSearchQuery={setSearchQuery}
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
+        genderFilter={genderFilter}
+        setGenderFilter={setGenderFilter}
+        onboardingFilter={onboardingFilter}
+        setOnboardingFilter={setOnboardingFilter}
+        providerStatusFilter={providerStatusFilter}
+        setProviderStatusFilter={setProviderStatusFilter}
+        createdFrom={createdFrom}
+        setCreatedFrom={setCreatedFrom}
+        createdTo={createdTo}
+        setCreatedTo={setCreatedTo}
         limit={pagination.limit}
         setLimit={(limit) => setPagination(prev => ({ ...prev, limit }))}
         setPage={(page) => setPagination(prev => ({ ...prev, page }))}
@@ -115,9 +150,6 @@ export function AdminCustomerList() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button className="px-2.5 py-1 text-xs font-semibold bg-white text-[#0f766e] border border-teal-200 rounded-lg hover:bg-teal-100/50 transition cursor-pointer">
-              Gửi Voucher / Ưu đãi
-            </button>
             <button 
               onClick={handleBulkLock}
               className="px-2.5 py-1 text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 rounded-lg hover:bg-rose-100 transition cursor-pointer"
@@ -144,9 +176,17 @@ export function AdminCustomerList() {
         onViewDetail={setDetailCustomer}
       />
 
+      {Math.ceil(totalCount / pagination.limit) > 1 && (
+        <div className="flex items-center justify-end gap-2">
+          <button type="button" disabled={pagination.page <= 1} onClick={() => setPagination((current) => ({ ...current, page: current.page - 1 }))} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold disabled:opacity-40">Trước</button>
+          <span className="text-sm text-slate-500">Trang {pagination.page}/{Math.ceil(totalCount / pagination.limit)}</span>
+          <button type="button" disabled={pagination.page >= Math.ceil(totalCount / pagination.limit)} onClick={() => setPagination((current) => ({ ...current, page: current.page + 1 }))} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold disabled:opacity-40">Sau</button>
+        </div>
+      )}
+
       {detailCustomer && (
         <CustomerDetailModal 
-          customer={detailCustomer} 
+          customerId={detailCustomer.id}
           onClose={() => setDetailCustomer(null)} 
         />
       )}

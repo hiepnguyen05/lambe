@@ -1,6 +1,8 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { apiRequest } from '../../../lib/api-client';
 import { useAdminAuth } from './useAdminAuth';
+import { useDebounce } from './useDebounce';
+import { useQueryClient } from '@tanstack/react-query';
 
 export interface AdminCustomer {
   id: string;
@@ -19,47 +21,78 @@ export interface AdminCustomer {
 export function useCustomers() {
   const [customers, setCustomers] = useState<AdminCustomer[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(searchQuery.trim(), 350);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [genderFilter, setGenderFilter] = useState("all");
+  const [onboardingFilter, setOnboardingFilter] = useState("all");
+  const [providerStatusFilter, setProviderStatusFilter] = useState("all");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 10 });
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeRequestIdRef = useRef(0);
 
   const { token } = useAdminAuth();
+  const queryClient = useQueryClient();
+
+  const changeSearch = useCallback((val: string) => {
+    setSearchQuery(val);
+  }, []);
+
+  useEffect(() => {
+    setPagination(prev => prev.page === 1 ? prev : { ...prev, page: 1 });
+  }, [debouncedSearch]);
+
+  const changeStatus = useCallback((val: string) => {
+    setStatusFilter(val);
+    setPagination(prev => prev.page === 1 ? prev : { ...prev, page: 1 });
+  }, []);
 
   const fetchCustomers = useCallback(async () => {
     if (!token) return;
+    const currentRequestId = ++activeRequestIdRef.current;
     setIsLoading(true);
     setError(null);
     try {
-      // Xây dựng query string
       const params = new URLSearchParams({
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
       });
-      if (searchQuery) params.append('search', searchQuery);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (genderFilter !== 'all') params.append('gender', genderFilter);
+      if (onboardingFilter !== 'all') params.append('onboardingStatus', onboardingFilter);
+      if (providerStatusFilter !== 'all') params.append('providerStatus', providerStatusFilter);
+      if (createdFrom) params.append('createdFrom', new Date(`${createdFrom}T00:00:00`).toISOString());
+      if (createdTo) params.append('createdTo', new Date(`${createdTo}T23:59:59.999`).toISOString());
 
-      const res = await apiRequest<{ data: AdminCustomer[], meta: { total: number } }>(`/admin/customers?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setCustomers(res.data || []);
-      setTotalCount(res.meta?.total || 0);
-    } catch (err: any) {
-      setError(err.message || 'Lỗi khi tải danh sách khách hàng');
+      const res = await apiRequest<{ data: AdminCustomer[], meta: { total: number } }>(`/admin/customers?${params.toString()}`);
+      if (currentRequestId === activeRequestIdRef.current) {
+        setCustomers(res.data || []);
+        setTotalCount(res.meta?.total || 0);
+      }
+    } catch (err: unknown) {
+      if (currentRequestId === activeRequestIdRef.current) {
+        setError(err instanceof Error ? err.message : 'Lỗi khi tải danh sách khách hàng');
+      }
     } finally {
-      setIsLoading(false);
+      if (currentRequestId === activeRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, [token, pagination.page, pagination.limit, searchQuery, statusFilter]);
+  }, [token, pagination.page, pagination.limit, debouncedSearch, statusFilter, genderFilter, onboardingFilter, providerStatusFilter, createdFrom, createdTo]);
 
   useEffect(() => {
-    fetchCustomers();
+    // eslint-disable-next-line react/set-state-in-effect
+    void fetchCustomers();
   }, [fetchCustomers]);
 
   const updateCustomerStatus = async (id: string, status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED', reason?: string) => {
     try {
-      const payload: any = { status };
+      const payload: { status: 'ACTIVE' | 'INACTIVE' | 'BLOCKED'; reason?: string } = { status };
       if (status === 'BLOCKED' || status === 'INACTIVE') {
         payload.reason = reason || 'Quản trị viên đã khóa tài khoản này do vi phạm chính sách';
       }
@@ -73,9 +106,10 @@ export function useCustomers() {
         body: JSON.stringify(payload)
       });
       setCustomers(prev => prev.map(c => c.id === id ? { ...c, status } : c));
+      await queryClient.invalidateQueries({ queryKey: ['admin-customer-summary'] });
       return true;
-    } catch (err: any) {
-      throw new Error(err.message || 'Lỗi khi cập nhật trạng thái');
+    } catch (err: unknown) {
+      throw new Error(err instanceof Error ? err.message : 'Lỗi khi cập nhật trạng thái');
     }
   };
 
@@ -96,8 +130,13 @@ export function useCustomers() {
   return {
     customers,
     totalCount,
-    searchQuery, setSearchQuery,
-    statusFilter, setStatusFilter,
+    searchQuery, setSearchQuery: changeSearch,
+    statusFilter, setStatusFilter: changeStatus,
+    genderFilter, setGenderFilter,
+    onboardingFilter, setOnboardingFilter,
+    providerStatusFilter, setProviderStatusFilter,
+    createdFrom, setCreatedFrom,
+    createdTo, setCreatedTo,
     selectedRowIds, setSelectedRowIds,
     pagination, setPagination,
     isLoading,

@@ -6,7 +6,6 @@ export function AdminLoginForm() {
     username, setUsername,
     password, setPassword,
     showPassword, setShowPassword,
-    rememberMe, setRememberMe,
     isLoading, handleSubmit
   } = useAdminLogin();
 
@@ -70,19 +69,6 @@ export function AdminLoginForm() {
             {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
         </div>
-      </div>
-
-      {/* Remember Me */}
-      <div className="flex items-center justify-between pt-0.5">
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={rememberMe}
-            onChange={(e) => setRememberMe(e.target.checked)}
-            className="w-4 h-4 rounded border-slate-300 text-[#0f766e] focus:ring-[#0f766e] focus:ring-offset-0 transition cursor-pointer"
-          />
-          <span className="text-xs text-slate-600">Ghi nhớ đăng nhập</span>
-        </label>
       </div>
 
       {/* Submit Button */}

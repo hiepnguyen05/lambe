@@ -1,6 +1,7 @@
-import { useCallback, useDeferredValue, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { apiRequest } from '../../../lib/api-client';
 import { useAdminAuth } from './useAdminAuth';
+import { useDebounce } from './useDebounce';
 
 export type ProviderType = 'INDIVIDUAL' | 'ORGANIZATION';
 export type ProviderProfileStatus = 'SETUP_REQUIRED' | 'ACTIVE' | 'SUSPENDED';
@@ -99,13 +100,17 @@ export function useAdminProviders() {
   const [providers, setProviders] = useState<AdminProvider[]>([]);
   const [summary, setSummary] = useState<ProviderSummary>(emptySummary);
   const [searchQuery, setSearchQuery] = useState('');
-  const deferredSearch = useDeferredValue(searchQuery.trim());
+  const debouncedSearch = useDebounce(searchQuery.trim(), 350);
   const [providerType, setProviderType] = useState<'ALL' | ProviderType>('ALL');
   const [status, setStatus] = useState<'ALL' | ProviderProfileStatus>('ALL');
   const [pagination, setPagination] = useState({ page: 1, limit: 20, totalPages: 1 });
   const [isLoading, setIsLoading] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPagination((current) => ({ ...current, page: 1 }));
+  }, [debouncedSearch]);
 
   const fetchProviders = useCallback(async () => {
     if (!token) return;
@@ -116,7 +121,7 @@ export function useAdminProviders() {
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
       });
-      if (deferredSearch) params.set('search', deferredSearch);
+      if (debouncedSearch) params.set('search', debouncedSearch);
       if (providerType !== 'ALL') params.set('providerType', providerType);
       if (status !== 'ALL') params.set('status', status);
 
@@ -138,7 +143,7 @@ export function useAdminProviders() {
     } finally {
       setIsLoading(false);
     }
-  }, [deferredSearch, pagination.limit, pagination.page, providerType, status, token]);
+  }, [debouncedSearch, pagination.limit, pagination.page, providerType, status, token]);
 
   useEffect(() => {
     // The effect synchronizes the current filters with the remote provider list.
@@ -231,6 +236,26 @@ export function useAdminProviders() {
     }
   };
 
+  const updateProviderServiceStatus = async (
+    providerId: string,
+    serviceId: string,
+    action: 'suspend' | 'restore',
+    reason?: string,
+  ) => {
+    if (!token) throw new Error('Phiên đăng nhập không hợp lệ.');
+    setActiveAction(`service:${serviceId}`);
+    try {
+      await apiRequest(`/admin/providers/${providerId}/services/${serviceId}/${action}`, {
+        method: 'POST',
+        body: action === 'suspend' ? JSON.stringify({ reason }) : undefined,
+      });
+      await fetchProviders();
+      return fetchProviderDetail(providerId);
+    } finally {
+      setActiveAction(null);
+    }
+  };
+
   return {
     providers,
     summary,
@@ -250,6 +275,7 @@ export function useAdminProviders() {
     updateProviderStatus,
     updateProviderAccountStatus,
     syncProviderAvatar,
+    updateProviderServiceStatus,
   };
 }
 

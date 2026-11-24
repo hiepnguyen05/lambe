@@ -68,6 +68,7 @@ export function getServiceVerificationIssue(
   item: import('../../../hooks/useProviderApplications').ProviderApplicationService,
   documents: import('../../../hooks/useProviderApplications').ProviderDocument[],
   experienceYears: number | null,
+  providerType?: string | null,
 ): string | null {
   if (
     item.proposedPriceAmount < item.service.minPriceAmount ||
@@ -75,7 +76,8 @@ export function getServiceVerificationIssue(
   ) {
     return "Giá đăng ký nằm ngoài giá sàn/trần của dịch vụ.";
   }
-  if ((experienceYears ?? 0) < item.service.minExperienceYears) {
+  const isOrganization = providerType === "ORGANIZATION";
+  if (!isOrganization && (experienceYears ?? 0) < item.service.minExperienceYears) {
     return `Yêu cầu tối thiểu ${item.service.minExperienceYears} năm kinh nghiệm.`;
   }
 
@@ -86,17 +88,20 @@ export function getServiceVerificationIssue(
         document.applicationServiceId === item.id),
   );
   if (
+    !isOrganization &&
     item.service.requiresCertificate &&
     !evidence.some((document) => document.type === "PROFESSIONAL_CERTIFICATE")
   ) {
     return "Chưa có chứng chỉ chuyên môn đã xác minh.";
   }
 
-  const portfolioCount = evidence.filter(
-    (document) => document.type === "PORTFOLIO",
-  ).length;
-  if (portfolioCount < item.service.minPortfolioImages) {
-    return `Cần ${item.service.minPortfolioImages} ảnh portfolio đã xác minh, hiện có ${portfolioCount}.`;
+  if (!isOrganization) {
+    const portfolioCount = evidence.filter(
+      (document) => document.type === "PORTFOLIO",
+    ).length;
+    if (portfolioCount < item.service.minPortfolioImages) {
+      return `Cần ${item.service.minPortfolioImages} ảnh portfolio đã xác minh, hiện có ${portfolioCount}.`;
+    }
   }
   return null;
 }

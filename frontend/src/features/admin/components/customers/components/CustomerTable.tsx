@@ -1,6 +1,6 @@
 import type { AdminCustomer } from '../../../hooks/useCustomers';
 import { Eye, Lock, Unlock } from 'lucide-react';
-import { useDialog } from '../../../../../components/ui/DialogProvider';
+import { useDialog } from '../../../../../components/ui/dialog-context';
 
 interface CustomerTableProps {
   customers: AdminCustomer[];
@@ -39,8 +39,8 @@ export function CustomerTable({ customers, isLoading, selectedRowIds, handleSele
           try {
             await updateCustomerStatus(id, status, reason.trim());
             showDialog({ title: 'Thành công', message: 'Đã khóa tài khoản thành công', type: 'success' });
-          } catch (err: any) {
-            showDialog({ title: 'Lỗi', message: err.message || 'Lỗi cập nhật trạng thái', type: 'error' });
+          } catch (err: unknown) {
+            showDialog({ title: 'Lỗi', message: err instanceof Error ? err.message : 'Lỗi cập nhật trạng thái', type: 'error' });
           }
         }
       });
@@ -48,8 +48,8 @@ export function CustomerTable({ customers, isLoading, selectedRowIds, handleSele
       try {
         await updateCustomerStatus(id, status);
         showDialog({ title: 'Thành công', message: 'Cập nhật trạng thái thành công', type: 'success' });
-      } catch (err: any) {
-        showDialog({ title: 'Lỗi', message: err.message || 'Lỗi cập nhật trạng thái', type: 'error' });
+      } catch (err: unknown) {
+        showDialog({ title: 'Lỗi', message: err instanceof Error ? err.message : 'Lỗi cập nhật trạng thái', type: 'error' });
       }
     }
   };
@@ -74,8 +74,8 @@ export function CustomerTable({ customers, isLoading, selectedRowIds, handleSele
               <th className="py-3.5 px-5 text-right">Tác vụ</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 text-xs">
-            {isLoading ? (
+          <tbody className={`divide-y divide-slate-100 text-xs ${isLoading && customers.length > 0 ? 'opacity-60 transition-opacity' : ''}`}>
+            {isLoading && customers.length === 0 ? (
               <tr>
                 <td colSpan={6} className="py-8 text-center text-slate-500">Đang tải dữ liệu...</td>
               </tr>

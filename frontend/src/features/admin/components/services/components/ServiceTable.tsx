@@ -1,4 +1,5 @@
-import { Lock, Unlock, Edit3, ImagePlus, ShieldAlert } from 'lucide-react';
+import { Lock, Unlock, Edit3, ImagePlus, ShieldAlert, ChevronUp, ChevronDown } from 'lucide-react';
+import { LambeIcon } from '../../../../../components/ui/LambeIcon';
 import type { AdminService } from '../../../hooks/useAdminServices';
 
 interface ServiceTableProps {
@@ -6,9 +7,10 @@ interface ServiceTableProps {
   isLoading: boolean;
   onEdit: (service: AdminService) => void;
   onStatusChange: (id: string, status: 'ACTIVE' | 'INACTIVE' | 'ARCHIVED') => void;
+  onMove: (service: AdminService, direction: -1 | 1) => void | Promise<void>;
 }
 
-export function ServiceTable({ services, isLoading, onEdit, onStatusChange }: ServiceTableProps) {
+export function ServiceTable({ services, isLoading, onEdit, onStatusChange, onMove }: ServiceTableProps) {
   const getAudienceLabel = (audience: string) => {
     if (audience === 'MEN') return 'Nam';
     if (audience === 'WOMEN') return 'Nữ';
@@ -42,8 +44,8 @@ export function ServiceTable({ services, isLoading, onEdit, onStatusChange }: Se
               <th className="py-3.5 px-5 text-right w-[140px]">Tác vụ</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 text-xs">
-            {isLoading ? (
+          <tbody className={`divide-y divide-slate-100 text-xs ${isLoading && services.length > 0 ? 'opacity-60 transition-opacity' : ''}`}>
+            {isLoading && services.length === 0 ? (
               <tr>
                 <td colSpan={6} className="py-8 text-center text-slate-500">Đang tải dữ liệu...</td>
               </tr>
@@ -60,11 +62,11 @@ export function ServiceTable({ services, isLoading, onEdit, onStatusChange }: Se
                   <td className="py-4 px-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 rounded-xl border border-teal-100 flex-shrink-0 overflow-hidden bg-teal-50 text-[#0f766e] flex items-center justify-center">
-                        {service.iconUrl ? (
-                          <span className="material-symbols-outlined text-2xl">{service.iconUrl}</span>
-                        ) : (
-                          <span className="material-symbols-outlined text-2xl text-teal-300">category</span>
-                        )}
+                        <LambeIcon
+                          nameOrUrl={service.iconUrl}
+                          className="w-6 h-6 text-[#0f766e]"
+                          imgClassName="w-full h-full object-cover block"
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-bold text-slate-900 truncate" title={service.name}>{service.name}</div>
@@ -117,6 +119,8 @@ export function ServiceTable({ services, isLoading, onEdit, onStatusChange }: Se
                   </td>
                   <td className="py-4 px-5 text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <button type="button" onClick={() => onMove(service, -1)} disabled={!services.some((item) => item.categoryId === service.categoryId && item.sortOrder < service.sortOrder)} className="p-1.5 text-slate-400 hover:text-teal-700 disabled:opacity-25" title="Đưa lên"><ChevronUp className="h-4 w-4" /></button>
+                      <button type="button" onClick={() => onMove(service, 1)} disabled={!services.some((item) => item.categoryId === service.categoryId && item.sortOrder > service.sortOrder)} className="p-1.5 text-slate-400 hover:text-teal-700 disabled:opacity-25" title="Đưa xuống"><ChevronDown className="h-4 w-4" /></button>
                       {/* Image Upload Button (Handled via Edit Modal for now, or direct if needed) */}
                       <button 
                         onClick={() => onEdit(service)}

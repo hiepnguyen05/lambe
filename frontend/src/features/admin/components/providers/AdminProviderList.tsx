@@ -11,7 +11,7 @@ import {
   UserRound,
   UsersRound,
 } from 'lucide-react';
-import { useDialog } from '../../../../components/ui/DialogProvider';
+import { useDialog } from '../../../../components/ui/dialog-context';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import {
   type AdminProvider,
@@ -141,6 +141,7 @@ export function AdminProviderList() {
     updateProviderStatus,
     updateProviderAccountStatus,
     syncProviderAvatar,
+    updateProviderServiceStatus,
   } = useAdminProviders();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminProviderDetail | null>(null);
@@ -259,6 +260,42 @@ export function AdminProviderList() {
               requestError instanceof Error
                 ? requestError.message
                 : 'Có lỗi xảy ra khi cập nhật tài khoản.',
+            type: 'error',
+          });
+        }
+      },
+    });
+  };
+
+  const confirmServiceStatusChange = (
+    provider: AdminProviderDetail,
+    service: AdminProviderDetail['services'][number],
+  ) => {
+    const restore = service.status === 'SUSPENDED';
+    showDialog({
+      title: restore ? 'Khôi phục dịch vụ' : 'Đình chỉ dịch vụ',
+      message: restore
+        ? `Khôi phục dịch vụ ${service.service.name} về trạng thái tạm ngừng?`
+        : `Đình chỉ dịch vụ ${service.service.name}. Vui lòng nhập lý do:`,
+      type: restore ? 'success' : 'warning',
+      withInput: !restore,
+      inputRequired: !restore,
+      inputMinLength: 10,
+      inputMaxLength: 500,
+      confirmText: restore ? 'Khôi phục' : 'Đình chỉ',
+      onConfirm: async (reason) => {
+        try {
+          const updated = await updateProviderServiceStatus(
+            provider.id,
+            service.id,
+            restore ? 'restore' : 'suspend',
+            reason,
+          );
+          setDetail(updated);
+        } catch (requestError) {
+          showDialog({
+            title: 'Không thể cập nhật',
+            message: requestError instanceof Error ? requestError.message : 'Có lỗi xảy ra.',
             type: 'error',
           });
         }
@@ -407,6 +444,7 @@ export function AdminProviderList() {
           onStatusChange={confirmStatusChange}
           onAccountStatusChange={confirmAccountStatusChange}
           onSyncAvatar={(provider) => void handleSyncAvatar(provider)}
+          onServiceStatusChange={confirmServiceStatusChange}
         />
       )}
     </div>

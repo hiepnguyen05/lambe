@@ -273,6 +273,7 @@ export function AdminProviderApplicationDetail() {
             services={application.services}
             documents={documents}
             experienceYears={application.experienceYears}
+            providerType={application.providerType}
             canReviewServices={canReviewServices}
             canEdit={canEdit}
             activeAction={activeAction}
@@ -389,6 +390,7 @@ export function AdminProviderApplicationDetail() {
       <ServiceSuggestionServiceForm
         suggestion={selectedSuggestion}
         experienceYears={application?.experienceYears ?? null}
+        providerType={application?.providerType ?? null}
         documents={documents}
         isSubmitting={
           selectedSuggestion

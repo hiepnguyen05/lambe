@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { apiRequest } from "../../../lib/api-client";
 import { useAdminAuth } from "./useAdminAuth";
 
@@ -229,6 +229,8 @@ export function useProviderApplications() {
       });
     },
     enabled: !!token,
+    placeholderData: keepPreviousData,
+    staleTime: 30000,
   });
 
   return {
@@ -263,6 +265,7 @@ export function usePendingProviderApplicationCount() {
     },
     enabled: !!token,
     refetchInterval: 30000, // optionally poll every 30s
+    staleTime: 30000,
   });
 
   return data?.meta?.total ?? 0;
@@ -288,6 +291,9 @@ export function useProviderDocumentPreviews(
       );
     },
     enabled: !!token && !!applicationId && enabled,
+    gcTime: 0,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
   });
 
   return {

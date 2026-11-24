@@ -1,20 +1,20 @@
 export const commonCatalogIcons = [
-  { name: 'content_cut', label: 'Cắt tóc' },
-  { name: 'spa', label: 'Spa & Massage' },
-  { name: 'face', label: 'Chăm sóc da' },
-  { name: 'face_retouching_natural', label: 'Trang điểm' },
+  { name: 'scissors', label: 'Cắt tóc' },
+  { name: 'flame', label: 'Uốn / Tạo kiểu' },
+  { name: 'flower_2', label: 'Spa & Massage' },
   { name: 'brush', label: 'Làm móng / Cọ' },
   { name: 'palette', label: 'Nhuộm / Màu' },
-  { name: 'wash', label: 'Gội đầu' },
-  { name: 'healing', label: 'Trị liệu' },
-  { name: 'local_florist', label: 'Thảo mộc' },
-  { name: 'clean_hands', label: 'Vệ sinh' },
-  { name: 'health_and_safety', label: 'Phòng khám' },
-  { name: 'self_improvement', label: 'Thư giãn' },
-  { name: 'favorite', label: 'Yêu thích' },
+  { name: 'droplets', label: 'Gội đầu / Nước' },
+  { name: 'smile', label: 'Chăm sóc da' },
+  { name: 'sparkles', label: 'Trang điểm / Combo' },
+  { name: 'eye', label: 'Nối mi' },
+  { name: 'heart', label: 'Phun xăm' },
+  { name: 'wand_2', label: 'Tẩy tóc' },
+  { name: 'bath', label: 'Tắm / Vệ sinh' },
+  { name: 'shield_check', label: 'Y tế / Vô trùng' },
   { name: 'star', label: 'Nổi bật' },
-  { name: 'category', label: 'Mặc định' },
-] as const
+  { name: 'layout_grid', label: 'Mặc định' },
+] as const;
 
 function withoutVietnameseMarks(text: string) {
   return text
@@ -40,4 +40,32 @@ export function generateCatalogCode(text: string) {
     .replace(/\s+/g, '_')
     .replace(/_+/g, '_')
     .slice(0, 50)
+}
+
+export function parseIconValue(rawIconUrl?: string | null): { iconCode: string; iconImageUrl: string } {
+  if (!rawIconUrl) return { iconCode: 'layout_grid', iconImageUrl: '' };
+  const trimmed = rawIconUrl.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    const hashIndex = trimmed.indexOf('#');
+    if (hashIndex !== -1) {
+      const iconImageUrl = trimmed.substring(0, hashIndex);
+      const hash = trimmed.substring(hashIndex + 1);
+      const match = hash.match(/fallback=([a-zA-Z0-9_-]+)/);
+      return {
+        iconCode: match ? match[1].replace(/-/g, '_') : 'sparkles',
+        iconImageUrl,
+      };
+    }
+    return { iconCode: 'sparkles', iconImageUrl: trimmed };
+  }
+  return { iconCode: trimmed.replace(/-/g, '_'), iconImageUrl: '' };
+}
+
+export function buildIconValue(iconCode: string, iconImageUrl: string): string {
+  const code = iconCode.trim().replace(/-/g, '_') || 'sparkles';
+  const img = iconImageUrl.trim();
+  if (img) {
+    return `${img}#fallback=${code}`;
+  }
+  return code;
 }

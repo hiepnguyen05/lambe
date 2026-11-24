@@ -1,103 +1,135 @@
-import { X } from 'lucide-react';
-import type { AdminCustomer } from '../../../hooks/useCustomers';
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Loader2, X } from 'lucide-react'
+import { apiRequest } from '../../../../../lib/api-client'
+import type { AdminCustomer } from '../../../hooks/useCustomers'
 
-interface CustomerDetailModalProps {
-  customer: AdminCustomer;
-  onClose: () => void;
+interface CustomerAddress {
+  id: string
+  label: string | null
+  addressLine: string
+  isDefault: boolean
+  contactName: string | null
+  contactPhone: string | null
 }
 
-export function CustomerDetailModal({ customer, onClose }: CustomerDetailModalProps) {
+interface CustomerDetail extends AdminCustomer {
+  customerAddresses: CustomerAddress[]
+  providerProfile: {
+    id: string
+    providerType: string
+    displayName: string
+    status: string
+    serviceAreaName: string | null
+  } | null
+}
+
+interface ActivityItem {
+  id: string
+  action: string
+  result: string
+  createdAt: string
+}
+
+interface ApplicationItem {
+  id: string
+  providerType: string
+  status: string
+  legalFullName: string | null
+  organizationName: string | null
+  submittedAt: string | null
+}
+
+type Tab = 'profile' | 'activity' | 'applications'
+
+export function CustomerDetailModal({ customerId, onClose }: { customerId: string; onClose: () => void }) {
+  const [tab, setTab] = useState<Tab>('profile')
+  const detail = useQuery({
+    queryKey: ['admin-customer-detail', customerId],
+    queryFn: () => apiRequest<{ data: CustomerDetail }>(`/admin/customers/${customerId}`),
+  })
+  const activity = useQuery({
+    queryKey: ['admin-customer-activity', customerId],
+    queryFn: () => apiRequest<{ data: ActivityItem[] }>(`/admin/customers/${customerId}/activity?page=1&limit=50`),
+    enabled: tab === 'activity',
+  })
+  const applications = useQuery({
+    queryKey: ['admin-customer-applications', customerId],
+    queryFn: () => apiRequest<{ data: ApplicationItem[] }>(`/admin/customers/${customerId}/provider-applications`),
+    enabled: tab === 'applications',
+  })
+
+  const customer = detail.data?.data
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div 
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200" 
-        onClick={onClose}
-      ></div>
-      
-      <div className="relative w-full max-w-2xl max-h-[90vh] bg-white rounded-2xl shadow-elevated flex flex-col animate-in zoom-in-95 fade-in duration-200 overflow-hidden">
-        {/* Header */}
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-          <h2 className="font-bold text-lg text-slate-800">Chi tiết khách hàng</h2>
-          <button 
-            onClick={onClose}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+      <button type="button" aria-label="Đóng" className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b bg-slate-50 p-4">
+          <h2 className="text-lg font-bold text-slate-800">Chi tiết khách hàng</h2>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-200"><X className="h-5 w-5" /></button>
         </div>
-
-        {/* Content */}
-        <div className="p-6 overflow-y-auto space-y-6">
-          <div className="flex flex-col sm:flex-row gap-6">
-            <div className="flex-shrink-0">
-              {customer.avatarUrl ? (
-                <img src={customer.avatarUrl} alt={customer.fullName || 'Khách hàng'} className="w-24 h-24 rounded-full object-cover shadow-sm border-2 border-white ring-2 ring-teal-100" />
-              ) : (
-                <div className="w-24 h-24 rounded-full bg-teal-50 flex items-center justify-center text-[#0f766e] font-bold text-3xl shadow-sm border-2 border-white ring-2 ring-teal-100">
-                  {(customer.fullName || customer.phone || 'K').charAt(0).toUpperCase()}
-                </div>
-              )}
-            </div>
-            <div className="flex-1 space-y-2">
-              <h3 className="text-xl font-bold text-slate-900">{customer.fullName || 'Chưa cập nhật tên'}</h3>
-              <p className="text-slate-500 font-medium">{customer.phone}</p>
-              <div className="flex items-center gap-2 mt-2">
-                {customer.status === 'ACTIVE' && <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-semibold border border-emerald-200">Hoạt động</span>}
-                {customer.status === 'BLOCKED' && <span className="px-2.5 py-0.5 bg-rose-50 text-rose-700 rounded-lg text-xs font-semibold border border-rose-200">Bị khóa</span>}
-                {customer.status === 'INACTIVE' && <span className="px-2.5 py-0.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-semibold border border-amber-200">Tạm vô hiệu</span>}
-                
-                <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-lg text-xs font-semibold border border-slate-200">
-                  ID: {customer.id.substring(0, 8)}...
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-            <h4 className="font-bold text-sm text-slate-900 mb-3 uppercase tracking-wider">Hồ sơ Onboarding</h4>
-            {customer.customerProfile ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-slate-500">Giới tính: </span>
-                  <span className="font-semibold text-slate-800">
-                    {customer.customerProfile.gender === 'MALE' ? 'Nam' : customer.customerProfile.gender === 'FEMALE' ? 'Nữ' : 'Khác'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-500">Trạng thái Onboarding: </span>
-                  <span className="font-semibold text-slate-800">{customer.customerProfile.onboardingStatus}</span>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500 italic">Khách hàng chưa hoàn thành onboarding.</p>
-            )}
-          </div>
-
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-             <h4 className="font-bold text-sm text-slate-900 mb-3 uppercase tracking-wider">Thông tin hệ thống</h4>
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-               <div>
-                  <span className="text-slate-500">Quyền: </span>
-                  <span className="font-semibold text-slate-800">{customer.roles.join(', ')}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500">Ngày tham gia: </span>
-                  <span className="font-semibold text-slate-800">{new Date(customer.createdAt).toLocaleString('vi-VN')}</span>
-                </div>
-             </div>
-          </div>
+        <div className="flex gap-2 border-b px-5 pt-4">
+          <TabButton active={tab === 'profile'} onClick={() => setTab('profile')}>Hồ sơ</TabButton>
+          <TabButton active={tab === 'activity'} onClick={() => setTab('activity')}>Hoạt động</TabButton>
+          <TabButton active={tab === 'applications'} onClick={() => setTab('applications')}>Hồ sơ đối tác</TabButton>
         </div>
-        
-        {/* Footer */}
-        <div className="p-4 border-t border-slate-100 flex justify-end">
-          <button 
-            onClick={onClose}
-            className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors"
-          >
-            Đóng
-          </button>
+        <div className="overflow-y-auto p-6">
+          {detail.isLoading ? <Loading /> : detail.error || !customer ? (
+            <ErrorText error={detail.error} />
+          ) : tab === 'profile' ? (
+            <Profile customer={customer} />
+          ) : tab === 'activity' ? (
+            <Activity data={activity.data?.data} loading={activity.isLoading} error={activity.error} />
+          ) : (
+            <Applications data={applications.data?.data} loading={applications.isLoading} error={applications.error} />
+          )}
         </div>
       </div>
     </div>
-  );
+  )
+}
+
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return <button type="button" onClick={onClick} className={`border-b-2 px-3 py-2 text-sm font-semibold ${active ? 'border-teal-700 text-teal-700' : 'border-transparent text-slate-500'}`}>{children}</button>
+}
+
+function Loading() {
+  return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-teal-700" /></div>
+}
+
+function ErrorText({ error }: { error: unknown }) {
+  return <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error instanceof Error ? error.message : 'Không thể tải dữ liệu.'}</div>
+}
+
+function Profile({ customer }: { customer: CustomerDetail }) {
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-4">
+        {customer.avatarUrl ? <img src={customer.avatarUrl} alt="" className="h-20 w-20 rounded-full object-cover" /> : <div className="flex h-20 w-20 items-center justify-center rounded-full bg-teal-50 text-2xl font-bold text-teal-700">{(customer.fullName || customer.phone).charAt(0)}</div>}
+        <div><h3 className="text-xl font-bold text-slate-900">{customer.fullName || 'Chưa cập nhật tên'}</h3><p className="text-sm text-slate-500">{customer.phone}</p><p className="mt-1 text-xs font-semibold text-teal-700">{customer.status}</p></div>
+      </div>
+      <section className="rounded-xl border border-slate-200 p-4">
+        <h4 className="mb-3 font-bold text-slate-900">Địa chỉ</h4>
+        {customer.customerAddresses.length === 0 ? <p className="text-sm text-slate-500">Chưa có địa chỉ.</p> : customer.customerAddresses.map((address) => <div key={address.id} className="border-b py-2 last:border-0"><p className="font-semibold text-slate-800">{address.label || 'Địa chỉ'} {address.isDefault && '· Mặc định'}</p><p className="text-sm text-slate-500">{address.addressLine}</p><p className="text-xs text-slate-400">{address.contactName} {address.contactPhone}</p></div>)}
+      </section>
+      <section className="rounded-xl border border-slate-200 p-4">
+        <h4 className="mb-2 font-bold text-slate-900">Trạng thái đối tác</h4>
+        {customer.providerProfile ? <p className="text-sm text-slate-600">{customer.providerProfile.displayName} · {customer.providerProfile.providerType} · {customer.providerProfile.status}</p> : <p className="text-sm text-slate-500">Chưa có hồ sơ provider.</p>}
+      </section>
+    </div>
+  )
+}
+
+function Activity({ data, loading, error }: { data?: ActivityItem[]; loading: boolean; error: unknown }) {
+  if (loading) return <Loading />
+  if (error) return <ErrorText error={error} />
+  if (!data?.length) return <p className="text-sm text-slate-500">Chưa có hoạt động.</p>
+  return <div className="space-y-2">{data.map((item) => <div key={item.id} className="rounded-xl border p-3"><p className="font-semibold text-slate-800">{item.action}</p><p className="text-xs text-slate-500">{item.result} · {new Date(item.createdAt).toLocaleString('vi-VN')}</p></div>)}</div>
+}
+
+function Applications({ data, loading, error }: { data?: ApplicationItem[]; loading: boolean; error: unknown }) {
+  if (loading) return <Loading />
+  if (error) return <ErrorText error={error} />
+  if (!data?.length) return <p className="text-sm text-slate-500">Khách hàng chưa có hồ sơ đăng ký đối tác.</p>
+  return <div className="space-y-2">{data.map((item) => <div key={item.id} className="rounded-xl border p-3"><p className="font-semibold text-slate-800">{item.organizationName || item.legalFullName || item.id}</p><p className="text-xs text-slate-500">{item.providerType} · {item.status}</p></div>)}</div>
 }

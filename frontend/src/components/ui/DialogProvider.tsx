@@ -1,7 +1,5 @@
 import React, {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useRef,
   useState,
@@ -15,39 +13,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-
-export type DialogType = 'success' | 'error' | 'info' | 'warning';
-
-export interface DialogInputSuggestion {
-  label: string;
-  value: string;
-  description?: string;
-}
-
-interface DialogOptions {
-  title: string;
-  message: string;
-  type?: DialogType;
-  confirmText?: string;
-  cancelText?: string;
-  withInput?: boolean;
-  inputLabel?: string;
-  inputPlaceholder?: string;
-  inputDefaultValue?: string;
-  inputRequired?: boolean;
-  inputMinLength?: number;
-  inputMaxLength?: number;
-  inputSuggestions?: Array<string | DialogInputSuggestion>;
-  onConfirm?: (inputValue?: string) => void | boolean | Promise<void | boolean>;
-  onCancel?: () => void;
-}
-
-interface DialogContextType {
-  showDialog: (options: DialogOptions) => void;
-  hideDialog: () => void;
-}
-
-const DialogContext = createContext<DialogContextType | undefined>(undefined);
+import { DialogContext, type DialogInputSuggestion, type DialogOptions, type DialogType } from './dialog-context';
 
 const iconStyles: Record<DialogType, string> = {
   success: 'bg-emerald-100 text-emerald-700',
@@ -351,12 +317,4 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
       )}
     </DialogContext.Provider>
   );
-}
-
-export function useDialog() {
-  const context = useContext(DialogContext);
-  if (context === undefined) {
-    throw new Error('useDialog must be used within a DialogProvider');
-  }
-  return context;
 }

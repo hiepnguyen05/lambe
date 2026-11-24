@@ -2,14 +2,13 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../../lib/api-client';
 import { useAdminAuth } from './useAdminAuth';
-import { useDialog } from '../../../components/ui/DialogProvider';
+import { useDialog } from '../../../components/ui/dialog-context';
 import type { AdminLoginData } from '../types/admin-auth.types';
 
 export function useAdminLogin() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   
   const { login } = useAdminAuth();
@@ -38,10 +37,10 @@ export function useAdminLogin() {
       } else {
         throw new Error('No access token received');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       showDialog({
         title: 'Đăng nhập thất bại',
-        message: error.message || "Vui lòng kiểm tra lại thông tin tài khoản và mật khẩu.",
+        message: error instanceof Error ? error.message : "Vui lòng kiểm tra lại thông tin tài khoản và mật khẩu.",
         type: 'error',
         confirmText: 'Thử lại'
       });
@@ -57,8 +56,6 @@ export function useAdminLogin() {
     setPassword,
     showPassword,
     setShowPassword,
-    rememberMe,
-    setRememberMe,
     isLoading,
     handleSubmit
   };

@@ -8,6 +8,13 @@
   }
 }
 
+@layer components {
+  .field,
+  .input {
+    @apply w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-teal-600 focus:outline-none;
+  }
+}
+
 /* Custom Scrollbar for a premium look */
 ::-webkit-scrollbar {
   width: 5px;

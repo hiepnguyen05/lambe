@@ -49,8 +49,8 @@ export function ProviderTable({
               <th className="min-w-64 px-4 py-3.5 text-right">Thao tác quản trị</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 text-sm">
-            {isLoading ? (
+          <tbody className={`divide-y divide-slate-100 text-sm ${isLoading && rows.length > 0 ? 'opacity-60 transition-opacity' : ''}`}>
+            {isLoading && rows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="h-72 text-center text-slate-500">
                   <LoaderCircle className="mx-auto mb-2 h-5 w-5 animate-spin text-teal-700" />
