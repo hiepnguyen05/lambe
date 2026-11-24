@@ -13,6 +13,7 @@ import {
   IsLongitude,
   IsDateString,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -89,9 +90,28 @@ export class InlineOrderAddressDto {
 }
 
 export class OrderQuoteDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Nhân viên đã chọn; bắt buộc với tổ chức, không gửi cho đối tác cá nhân.',
+  })
+  @IsUUID('4')
+  @IsOptional()
+  memberId?: string;
   @ApiProperty({ format: 'uuid' })
   @IsUUID('4')
   providerServiceId: string;
+
+  @ApiPropertyOptional({
+    example: 'LAMBE30',
+    description: 'Một mã voucher cho mỗi đơn.',
+  })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsOptional()
+  @Matches(/^[A-Z0-9_-]{4,32}$/)
+  voucherCode?: string;
 
   @ApiPropertyOptional({
     format: 'uuid',
@@ -127,6 +147,12 @@ export class OrderQuoteDto {
 }
 
 export class CreateOrderDto extends OrderQuoteDto {
+  @ApiProperty({ description: 'Báo giá còn hạn từ POST /orders/quote.' })
+  @IsString()
+  @MinLength(100)
+  @MaxLength(2000)
+  quoteToken: string;
+
   @ApiPropertyOptional({ example: 'Nguyễn Văn A' })
   @Transform(trim)
   @IsString()
@@ -217,11 +243,73 @@ export class CompleteOrderDto {
   cashReceived: true;
 }
 
+export class OpenPaymentDisputeDto {
+  @ApiProperty({
+    example: 'Khách chưa thanh toán đủ tiền mặt sau khi hoàn thành dịch vụ.',
+  })
+  @Transform(trim)
+  @IsString()
+  @MinLength(10)
+  @MaxLength(500)
+  reason: string;
+}
+
+export class RequestOrderRescheduleDto {
+  @ApiProperty({ format: 'date-time', example: '2026-10-25T14:00:00+07:00' })
+  @IsDateString({ strict: true })
+  @Matches(/(Z|[+-]\d{2}:\d{2})$/)
+  scheduledAt: string;
+}
+
+export class DecideOrderRescheduleDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'ID yêu cầu thợ đang xem; truyền để tránh quyết định nhầm yêu cầu mới thay thế.',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  requestId?: string;
+
+  @ApiProperty({ example: true })
+  @IsBoolean()
+  approve: boolean;
+}
+
+export class DecidePaymentDisputeDto {
+  @ApiProperty({ enum: ['CONFIRM_PAID', 'CONFIRM_UNPAID'] })
+  @IsIn(['CONFIRM_PAID', 'CONFIRM_UNPAID'])
+  decision: 'CONFIRM_PAID' | 'CONFIRM_UNPAID';
+
+  @ApiProperty({ example: 'Đã đối chiếu trao đổi giữa khách và thợ.' })
+  @Transform(trim)
+  @IsString()
+  @MinLength(10)
+  @MaxLength(500)
+  note: string;
+}
+
 export class OrderQueryDto {
   @ApiPropertyOptional({ enum: ServiceOrderStatus })
   @IsEnum(ServiceOrderStatus)
   @IsOptional()
   status?: ServiceOrderStatus;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'ID cuối của trang trước.',
+  })
+  @IsUUID('4')
+  @IsOptional()
+  cursor?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 50, default: 50 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  @IsOptional()
+  limit?: number;
 }
 
 export class OrderParamDto {

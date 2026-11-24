@@ -21,7 +21,7 @@ import {
   type ProviderLocationStore,
 } from '../../../../infrastructure/location/provider-location.store';
 import { PrismaService } from '../../../../infrastructure/persistence/postgres/prisma.service';
-import type { ProviderLocationDto } from '../../dto/provider-location.dto';
+import type { ProviderRealtimeLocationDto } from '../../dto/provider-location.dto';
 import { availableWalletBalance } from '../../domain/provider-receiving.policy';
 
 const providerAvailabilitySelect = {
@@ -45,7 +45,12 @@ const providerAvailabilitySelect = {
       service: { select: { minPriceAmount: true, maxPriceAmount: true } },
     },
   },
-  _count: { select: { workingHours: true } },
+  _count: {
+    select: {
+      workingHours: true,
+      orders: { where: { status: 'SAFETY_HOLD' } },
+    },
+  },
 } satisfies Prisma.ProviderProfileSelect;
 
 type AvailabilityProvider = Prisma.ProviderProfileGetPayload<{
@@ -103,10 +108,13 @@ export class ProviderAvailabilityService {
 
   async goOnline(
     userId: string,
-    dto: ProviderLocationDto,
+    dto: ProviderRealtimeLocationDto,
     request: RequestMetadata,
   ) {
     let providerId: string | undefined;
+    let locationPublished = false;
+    const capturedAt = this.parseCapturedAt(dto);
+    const sequence = BigInt(dto.sequence);
     try {
       const result = await this.prisma.$transaction(async (transaction) => {
         providerId = await this.lockProviderByUserId(transaction, userId);
@@ -125,10 +133,24 @@ export class ProviderAvailabilityService {
           data: { endedAt: now, endReason: 'RECONNECTED' },
         });
         const created = await transaction.providerAvailabilitySession.create({
-          data: { providerId: provider.id, lastHeartbeatAt: now },
+          data: {
+            providerId: provider.id,
+            lastHeartbeatAt: now,
+            lastCapturedAt: capturedAt,
+            lastSequence: sequence,
+          },
           select: { id: true, startedAt: true, lastHeartbeatAt: true },
         });
-        await this.locations.upsert(provider.id, dto.latitude, dto.longitude);
+        locationPublished = await this.locations.upsert({
+          providerId: provider.id,
+          sessionId: created.id,
+          latitude: dto.latitude,
+          longitude: dto.longitude,
+          accuracyMeters: dto.accuracyMeters,
+          capturedAtMs: capturedAt.getTime(),
+          sequence: dto.sequence,
+        });
+        if (!locationPublished) throw this.staleLocationException();
         await this.audit.record(
           {
             actorUserId: userId,
@@ -157,70 +179,101 @@ export class ProviderAvailabilityService {
         },
       };
     } catch (error) {
-      if (providerId) {
+      if (providerId && locationPublished) {
         await this.locations.remove(providerId).catch(() => undefined);
       }
       throw error;
     }
   }
 
-  async heartbeat(userId: string, dto: ProviderLocationDto) {
-    let providerId: string | undefined;
-    try {
-      const result = await this.prisma.$transaction(async (transaction) => {
-        providerId = await this.lockProviderByUserId(transaction, userId);
-        const provider = await this.findProvider(userId, transaction);
-        const blocker = this.receivingBlocker(provider);
-        if (blocker) {
-          await transaction.providerAvailabilitySession.updateMany({
-            where: { providerId: provider.id, endedAt: null },
-            data: { endedAt: new Date(), endReason: blocker.code },
-          });
-          return { provider, blocker, lastHeartbeatAt: null };
-        }
-        const activeSession =
+  async heartbeat(userId: string, dto: ProviderRealtimeLocationDto) {
+    const capturedAt = this.parseCapturedAt(dto);
+    const sequence = BigInt(dto.sequence);
+    const result = await this.prisma.$transaction(async (transaction) => {
+      await this.lockProviderByUserId(transaction, userId);
+      const provider = await this.findProvider(userId, transaction);
+      const blocker = this.receivingBlocker(provider);
+      if (blocker) {
+        await transaction.providerAvailabilitySession.updateMany({
+          where: { providerId: provider.id, endedAt: null },
+          data: { endedAt: new Date(), endReason: blocker.code },
+        });
+        return { provider, blocker, lastHeartbeatAt: null };
+      }
+      const activeSession =
+        await transaction.providerAvailabilitySession.findFirst({
+          where: { providerId: provider.id, endedAt: null },
+          select: {
+            id: true,
+            lastCapturedAt: true,
+            lastSequence: true,
+          },
+        });
+      if (!activeSession) {
+        throw new BadRequestException(
+          'Nhà cung cấp chưa bật trạng thái online. Hãy bắt đầu phiên mới.',
+        );
+      }
+      if (
+        activeSession.lastSequence >= sequence ||
+        (activeSession.lastCapturedAt !== null &&
+          activeSession.lastCapturedAt >= capturedAt)
+      ) {
+        throw this.staleLocationException();
+      }
+
+      const heartbeatAt = new Date();
+      const updated = await transaction.providerAvailabilitySession.updateMany({
+        where: {
+          id: activeSession.id,
+          endedAt: null,
+          lastSequence: { lt: sequence },
+          OR: [
+            { lastCapturedAt: null },
+            { lastCapturedAt: { lt: capturedAt } },
+          ],
+        },
+        data: {
+          lastHeartbeatAt: heartbeatAt,
+          lastCapturedAt: capturedAt,
+          lastSequence: sequence,
+        },
+      });
+      if (updated.count !== 1) {
+        const stillActive =
           await transaction.providerAvailabilitySession.findFirst({
-            where: { providerId: provider.id, endedAt: null },
+            where: { id: activeSession.id, endedAt: null },
             select: { id: true },
           });
-        if (!activeSession) {
-          throw new BadRequestException(
-            'Nhà cung cấp chưa bật trạng thái online. Hãy bắt đầu phiên mới.',
-          );
-        }
-
-        const heartbeatAt = new Date();
-        const updated =
-          await transaction.providerAvailabilitySession.updateMany({
-            where: { id: activeSession.id, endedAt: null },
-            data: { lastHeartbeatAt: heartbeatAt },
-          });
-        if (updated.count !== 1) {
-          throw new BadRequestException(
-            'Phiên hoạt động đã kết thúc. Hãy bật lại trạng thái online.',
-          );
-        }
-        await this.locations.upsert(provider.id, dto.latitude, dto.longitude);
-        return { provider, blocker: null, lastHeartbeatAt: heartbeatAt };
+        if (stillActive) throw this.staleLocationException();
+        throw new BadRequestException(
+          'Phiên hoạt động đã kết thúc. Hãy bật lại trạng thái online.',
+        );
+      }
+      const saved = await this.locations.upsert({
+        providerId: provider.id,
+        sessionId: activeSession.id,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        accuracyMeters: dto.accuracyMeters,
+        capturedAtMs: capturedAt.getTime(),
+        sequence: dto.sequence,
       });
-      if (result.blocker) {
-        await this.locations.remove(result.provider.id).catch(() => undefined);
-        throw this.blockerException(result.blocker, result.provider);
-      }
-      return {
-        success: true,
-        data: {
-          online: true,
-          lastHeartbeatAt: result.lastHeartbeatAt,
-          receivingEligibility: this.presentEligibility(result.provider, null),
-        },
-      };
-    } catch (error) {
-      if (providerId) {
-        await this.locations.remove(providerId).catch(() => undefined);
-      }
-      throw error;
+      if (!saved) throw this.staleLocationException();
+      return { provider, blocker: null, lastHeartbeatAt: heartbeatAt };
+    });
+    if (result.blocker) {
+      await this.locations.remove(result.provider.id).catch(() => undefined);
+      throw this.blockerException(result.blocker, result.provider);
     }
+    return {
+      success: true,
+      data: {
+        online: true,
+        lastHeartbeatAt: result.lastHeartbeatAt,
+        receivingEligibility: this.presentEligibility(result.provider, null),
+      },
+    };
   }
 
   async goOffline(userId: string, request: RequestMetadata) {
@@ -275,6 +328,12 @@ export class ProviderAvailabilityService {
   private receivingBlocker(
     provider: AvailabilityProvider,
   ): AvailabilityBlocker | null {
+    if (provider._count.orders > 0)
+      return {
+        code: 'PROVIDER_SAFETY_HOLD',
+        message: 'Có sự cố an toàn đang chờ bộ phận hỗ trợ xử lý.',
+        forbidden: true,
+      };
     if (provider.status === ProviderProfileStatus.SUSPENDED)
       return {
         code: 'PROVIDER_SUSPENDED',
@@ -343,6 +402,31 @@ export class ProviderAvailabilityService {
       availableBalance: availableWalletBalance(provider.wallet),
       minimumBalance: this.minimumReceivingBalance,
     };
+  }
+
+  private parseCapturedAt(dto: ProviderRealtimeLocationDto): Date {
+    const capturedAt = new Date(dto.capturedAt);
+    const capturedAtMs = capturedAt.getTime();
+    const now = Date.now();
+    if (
+      !/(?:Z|[+-]\d{2}:\d{2})$/i.test(dto.capturedAt) ||
+      !Number.isFinite(capturedAtMs) ||
+      capturedAtMs < now - 60_000 ||
+      capturedAtMs > now + 15_000 ||
+      dto.sequence !== capturedAtMs
+    ) {
+      throw new BadRequestException(
+        'GPS quá cũ hoặc metadata thời gian không hợp lệ.',
+      );
+    }
+    return capturedAt;
+  }
+
+  private staleLocationException(): ConflictException {
+    return new ConflictException({
+      code: 'STALE_GPS',
+      message: 'Vị trí cũ đã được bỏ qua; hãy lấy GPS mới.',
+    });
   }
 
   private async lockProviderByUserId(

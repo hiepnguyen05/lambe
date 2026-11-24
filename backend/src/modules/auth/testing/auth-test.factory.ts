@@ -55,6 +55,7 @@ export function createAuthTestContext() {
       deliveryType: 'upload' as const,
     }),
     uploadPrivateImage: jest.fn(),
+    uploadChatImage: jest.fn(),
     publishPrivateImage: jest.fn(),
     createPrivateDownloadUrl: jest.fn(),
     deleteImage: jest.fn().mockResolvedValue(true),

@@ -1,6 +1,11 @@
 import type { NextFunction, Response } from 'express';
 import type { RequestWithId } from '../types/request-with-id.type';
 import { requestIdMiddleware } from './request-id.middleware';
+import {
+  allowsFeedReadFallback,
+  currentRequestId,
+  runWithRequestId,
+} from '../request-context';
 
 describe('requestIdMiddleware', () => {
   const execute = (incomingRequestId?: string) => {
@@ -39,4 +44,57 @@ describe('requestIdMiddleware', () => {
       expect(setHeader).toHaveBeenCalledWith('x-request-id', request.requestId);
     },
   );
+
+  it('keeps concurrent async chains isolated and restores the outside context', async () => {
+    const executeAsync = (id: string, delay: number) =>
+      new Promise<string | undefined>((resolve) => {
+        const request = { get: () => id } as unknown as RequestWithId;
+        const response = { setHeader: jest.fn() } as unknown as Response;
+        requestIdMiddleware(request, response, () => {
+          expect(currentRequestId()).toBe(id);
+          setTimeout(() => resolve(currentRequestId()), delay);
+        });
+      });
+    await expect(
+      Promise.all([executeAsync('first', 15), executeAsync('second', 0)]),
+    ).resolves.toEqual(['first', 'second']);
+    expect(currentRequestId()).toBeUndefined();
+  });
+
+  it('bounds worker contexts and restores a parent context after throwing', () => {
+    runWithRequestId('parent', () => {
+      expect(() =>
+        runWithRequestId('token\nprivate', () => {
+          expect(currentRequestId()).toMatch(/^[0-9a-f-]{36}$/);
+          throw new Error('failure');
+        }),
+      ).toThrow('failure');
+      expect(currentRequestId()).toBe('parent');
+    });
+    expect(currentRequestId()).toBeUndefined();
+  });
+
+  it.each([
+    ['GET', '/api/feed/posts', true],
+    ['GET', '/api/me/feed/posts', true],
+    ['GET', '/api/me/feed/mine', false],
+    ['GET', '/api/internal/feed/cache/status', false],
+    ['POST', '/api/me/feed/posts', false],
+    ['DELETE', '/api/me/feed/posts/123', false],
+    ['GET', '/api/admin/orders', false],
+  ])('limits degradation to public reads: %s %s', (method, path, allowed) => {
+    const request = {
+      get: () => 'id',
+      method,
+      path,
+    } as unknown as RequestWithId;
+    requestIdMiddleware(
+      request,
+      { setHeader: jest.fn() } as unknown as Response,
+      () => {
+        expect(allowsFeedReadFallback()).toBe(allowed);
+      },
+    );
+    expect(allowsFeedReadFallback()).toBe(false);
+  });
 });

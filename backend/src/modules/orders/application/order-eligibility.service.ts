@@ -8,6 +8,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { BookingType, Prisma } from '@prisma/client';
 import {
+  MemberServingService,
+  type MemberOrigin,
+  type MemberServingContext,
+} from '../../provider-members/application/booking/member-serving.service';
+import {
   PROVIDER_LOCATION_STORE,
   type ProviderLocationStore,
 } from '../../../infrastructure/location/provider-location.store';
@@ -27,6 +32,10 @@ import {
 } from '../domain/booking-calendar.policy';
 import { BookingCalendarService } from './scheduling/booking-calendar.service';
 import { hasReceivingBalance } from '../../providers/domain/provider-receiving.policy';
+import {
+  calculateTravelFee,
+  estimateTravelDistanceKm,
+} from '../domain/travel-fee.policy';
 
 export const DEFAULT_COMMISSION_RATE_BPS = 1000;
 const addressSelect = {
@@ -47,6 +56,14 @@ type AddressSnapshot = Prisma.CustomerAddressGetPayload<{
   select: typeof addressSelect;
 }>;
 
+export interface OrderOriginSnapshot {
+  providerId: string;
+  latitude: number;
+  longitude: number;
+  observedAt: number;
+  member?: MemberOrigin;
+}
+
 @Injectable()
 export class OrderEligibilityService {
   private readonly minimumReceivingBalance: number;
@@ -57,6 +74,7 @@ export class OrderEligibilityService {
     private readonly locations: ProviderLocationStore,
     private readonly calendar: BookingCalendarService,
     private readonly config: ConfigService,
+    private readonly members: MemberServingService,
   ) {
     this.minimumReceivingBalance = this.config.get<number>(
       'provider.minReceivingBalanceAmount',
@@ -79,10 +97,11 @@ export class OrderEligibilityService {
     customerId: string,
     dto: Pick<
       OrderQuoteDto,
-      'providerServiceId' | 'customerAddressId' | 'inlineAddress'
+      'providerServiceId' | 'customerAddressId' | 'inlineAddress' | 'memberId'
     >,
     tx: Prisma.TransactionClient = this.prisma,
     snapshotAddress?: AddressSnapshot,
+    allowInactive = false,
   ) {
     if (
       !snapshotAddress &&
@@ -117,11 +136,12 @@ export class OrderEligibilityService {
     const providerService = await tx.providerService.findFirst({
       where: {
         id: dto.providerServiceId,
-        status: 'ACTIVE',
+        status: allowInactive ? { in: ['ACTIVE', 'INACTIVE'] } : 'ACTIVE',
         provider: {
           status: 'ACTIVE',
           setupCompletedAt: { not: null },
           user: { status: 'ACTIVE' },
+          orders: { none: { status: 'SAFETY_HOLD' } },
         },
         service: { status: 'ACTIVE', category: { status: 'ACTIVE' } },
       },
@@ -136,6 +156,17 @@ export class OrderEligibilityService {
       );
     if (providerService.provider.userId === customerId)
       throw new BadRequestException('Không thể tự đặt dịch vụ của mình.');
+    if (
+      providerService.provider.providerType === 'ORGANIZATION' &&
+      !dto.memberId &&
+      !allowInactive
+    )
+      throw new BadRequestException({
+        code: 'MEMBER_REQUIRED',
+        message: 'Hãy chọn nhân viên thực hiện của tổ chức.',
+      });
+    if (providerService.provider.providerType === 'INDIVIDUAL' && dto.memberId)
+      throw new BadRequestException('Đối tác cá nhân không nhận memberId.');
     const durationMinutes =
       providerService.durationMinutes ??
       providerService.service.defaultDurationMinutes ??
@@ -156,15 +187,25 @@ export class OrderEligibilityService {
       commissionAmount: number;
       address: AddressSnapshot;
     },
+    commissionAmountOverride?: number,
+    originSnapshot?: OrderOriginSnapshot,
   ) {
-    const loaded = await this.load(customerId, dto, tx, snapshot?.address);
+    const loaded = await this.load(
+      customerId,
+      dto,
+      tx,
+      snapshot?.address,
+      Boolean(excludeOrderId && snapshot),
+    );
     const { providerService } = loaded;
     const address = snapshot
       ? { ...loaded.address, ...snapshot.address }
       : loaded.address;
     const durationMinutes = snapshot?.durationMinutes ?? loaded.durationMinutes;
     const commissionAmount =
-      snapshot?.commissionAmount ?? loaded.commissionAmount;
+      snapshot?.commissionAmount ??
+      commissionAmountOverride ??
+      loaded.commissionAmount;
     const now = new Date();
     const provider = providerService.provider;
     // Already-created appointments are not subject to the original advance-booking lead time.
@@ -172,7 +213,26 @@ export class OrderEligibilityService {
       excludeOrderId && dto.scheduledAt
         ? new Date(dto.scheduledAt)
         : resolveOrderTime(dto.bookingType, dto.scheduledAt, now);
-    const distanceKm = await this.distance(provider, address, dto.bookingType);
+    const memberContext = dto.memberId
+      ? await this.members.get(
+          dto.memberId,
+          providerService.id,
+          serviceTime,
+          new Date(serviceTime.getTime() + 7 * DAY),
+          tx,
+          new Date(serviceTime.getTime() + durationMinutes * MINUTE),
+        )
+      : null;
+    if (memberContext && memberContext.member.userId === customerId)
+      throw new BadRequestException('Không thể tự đặt lịch cho chính mình.');
+    const { distanceKm, origin } = await this.travel(
+      provider,
+      address,
+      dto.bookingType,
+      memberContext,
+      originSnapshot,
+      tx !== this.prisma ? tx : undefined,
+    );
     if (dto.bookingType === BookingType.ASAP) {
       serviceTime = new Date(
         now.getTime() +
@@ -182,6 +242,20 @@ export class OrderEligibilityService {
             MINUTE,
       );
     }
+    if (memberContext) {
+      const code = this.members.blocker(
+        memberContext,
+        new Date(serviceTime.getTime() + durationMinutes * MINUTE),
+      );
+      if (code)
+        throw new ConflictException({
+          code,
+          message:
+            'Chuyên môn/chứng chỉ không hợp lệ đến hết thời gian thực hiện.',
+        });
+    }
+    const hours = memberContext?.hours ?? provider.workingHours;
+    const resourceId = memberContext?.member.id ?? provider.id;
     const blocks =
       (
         await this.calendar.read(
@@ -191,13 +265,23 @@ export class OrderEligibilityService {
           now,
           tx,
           excludeOrderId,
+          memberContext
+            ? new Map([[memberContext.member.id, provider.id]])
+            : undefined,
         )
-      ).get(provider.id) ?? [];
+      ).get(resourceId) ?? [];
+    if (memberContext)
+      blocks.push(
+        ...memberContext.timeOffs.map((t) => ({
+          startAt: t.startAt,
+          endAt: t.endAt,
+        })),
+      );
     const assessment = assessSlot({
       startAt: serviceTime,
       durationMinutes,
       point: address,
-      hours: provider.workingHours,
+      hours,
       blocks,
       reservationStartAt:
         dto.bookingType === BookingType.ASAP ? now : undefined,
@@ -229,22 +313,28 @@ export class OrderEligibilityService {
           ),
           durationMinutes,
           point: address,
-          hours: provider.workingHours,
+          hours,
           blocks,
           limit: 3,
         });
+    const travelDistanceKm = estimateTravelDistanceKm(distanceKm);
+    const travelFeeAmount = calculateTravelFee(travelDistanceKm);
     return {
       address,
       providerService,
+      memberContext,
       serviceTime,
       durationMinutes,
       commissionAmount,
       reservedStartAt: dto.bookingType === BookingType.ASAP ? now : serviceTime,
       expectedEndAt: new Date(serviceTime.getTime() + durationMinutes * MINUTE),
       distanceKm: Math.round(distanceKm * 10) / 10,
+      travelOrigin: origin,
       servicePriceAmount: providerService.priceAmount,
-      travelFeeAmount: 0,
-      totalAmount: providerService.priceAmount,
+      travelDistanceKm,
+      distanceSource: 'CONSERVATIVE_DISTANCE' as const,
+      travelFeeAmount,
+      totalAmount: providerService.priceAmount + travelFeeAmount,
       commissionRateBps: DEFAULT_COMMISSION_RATE_BPS,
       available,
       reason,
@@ -273,6 +363,34 @@ export class OrderEligibilityService {
       });
   }
 
+  async captureOrigin(
+    dto: Pick<OrderQuoteDto, 'providerServiceId' | 'memberId' | 'bookingType'>,
+  ): Promise<OrderOriginSnapshot | undefined> {
+    if (dto.bookingType !== 'ASAP') return undefined;
+    const offering = await this.prisma.providerService.findUnique({
+      where: { id: dto.providerServiceId },
+      select: { providerId: true },
+    });
+    if (!offering)
+      throw new NotFoundException('Không tìm thấy dịch vụ của thợ.');
+    const member = dto.memberId
+      ? await this.members.capturePosition(dto.memberId)
+      : undefined;
+    const point =
+      member ?? (await this.locations.getPosition(offering.providerId));
+    if (!point)
+      throw new ConflictException({
+        code: 'PROVIDER_OFFLINE',
+        message: 'Thợ chưa bật hoạt động hoặc GPS đã hết hạn.',
+      });
+    return {
+      ...point,
+      providerId: offering.providerId,
+      observedAt: Date.now(),
+      member,
+    };
+  }
+
   async distance(
     provider: {
       id: string;
@@ -283,11 +401,46 @@ export class OrderEligibilityService {
     address: { latitude: number; longitude: number },
     type: BookingType,
   ) {
+    return (await this.travel(provider, address, type)).distanceKm;
+  }
+
+  private async travel(
+    provider: {
+      id: string;
+      serviceRadiusKm: number | null;
+      serviceAreaLatitude: number | null;
+      serviceAreaLongitude: number | null;
+    },
+    address: { latitude: number; longitude: number },
+    type: BookingType,
+    memberContext?: MemberServingContext | null,
+    snapshot?: OrderOriginSnapshot,
+    transaction?: Prisma.TransactionClient,
+  ) {
     if (provider.serviceRadiusKm === null)
       throw new BadRequestException('Thợ chưa cấu hình bán kính nhận đơn.');
+    if (type === 'ASAP' && transaction && !snapshot)
+      throw new ConflictException('Cần lấy vị trí trước khi khóa lịch.');
+    if (
+      snapshot &&
+      (snapshot.providerId !== provider.id ||
+        snapshot.observedAt < Date.now() - 30_000 ||
+        (memberContext &&
+          snapshot.member?.memberId !== memberContext.member.id))
+    )
+      throw new ConflictException('Vị trí không còn khớp người thực hiện.');
+    if (snapshot?.member && memberContext)
+      await this.members.assertOrigin(
+        transaction ?? this.prisma,
+        memberContext,
+        snapshot.member,
+      );
     const origin =
       type === BookingType.ASAP
-        ? await this.locations.getPosition(provider.id)
+        ? (snapshot ??
+          (memberContext
+            ? await this.members.capturePosition(memberContext.member.id)
+            : await this.locations.getPosition(provider.id)))
         : provider.serviceAreaLatitude !== null &&
             provider.serviceAreaLongitude !== null
           ? {
@@ -304,11 +457,14 @@ export class OrderEligibilityService {
         message: 'Thợ chưa sẵn sàng nhận đơn theo hình thức này.',
       });
     const distance = calculateDistanceKm(origin, address);
-    if (distance > provider.serviceRadiusKm)
+    if (distance > (memberContext?.radiusKm ?? provider.serviceRadiusKm))
       throw new ConflictException({
         code: 'OUTSIDE_PROVIDER_RADIUS',
         message: 'Địa chỉ nằm ngoài bán kính nhận đơn do thợ cấu hình.',
       });
-    return distance;
+    return {
+      distanceKm: distance,
+      origin: { latitude: origin.latitude, longitude: origin.longitude },
+    };
   }
 }

@@ -10,7 +10,7 @@ import {
 import {
   assertProviderAdult,
   parseProviderBirthDate,
-} from './provider-birth-date.policy';
+} from '../../../common/validation/provider-birth-date.policy';
 import { assertProviderServiceEligible } from './provider-service-eligibility.policy';
 import {
   assertProviderSectionReviewAllowed,

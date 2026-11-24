@@ -1,0 +1,20 @@
+[
+  {
+    "suite": "e2e",
+    "exitCode": 0,
+    "passed": 81,
+    "failed": 0
+  },
+  {
+    "suite": "ai-consultation",
+    "exitCode": 1,
+    "passed": 22,
+    "failed": 3
+  },
+  {
+    "suite": "feed-cache",
+    "exitCode": 0,
+    "passed": 14,
+    "failed": 0
+  }
+]

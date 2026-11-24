@@ -9,9 +9,9 @@ import { AuditService } from '../../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../../infrastructure/persistence/postgres/prisma.service';
 import type { UpdateCategoryDto } from '../dto/update-category.dto';
 import {
-  normalizeCategoryName,
-  trimOptionalCategoryField,
-} from '../domain/category-normalizer';
+  normalizeName as normalizeCategoryName,
+  trimOptionalField as trimOptionalCategoryField,
+} from '../../../common/utils/text-normalizer';
 import {
   adminCategorySelect,
   toCategoryAuditSnapshot,

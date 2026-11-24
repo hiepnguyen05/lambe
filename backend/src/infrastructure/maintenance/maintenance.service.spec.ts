@@ -7,7 +7,9 @@ describe('MaintenanceService', () => {
   let prisma: jest.Mocked<PrismaService>;
   let queryLock: jest.Mock;
   let deleteSessions: jest.Mock;
+  let deleteSetupTokens: jest.Mock;
   let deleteUserSessions: jest.Mock;
+  let deletePushRows: jest.Mock;
   let closeProviderSessions: jest.Mock;
   let expireOrders: jest.Mock;
   let createOrderHistory: jest.Mock;
@@ -18,7 +20,9 @@ describe('MaintenanceService', () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-09-25T03:00:00.000Z'));
     queryLock = jest.fn().mockResolvedValue([{ acquired: true }]);
     deleteSessions = jest.fn().mockResolvedValue({ count: 2 });
+    deleteSetupTokens = jest.fn().mockResolvedValue({ count: 1 });
     deleteUserSessions = jest.fn().mockResolvedValue({ count: 3 });
+    deletePushRows = jest.fn().mockResolvedValue({ count: 4 });
     closeProviderSessions = jest.fn().mockResolvedValue({ count: 0 });
     expireOrders = jest.fn().mockResolvedValue({ count: 0 });
     createOrderHistory = jest.fn().mockResolvedValue({ count: 0 });
@@ -27,7 +31,9 @@ describe('MaintenanceService', () => {
     const transaction = {
       $queryRaw: queryLock,
       internalSession: { deleteMany: deleteSessions },
+      internalSetupToken: { deleteMany: deleteSetupTokens },
       userSession: { deleteMany: deleteUserSessions },
+      pushOutbox: { deleteMany: deletePushRows },
       serviceOrder: {
         updateMany: expireOrders,
         findMany: jest.fn().mockResolvedValue([
@@ -47,6 +53,9 @@ describe('MaintenanceService', () => {
         createMany: createOrderNotifications,
       },
       providerCalendarBlock: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      voucherRedemption: {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       orderStatusHistory: { createMany: createOrderHistory },
@@ -76,6 +85,14 @@ describe('MaintenanceService', () => {
     await service.cleanupExpiredRecords();
 
     expect(queryLock).toHaveBeenCalledTimes(1);
+    expect(deleteSetupTokens).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { expiresAt: { lt: new Date('2026-09-25T03:00:00.000Z') } },
+          { consumedAt: { lt: new Date('2026-09-18T03:00:00.000Z') } },
+        ],
+      },
+    });
     expect(deleteSessions).toHaveBeenCalledWith({
       where: {
         OR: [
@@ -90,6 +107,12 @@ describe('MaintenanceService', () => {
           { expiresAt: { lt: new Date('2026-09-25T03:00:00.000Z') } },
           { revokedAt: { lt: new Date('2026-09-18T03:00:00.000Z') } },
         ],
+      },
+    });
+    expect(deletePushRows).toHaveBeenCalledWith({
+      where: {
+        createdAt: { lt: new Date('2026-08-26T03:00:00.000Z') },
+        OR: [{ sentAt: { not: null } }, { failedAt: { not: null } }],
       },
     });
   });

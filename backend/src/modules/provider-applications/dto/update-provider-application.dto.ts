@@ -14,7 +14,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { trimOptionalString } from './provider-transformers';
+import { trimOptionalString } from '../../../common/validation/string-transformers';
 
 export class UpdateProviderApplicationDto {
   @ApiPropertyOptional({ example: 'Nguyen Van A' })

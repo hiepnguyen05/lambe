@@ -67,7 +67,11 @@ export class JwtAuthGuard implements CanActivate {
         throw new UnauthorizedException('Tài khoản hiện không hoạt động.');
       }
 
-      request.user = { userId: payload.sub, phone: payload.phone };
+      request.user = {
+        userId: payload.sub,
+        phone: payload.phone,
+        sessionId: payload.sessionId,
+      };
       return true;
     } catch {
       throw new UnauthorizedException(

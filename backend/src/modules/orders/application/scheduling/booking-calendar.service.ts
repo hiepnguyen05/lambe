@@ -1,6 +1,7 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { Prisma, ServiceOrderStatus } from '@prisma/client';
 import { PrismaService } from '../../../../infrastructure/persistence/postgres/prisma.service';
+import { lockBookingResource } from '../persistence/booking-resource.lock';
 import {
   DAY,
   MINUTE,
@@ -12,11 +13,13 @@ const executingStatuses: ServiceOrderStatus[] = [
   'EN_ROUTE',
   'ARRIVED',
   'IN_PROGRESS',
+  'SAFETY_HOLD',
 ];
 const blockSelect = {
   id: true,
   orderId: true,
   providerId: true,
+  memberId: true,
   startAt: true,
   endAt: true,
   addressLatitude: true,
@@ -30,10 +33,12 @@ const blockSelect = {
 export class BookingCalendarService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async lockProvider(tx: Prisma.TransactionClient, providerId: string) {
-    await tx.$queryRaw(
-      Prisma.sql`SELECT "id" FROM "provider_profiles" WHERE "id" = ${providerId} FOR UPDATE`,
-    );
+  async lockProvider(
+    tx: Prisma.TransactionClient,
+    providerId: string,
+    memberId?: string | null,
+  ) {
+    await lockBookingResource(tx, providerId, memberId);
   }
 
   async releaseExpired(
@@ -44,7 +49,7 @@ export class BookingCalendarService {
     const expired = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT "id" FROM "service_orders" WHERE "providerId" = ${providerId}
         AND "status" = 'PENDING_PROVIDER' AND "providerResponseDeadlineAt" <= ${now}
-      FOR UPDATE`);
+      ORDER BY "id" FOR UPDATE`);
     if (!expired.length) return;
     const ids = expired.map((order) => order.id);
     await tx.serviceOrder.updateMany({
@@ -54,6 +59,10 @@ export class BookingCalendarService {
     await tx.providerCalendarBlock.updateMany({
       where: { orderId: { in: ids }, active: true },
       data: { active: false },
+    });
+    await tx.voucherRedemption.updateMany({
+      where: { orderId: { in: ids }, status: 'RESERVED' },
+      data: { status: 'RELEASED' },
     });
     await tx.orderStatusHistory.createMany({
       data: ids.map((orderId) => ({
@@ -83,16 +92,29 @@ export class BookingCalendarService {
     now = new Date(),
     tx: Prisma.TransactionClient = this.prisma,
     excludeOrderId?: string,
+    members?: ReadonlyMap<string, string>,
   ) {
     if (!providerIds.length) return new Map<string, BusyInterval[]>();
     const rows = await tx.providerCalendarBlock.findMany({
       where: {
         providerId: { in: providerIds },
-        active: true,
-        ...(excludeOrderId
-          ? { OR: [{ orderId: null }, { orderId: { not: excludeOrderId } }] }
+        ...(members
+          ? {
+              OR: [
+                { memberId: { in: [...members.keys()] } },
+                { memberId: null },
+              ],
+            }
           : {}),
+        active: true,
         AND: [
+          ...(excludeOrderId
+            ? [
+                {
+                  OR: [{ orderId: null }, { orderId: { not: excludeOrderId } }],
+                },
+              ]
+            : []),
           { OR: [{ holdExpiresAt: null }, { holdExpiresAt: { gt: now } }] },
           {
             OR: [
@@ -142,9 +164,71 @@ export class BookingCalendarService {
             ? { latitude: row.addressLatitude, longitude: row.addressLongitude }
             : undefined,
       };
-      const list = grouped.get(row.providerId) ?? [];
-      list.push(block);
-      grouped.set(row.providerId, list);
+      const keys = members
+        ? row.memberId
+          ? [row.memberId]
+          : [...members]
+              .filter(([, p]) => p === row.providerId)
+              .map(([id]) => id)
+        : [row.providerId];
+      for (const key of keys) {
+        const list = grouped.get(key) ?? [];
+        list.push(block);
+        grouped.set(key, list);
+      }
+    }
+    const proposals = await tx.orderRescheduleRequest.findMany({
+      where: {
+        status: 'PENDING',
+        expiresAt: { gt: now },
+        proposedStartAt: { lt: new Date(end.getTime() + DAY) },
+        proposedEndAt: { gt: new Date(start.getTime() - DAY) },
+        order: {
+          providerId: { in: providerIds },
+          ...(members
+            ? {
+                OR: [
+                  { assignedMemberId: { in: [...members.keys()] } },
+                  { assignedMemberId: null },
+                ],
+              }
+            : {}),
+          status: 'ACCEPTED',
+          ...(excludeOrderId ? { id: { not: excludeOrderId } } : {}),
+        },
+      },
+      select: {
+        proposedStartAt: true,
+        proposedEndAt: true,
+        order: {
+          select: {
+            providerId: true,
+            assignedMemberId: true,
+            addressLatitude: true,
+            addressLongitude: true,
+          },
+        },
+      },
+    });
+    for (const proposal of proposals) {
+      const providerId = proposal.order.providerId;
+      const keys = members
+        ? proposal.order.assignedMemberId
+          ? [proposal.order.assignedMemberId]
+          : [...members].filter(([, p]) => p === providerId).map(([id]) => id)
+        : [providerId];
+      for (const key of keys) {
+        const list = grouped.get(key) ?? [];
+        list.push({
+          startAt: proposal.proposedStartAt,
+          endAt: proposal.proposedEndAt,
+          point: {
+            latitude: proposal.order.addressLatitude,
+            longitude: proposal.order.addressLongitude,
+          },
+        });
+        grouped.set(key, list);
+      }
     }
     return grouped;
   }
@@ -161,6 +245,7 @@ export class BookingCalendarService {
     providerId: string,
     orderId: string,
     expectedStartAt: Date,
+    memberId?: string | null,
   ) {
     if (expectedStartAt.getTime() - Date.now() > 60 * MINUTE) {
       throw new ConflictException({
@@ -171,6 +256,9 @@ export class BookingCalendarService {
     const other = await tx.serviceOrder.findFirst({
       where: {
         providerId,
+        ...(memberId
+          ? { OR: [{ assignedMemberId: memberId }, { assignedMemberId: null }] }
+          : {}),
         id: { not: orderId },
         status: { in: executingStatuses },
       },

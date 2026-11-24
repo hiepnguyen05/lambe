@@ -24,6 +24,15 @@ describe('TransformInterceptor', () => {
     });
   });
 
+  it('does not treat a business success field as a response envelope', async () => {
+    await expect(
+      run({ success: 'pending', data: { id: 'one' } }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: { success: 'pending', data: { id: 'one' } },
+    });
+  });
+
   it('moves legacy top-level response fields into data without losing them', async () => {
     await expect(
       run({

@@ -17,7 +17,7 @@ import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
 import { ProviderAvailabilityService } from '../application/availability/provider-availability.service';
-import { ProviderLocationDto } from '../dto/provider-location.dto';
+import { ProviderRealtimeLocationDto } from '../dto/provider-location.dto';
 
 @ApiTags('Provider Availability')
 @ApiBearerAuth('user-token')
@@ -54,7 +54,7 @@ export class ProviderAvailabilityController {
   )
   goOnline(
     @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: ProviderLocationDto,
+    @Body() dto: ProviderRealtimeLocationDto,
     @CurrentRequestMetadata() request: RequestMetadata,
   ) {
     return this.availability.goOnline(user.userId, dto, request);
@@ -75,7 +75,7 @@ export class ProviderAvailabilityController {
   )
   heartbeat(
     @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: ProviderLocationDto,
+    @Body() dto: ProviderRealtimeLocationDto,
   ) {
     return this.availability.heartbeat(user.userId, dto);
   }

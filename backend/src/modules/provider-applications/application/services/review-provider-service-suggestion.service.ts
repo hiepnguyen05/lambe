@@ -8,6 +8,7 @@ import {
   Prisma,
   ProviderApplicationSection,
   ProviderServiceSuggestionStatus,
+  ProviderType,
   ReviewStatus,
   ServiceCategoryStatus,
   ServiceStatus,
@@ -21,7 +22,7 @@ import {
   rethrowServiceWriteError,
   ServiceUniquenessService,
 } from '../../../services/application/service-uniqueness.service';
-import { normalizeServiceName } from '../../../services/domain/service-normalizer';
+import { normalizeName as normalizeServiceName } from '../../../../common/utils/text-normalizer';
 import { assertValidPriceRange } from '../../../services/domain/service-status.policy';
 import type {
   ApproveProviderServiceSuggestionDto,
@@ -132,6 +133,7 @@ export class ReviewProviderServiceSuggestionService {
           application.experienceYears,
           application.documents,
           false,
+          application.providerType === ProviderType.ORGANIZATION,
         );
         await transaction.providerServiceSuggestion.update({
           where: { id: suggestionId },
@@ -237,6 +239,7 @@ export class ReviewProviderServiceSuggestionService {
       where: { id: applicationId },
       select: {
         status: true,
+        providerType: true,
         experienceYears: true,
         documents: true,
       },

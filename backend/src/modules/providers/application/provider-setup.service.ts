@@ -16,11 +16,11 @@ import { AuditService } from '../../../infrastructure/audit/audit.service';
 import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 import type { ProviderSetupDto } from '../dto/provider-setup.dto';
 import { assertWorkingHoursValid } from '../domain/provider-setup.policy';
-import { lockProviderCatalog } from '../../provider-applications/application/persistence/provider-application-lock';
 
 const providerSetupSelect = {
   id: true,
   providerType: true,
+  acceptingMemberOrders: true,
   displayName: true,
   status: true,
   serviceAreaName: true,
@@ -91,7 +91,14 @@ export class ProviderSetupService {
         throw new NotFoundException('Không tìm thấy hồ sơ nhà cung cấp.');
       if (current.status === ProviderProfileStatus.SUSPENDED)
         throw new ForbiddenException('Nhà cung cấp đang bị đình chỉ.');
-      await lockProviderCatalog(transaction, current.sourceApplicationId);
+      await transaction.$queryRaw(Prisma.sql`
+        SELECT service."id" FROM "services" service
+        JOIN "service_categories" category ON category."id" = service."categoryId"
+        JOIN "provider_services" offering ON offering."serviceId" = service."id"
+        WHERE offering."providerId" = ${current.id}
+          AND offering."id" IN (${Prisma.join(dto.enabledServiceIds)})
+        ORDER BY service."id" FOR SHARE OF service, category
+      `);
       const services = await transaction.providerService.findMany({
         where: { providerId: current.id, id: { in: dto.enabledServiceIds } },
         include: { service: { include: { category: true } } },

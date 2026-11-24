@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { ConfigService } from '@nestjs/config';
 import { createTestApp, type TestAppContext } from './support/create-test-app';
 
 describe('Application validation (e2e)', () => {
@@ -13,6 +14,11 @@ describe('Application validation (e2e)', () => {
   });
 
   it('/api/health reports PostgreSQL and cache status', () => {
+    const expectedCache = context.app
+      .get(ConfigService)
+      .get<boolean>('cache.enabled')
+      ? 'up'
+      : 'disabled';
     return request(context.app.getHttpServer())
       .get('/api/health')
       .set('x-request-id', 'e2e-request-id')
@@ -23,7 +29,7 @@ describe('Application validation (e2e)', () => {
           success: true,
           data: {
             status: 'ok',
-            services: { database: 'up', cache: 'disabled' },
+            services: { database: 'up', cache: expectedCache },
           },
         });
       });

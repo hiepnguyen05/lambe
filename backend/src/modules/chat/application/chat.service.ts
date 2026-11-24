@@ -17,16 +17,28 @@ import {
   ServiceStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/persistence/postgres/prisma.service';
+import { RedisCacheService } from '../../../infrastructure/cache/redis-cache.service';
+import { PushOutboxService } from '../../push/application/push-outbox.service';
 import type { SendChatMessageDto, StartChatDto } from '../dto/chat.dto';
 import {
   findAccessibleChat,
   lockChat,
+  lockAccessibleChat,
+  assertChatOpen,
+  chatRecipients,
+  ensureChatConversation,
   presentChatMessage,
 } from './chat.helpers';
+import { OrderChatService } from './order-chat.service';
 
 @Injectable()
 export class ChatService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: RedisCacheService,
+    private readonly push: PushOutboxService,
+    private readonly orderChats: OrderChatService,
+  ) {}
 
   async start(customerId: string, dto: StartChatDto) {
     const provider = await this.prisma.providerProfile.findFirst({
@@ -45,20 +57,28 @@ export class ChatService {
     });
     if (!customerRole)
       throw new ForbiddenException('Tài khoản không có quyền khách hàng.');
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw(
         Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${`chat-start:${customerId}`}, 0))::text AS locked`,
       );
       const existing = await tx.chatConversation.findUnique({
         where: {
-          customerId_providerId: { customerId, providerId: provider.id },
+          customerId_providerId_scopeKey: {
+            customerId,
+            providerId: provider.id,
+            scopeKey: 'CONSULTATION',
+          },
         },
         select: { id: true },
       });
       if (!existing) {
         const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const recent = await tx.chatConversation.count({
-          where: { customerId, createdAt: { gte: since } },
+          where: {
+            customerId,
+            bookingOrderId: null,
+            createdAt: { gte: since },
+          },
         });
         if (recent >= 10)
           throw new HttpException(
@@ -66,7 +86,7 @@ export class ChatService {
             HttpStatus.TOO_MANY_REQUESTS,
           );
       }
-      const { conversation, created } = await this.ensureConversation(
+      const { conversation, created } = await ensureChatConversation(
         tx,
         customerId,
         provider.id,
@@ -91,14 +111,15 @@ export class ChatService {
         message: presentChatMessage(message),
       };
     });
+    void this.cache.publishChatUpdate(result.conversationId);
+    return result;
   }
 
   async send(userId: string, conversationId: string, dto: SendChatMessageDto) {
     const payload = this.validateMessage(dto);
-    return this.prisma.$transaction(async (tx) => {
-      await findAccessibleChat(tx, conversationId, userId);
-      await lockChat(tx, conversationId);
-      const conversation = await findAccessibleChat(tx, conversationId, userId);
+    const result = await this.prisma.$transaction(async (tx) => {
+      const conversation = await lockAccessibleChat(tx, conversationId, userId);
+      assertChatOpen(conversation);
       await this.assertProviderActive(tx, conversation.providerId);
       await this.assertUnblocked(tx, conversationId);
       if (userId === conversation.provider.userId) {
@@ -113,6 +134,12 @@ export class ChatService {
       );
       return { conversationId, message: presentChatMessage(message) };
     });
+    void this.cache.publishChatUpdate(conversationId);
+    return result;
+  }
+
+  notifyOrderAttached(conversationId: string): void {
+    void this.cache.publishChatUpdate(conversationId);
   }
 
   async attachOrder(
@@ -123,57 +150,7 @@ export class ChatService {
       providerId: string;
     },
   ): Promise<string> {
-    const provider = await tx.providerProfile.findUniqueOrThrow({
-      where: { id: order.providerId },
-      select: { userId: true },
-    });
-    const { conversation } = await this.ensureConversation(
-      tx,
-      order.customerId,
-      order.providerId,
-      provider.userId,
-    );
-    await lockChat(tx, conversation.id);
-    await tx.serviceOrder.update({
-      where: { id: order.id },
-      data: { conversationId: conversation.id },
-    });
-    const eventKey = `order:${order.id}:created`;
-    const exists = await tx.chatMessage.findUnique({
-      where: { eventKey },
-      select: { id: true },
-    });
-    if (!exists) {
-      const fresh = await tx.chatConversation.findUniqueOrThrow({
-        where: { id: conversation.id },
-        select: { lastSequence: true },
-      });
-      const seq = fresh.lastSequence + 1;
-      await tx.chatMessage.create({
-        data: {
-          conversationId: conversation.id,
-          sequence: seq,
-          kind: ChatMessageKind.ORDER_EVENT,
-          orderId: order.id,
-          eventKey,
-          payload: { event: 'ORDER_REQUESTED' },
-        },
-      });
-      await tx.chatConversation.update({
-        where: { id: conversation.id },
-        data: { lastSequence: seq, lastMessageAt: new Date() },
-      });
-      await tx.chatParticipantState.update({
-        where: {
-          conversationId_userId: {
-            conversationId: conversation.id,
-            userId: order.customerId,
-          },
-        },
-        data: { lastReadSequence: seq },
-      });
-    }
-    return conversation.id;
+    return this.orderChats.attach(tx, order);
   }
 
   private async assertProviderActive(tx: Prisma.TransactionClient, id: string) {
@@ -186,29 +163,6 @@ export class ChatService {
       select: { id: true },
     });
     if (!active) throw new ForbiddenException('Hồ sơ thợ không còn hoạt động.');
-  }
-
-  private async ensureConversation(
-    tx: Prisma.TransactionClient,
-    customerId: string,
-    providerId: string,
-    providerUserId: string,
-  ) {
-    const inserted = await tx.chatConversation.createMany({
-      data: [{ customerId, providerId }],
-      skipDuplicates: true,
-    });
-    const conversation = await tx.chatConversation.findUniqueOrThrow({
-      where: { customerId_providerId: { customerId, providerId } },
-    });
-    await tx.chatParticipantState.createMany({
-      data: [
-        { conversationId: conversation.id, userId: customerId },
-        { conversationId: conversation.id, userId: providerUserId },
-      ],
-      skipDuplicates: true,
-    });
-    return { conversation, created: inserted.count === 1 };
   }
 
   private async assertUnblocked(tx: Prisma.TransactionClient, id: string) {
@@ -293,10 +247,7 @@ export class ChatService {
         durationMinutes: service.durationMinutes,
       };
     }
-    const current = await tx.chatConversation.findUniqueOrThrow({
-      where: { id: conversationId },
-      select: { lastSequence: true },
-    });
+    const current = await findAccessibleChat(tx, conversationId, userId);
     const seq = current.lastSequence + 1;
     const message = await tx.chatMessage.create({
       data: {
@@ -319,6 +270,14 @@ export class ChatService {
       where: { conversationId_userId: { conversationId, userId } },
       data: { lastReadSequence: seq },
     });
+    for (const recipient of chatRecipients(current, userId))
+      await this.push.enqueue(tx, {
+        ...recipient,
+        sourceId: message.id,
+        event: 'CHAT_MESSAGE',
+        entityType: 'CHAT',
+        entityId: conversationId,
+      });
     return message;
   }
 }

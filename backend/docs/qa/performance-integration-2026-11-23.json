@@ -1,0 +1,90 @@
+[
+    {
+        "suite":  "booking",
+        "exitCode":  0,
+        "passed":  36,
+        "failed":  0,
+        "pending":  0,
+        "durationSeconds":  14.0071218
+    },
+    {
+        "suite":  "e2e",
+        "exitCode":  1,
+        "passed":  78,
+        "failed":  2,
+        "pending":  0,
+        "durationSeconds":  20.3864534
+    },
+    {
+        "suite":  "ai-consultation",
+        "exitCode":  1,
+        "passed":  22,
+        "failed":  3,
+        "pending":  0,
+        "durationSeconds":  8.5675968
+    },
+    {
+        "suite":  "organization-booking",
+        "exitCode":  0,
+        "passed":  21,
+        "failed":  0,
+        "pending":  0,
+        "durationSeconds":  14.411209999999999
+    },
+    {
+        "suite":  "feed-cache",
+        "exitCode":  1,
+        "passed":  0,
+        "failed":  14,
+        "pending":  0,
+        "durationSeconds":  1.989574
+    },
+    {
+        "suite":  "organization-chat",
+        "exitCode":  0,
+        "passed":  13,
+        "failed":  0,
+        "pending":  0,
+        "durationSeconds":  10.380920399999999
+    },
+    {
+        "suite":  "organization-feed",
+        "exitCode":  0,
+        "passed":  28,
+        "failed":  0,
+        "pending":  0,
+        "durationSeconds":  13.0454718
+    },
+    {
+        "suite":  "organization-finance",
+        "exitCode":  0,
+        "passed":  18,
+        "failed":  0,
+        "pending":  0,
+        "durationSeconds":  8.8649557
+    },
+    {
+        "suite":  "organization-reviews",
+        "exitCode":  0,
+        "passed":  19,
+        "failed":  0,
+        "pending":  0,
+        "durationSeconds":  8.9766640999999989
+    },
+    {
+        "suite":  "provider-members",
+        "exitCode":  0,
+        "passed":  75,
+        "failed":  0,
+        "pending":  0,
+        "durationSeconds":  15.269270899999999
+    },
+    {
+        "suite":  "provider-notifications",
+        "exitCode":  0,
+        "passed":  18,
+        "failed":  0,
+        "pending":  0,
+        "durationSeconds":  10.859763599999999
+    }
+]

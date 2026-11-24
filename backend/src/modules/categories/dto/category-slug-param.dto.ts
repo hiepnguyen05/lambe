@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
-import { normalizeCategorySlug } from './category-transformers';
+import { normalizeSlug as normalizeCategorySlug } from '../../../common/validation/string-transformers';
 
 export class CategorySlugParamDto {
   @ApiProperty({ example: 'toc' })

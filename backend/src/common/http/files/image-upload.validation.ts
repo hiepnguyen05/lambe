@@ -4,11 +4,11 @@ import 'multer';
 export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
 export class ImageContentValidator extends FileValidator<
-  Record<string, never>,
+  { allowSvg: boolean },
   Express.Multer.File
 > {
-  constructor() {
-    super({});
+  constructor(options: { allowSvg?: boolean } = {}) {
+    super({ allowSvg: options.allowSvg ?? true });
   }
 
   isValid(
@@ -37,18 +37,44 @@ export class ImageContentValidator extends FileValidator<
       buffer.length >= 12 &&
       buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
       buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+    const isSvg = (() => {
+      if (buffer.length < 10) return false;
+      const sample = buffer
+        .subarray(0, Math.min(buffer.length, 1024))
+        .toString('utf8')
+        .trim()
+        .toLowerCase();
+      if (!sample.includes('<svg') && !sample.startsWith('<?xml')) return false;
+      const fullText = buffer.toString('utf8').toLowerCase();
+      if (
+        fullText.includes('<script') ||
+        fullText.includes('javascript:') ||
+        /on[a-z]+\s*=/i.test(fullText)
+      ) {
+        return false;
+      }
+      return fullText.includes('</svg>');
+    })();
 
-    return isJpeg || isPng || isGif || isWebp;
+    return (
+      isJpeg ||
+      isPng ||
+      isGif ||
+      isWebp ||
+      (this.validationOptions.allowSvg && isSvg)
+    );
   }
 
   buildErrorMessage(): string {
-    return 'Nội dung file phải là ảnh JPEG, PNG, WEBP hoặc GIF hợp lệ.';
+    return this.validationOptions.allowSvg
+      ? 'Nội dung file phải là ảnh JPEG, PNG, WEBP, GIF hoặc SVG hợp lệ.'
+      : 'Giấy tờ phải là ảnh JPEG, PNG, WEBP hoặc GIF hợp lệ.';
   }
 }
 
-export function createImageUploadPipe() {
+export function createImageUploadPipe(options: { allowSvg?: boolean } = {}) {
   return new ParseFilePipeBuilder()
     .addMaxSizeValidator({ maxSize: MAX_IMAGE_SIZE_BYTES })
-    .addValidator(new ImageContentValidator())
+    .addValidator(new ImageContentValidator(options))
     .build({ fileIsRequired: true });
 }

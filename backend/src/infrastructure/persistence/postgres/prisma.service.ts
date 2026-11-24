@@ -4,31 +4,42 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService
-  extends PrismaClient
+  extends PrismaClient<Prisma.PrismaClientOptions, 'query'>
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(PrismaService.name);
+
+  constructor(
+    options: Prisma.PrismaClientOptions = {},
+    observeQuery?: (durationMs: number) => void,
+  ) {
+    super({
+      ...options,
+      ...(observeQuery && {
+        log: [...(options.log ?? []), { emit: 'event', level: 'query' }],
+      }),
+      transactionOptions: {
+        maxWait: 10000,
+        timeout: 15000,
+        ...options.transactionOptions,
+      },
+    });
+    if (observeQuery) {
+      this.$on('query', ({ duration }) => observeQuery(duration));
+    }
+  }
 
   async onModuleInit() {
     try {
       await this.$connect();
 
-      const host = process.env.DB_HOST || 'localhost';
-      const port = process.env.DB_PORT || '5432';
-      const database = process.env.DB_NAME || 'unknown';
-
-      this.logger.log(
-        `Database connected successfully: ${database} at ${host}:${port}`,
-      );
+      this.logger.log({ event: 'postgres.connected' });
     } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown database error';
-
-      this.logger.error(`Database connection failed: ${message}`);
+      this.logger.error({ event: 'postgres.connection_failed' });
       throw error;
     }
   }

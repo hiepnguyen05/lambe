@@ -1,0 +1,9 @@
+# Theo doi hanh trinh tho
+
+- Trong Docker, chay `powershell -File scripts/prepare-routing.ps1` tai thu muc `backend/` mot lan de tai du lieu OSM Viet Nam va tao graph OSRM. Can khoang 315 MB de tai va nhieu GB dung luong cho graph; buoc xu ly co the mat thoi gian.
+- Sau khi chuan bi xong, chay `docker compose --profile routing up -d --build`. OSRM chi nam tren mang Docker, khong mo cong ra Internet. Khong duoc dung OSRM demo cong khai cho production.
+- Tho chi gui `PUT /api/me/provider/orders/:id/location` khi don dang `EN_ROUTE`, voi `latitude`, `longitude`, `accuracyMeters` (0-100), `capturedAt` ISO-8601 va `headingDegrees` tuy chon. Token phai thuoc dung tho cua don. Vị trí cũ trên 30 giây bị từ chối; Redis giữ bản mới nhất trong 120 giây, nhưng API chỉ coi vị trí còn mới trong 20 giây.
+- Khach so huu don xem `GET /api/me/orders/:id/tracking` hoac mo `GET /api/me/orders/:id/tracking/events` (SSE). GPS duoc day qua Redis Pub/Sub den SSE ngay khi luu, khong phai cho chu ky poll; kiem tra trang thai don moi 3 giay. SSE dong sau 30 giay; client ket noi lai de kiem tra token/session. Khi don khong con `EN_ROUTE`, API tra `INACTIVE`, khong lo toa do cu.
+- Payload snapshot: `status` = `LIVE`, `WAITING_FOR_LOCATION` hoac `INACTIVE`; `position` la GPS that (co `capturedAt`), `route.coordinates` la mang GeoJSON `[longitude, latitude]`; `durationSeconds` chi la thoi gian di chuyen uoc luong, khong phai cam ket.
+- OSRM loi hoac chua duoc khoi dong: van hien vi tri thợ, nhung `route=null`; khong ve duong chim bay. Tuyến đường không được dùng để tính lại phí di chuyển/giá đơn hiện tại.
+- Mobile hiện gửi GPS khi tiến trình app còn hoạt động, kể cả khi chuyển màn hình. Để bảo đảm theo dõi khi app chuyển hẳn xuống nền trên Android/iOS cần một giai đoạn cấp quyền nền, thông báo foreground và kiểm thử trên thiết bị thật. Đóng cưỡng bức app luôn có thể làm mất vị trí; giao diện khách sẽ báo vị trí không còn mới.

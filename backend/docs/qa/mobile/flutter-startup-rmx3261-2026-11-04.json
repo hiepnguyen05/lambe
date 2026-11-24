@@ -1,0 +1,13 @@
+{
+  "date": "2026-11-04",
+  "device": "realme RMX3261",
+  "androidApi": 30,
+  "buildMode": "profile",
+  "abi": "arm64-v8a",
+  "source": "flutter run --profile --trace-startup",
+  "apkSha256": "1BD2791A9E923F7F2F04CFC32EAFDC8D168F9B05DCD2DC0B45FCE98FC26055A3",
+  "timeToFrameworkInitMicros": 518669,
+  "timeToFirstFrameMicros": 1073602,
+  "timeToFirstFrameRasterizedMicros": 1089268,
+  "limitation": "One instrumented startup; not P95 or time to interactive."
+}

@@ -12,23 +12,51 @@ import { PrismaService } from '../../infrastructure/persistence/postgres/prisma.
 
 @Injectable()
 export class HealthService {
+  private databaseResult?: { up: boolean; expiresAt: number };
+  private databaseProbe?: Promise<boolean>;
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_STORE) private readonly cache: CacheStore,
   ) {}
 
+  private checkDatabase(): Promise<boolean> {
+    if (this.databaseResult && this.databaseResult.expiresAt > Date.now()) {
+      return Promise.resolve(this.databaseResult.up);
+    }
+    if (this.databaseProbe) return this.databaseProbe;
+    let timer: ReturnType<typeof setTimeout>;
+    const query = Promise.resolve()
+      .then(() => this.prisma.$queryRaw(Prisma.sql`SELECT 1`))
+      .then(
+        () => true,
+        () => false,
+      )
+      .then((up) => {
+        clearTimeout(timer);
+        this.databaseResult = { up, expiresAt: Date.now() + 1_000 };
+        this.databaseProbe = undefined;
+        return up;
+      });
+    const deadline = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), 1_000);
+    });
+    // A timed-out query is not cancelled: retain its shared result until it settles.
+    // New health requests must never launch more pings while that query is running.
+    this.databaseProbe = Promise.race([query, deadline]);
+    return this.databaseProbe;
+  }
+
   async check() {
-    try {
-      await this.prisma.$queryRaw(Prisma.sql`SELECT 1`);
-    } catch {
+    const databaseUp = await this.checkDatabase();
+    const cache = this.cache.getStatus();
+    if (!databaseUp) {
       throw new ServiceUnavailableException({
         success: false,
         status: 'unavailable',
-        services: { database: 'down', cache: this.cache.getStatus() },
+        services: { database: 'down', cache },
       });
     }
 
-    const cache = this.cache.getStatus();
     return {
       status: cache === 'down' ? 'degraded' : 'ok',
       services: { database: 'up', cache },

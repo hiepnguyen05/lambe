@@ -1,8 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { Prisma, type MailOutbox } from '@prisma/client';
+import { InternalRole, Prisma, type MailOutbox } from '@prisma/client';
 import { PrismaService } from '../persistence/postgres/prisma.service';
-import { MailService, type SendMailInput } from './mail.service';
+import {
+  MailService,
+  type SendMailInput,
+  smtpErrorDetails,
+} from './mail.service';
 
 const MAX_ATTEMPTS = 8;
 
@@ -41,9 +45,7 @@ export class MailOutboxService {
     if (this.processing) return;
     if (!this.mail.isEnabled()) {
       if (source !== 'scheduled') {
-        this.logger.warn(
-          `Mail delivery skipped from ${source}: SMTP disabled.`,
-        );
+        this.logger.warn('mail.outbox.skipped_disabled');
       }
       return;
     }
@@ -73,15 +75,14 @@ export class MailOutboxService {
           FROM candidate WHERE mail."id" = candidate."id" RETURNING mail.*
         `);
         if (!rows.length) break;
-        this.logger.log(
-          `Mail outbox ${rows[0].id}: delivering to ${rows[0].recipient}.`,
-        );
+        this.logger.log('mail.outbox.delivering');
         await this.deliver(rows[0]);
       }
     } catch (error: unknown) {
-      this.logger.error(
-        `Mail outbox processing failed from ${source}; pending messages will be retried. ${this.describeError(error)}`,
-      );
+      this.logger.error({
+        event: 'mail.outbox.processing_failed',
+        ...smtpErrorDetails(error),
+      });
     } finally {
       this.processing = false;
     }
@@ -95,6 +96,69 @@ export class MailOutboxService {
       lockedUntil: message.lockedUntil,
     };
     try {
+      if (
+        message.deduplicationKey.startsWith('order-alert:') ||
+        message.deduplicationKey.startsWith('feed-cache-alert:')
+      ) {
+        const accountId = message.deduplicationKey.split(':').at(-1);
+        const account = await this.prisma.internalAccount.findFirst({
+          where: {
+            id: accountId,
+            email: message.recipient,
+            status: 'ACTIVE',
+            roles: {
+              some: {
+                role: { in: [InternalRole.ADMIN, InternalRole.SUPPORT] },
+                revokedAt: null,
+              },
+            },
+          },
+          select: { id: true },
+        });
+        if (!account) {
+          await this.prisma.mailOutbox.updateMany({
+            where: lease,
+            data: {
+              failedAt: new Date(),
+              lockedUntil: null,
+              text: '',
+              html: '',
+            },
+          });
+          return;
+        }
+      }
+      if (message.deduplicationKey.startsWith('feed-notice:')) {
+        const notice = await this.prisma.feedNotice.findFirst({
+          where: {
+            id: message.deduplicationKey.slice('feed-notice:'.length),
+            managed: true,
+            user: { status: 'ACTIVE' },
+            post: {
+              provider: {
+                user: { status: 'ACTIVE' },
+                sourceApplication: { email: message.recipient },
+              },
+            },
+          },
+          select: {
+            userId: true,
+            post: { select: { provider: { select: { userId: true } } } },
+          },
+        });
+        if (!notice || notice.userId !== notice.post.provider.userId) {
+          await this.prisma.mailOutbox.updateMany({
+            where: lease,
+            data: {
+              failedAt: new Date(),
+              lockedUntil: null,
+              text: '',
+              html: '',
+            },
+          });
+          return;
+        }
+      }
       await this.mail.send({
         to: message.recipient,
         subject: message.subject,
@@ -105,9 +169,7 @@ export class MailOutboxService {
         where: lease,
         data: { sentAt: new Date(), lockedUntil: null, text: '', html: '' },
       });
-      this.logger.log(
-        `Mail outbox ${message.id}: delivered to ${message.recipient}.`,
-      );
+      this.logger.log('mail.outbox.delivered');
     } catch (error: unknown) {
       const failed = message.attempts >= MAX_ATTEMPTS;
       await this.prisma.mailOutbox.updateMany({
@@ -121,23 +183,12 @@ export class MailOutboxService {
           ),
         },
       });
-      this.logger.warn(
-        `Mail outbox ${message.id}: ${failed ? 'delivery exhausted' : 'retry scheduled'}. ${this.describeError(error)}`,
-      );
+      this.logger.warn({
+        event: failed
+          ? 'mail.outbox.delivery_exhausted'
+          : 'mail.outbox.retry_scheduled',
+        ...smtpErrorDetails(error),
+      });
     }
-  }
-
-  private describeError(error: unknown): string {
-    if (!error || typeof error !== 'object') return 'reason=unknown';
-    const record = error as Record<string, unknown>;
-    const details = ['code', 'command', 'responseCode']
-      .map((key) => {
-        const value = record[key];
-        return typeof value === 'string' || typeof value === 'number'
-          ? `${key}=${value}`
-          : null;
-      })
-      .filter(Boolean);
-    return details.length ? details.join(' ') : 'reason=unknown';
   }
 }

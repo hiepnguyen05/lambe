@@ -46,6 +46,7 @@ describe('booking eligibility', () => {
               key === 'provider.minReceivingBalanceAmount' ? 50_000 : fallback,
             ),
         } as never,
+        {} as never,
       ),
       provider,
       prisma,
@@ -69,6 +70,23 @@ describe('booking eligibility', () => {
     locations.getPosition.mockResolvedValue(null);
     expect((await service.prepare('customer', dto)).available).toBe(true);
     expect(locations.getPosition).not.toHaveBeenCalled();
+  });
+  it('allows an inactive offering only when rechecking an existing order', async () => {
+    const { service, prisma } = context();
+    await service.prepare('customer', dto, undefined, 'existing-order', {
+      durationMinutes: 60,
+      commissionAmount: 10000,
+      address: {
+        id: 'address',
+        latitude: point.latitude,
+        longitude: point.longitude,
+        label: 'Nhà',
+        addressLine: 'Hà Nội',
+      } as never,
+    });
+    const queries = prisma.providerService.findFirst.mock
+      .calls as unknown as Array<[{ where: { status: unknown } }]>;
+    expect(queries[0][0].where.status).toEqual({ in: ['ACTIVE', 'INACTIVE'] });
   });
   it('checks the selected provider directly without truncating a nearby list', async () => {
     const { service, locations } = context();

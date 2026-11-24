@@ -1,9 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { MailOutboxService } from '../../../../infrastructure/mail/mail-outbox.service';
+import { PushOutboxService } from '../../../push/application/push-outbox.service';
 
 interface ApplicationEmailRecipient {
   applicationId: string;
+  userId: string;
   email: string | null;
   displayName: string | null;
   revisionNumber: number;
@@ -15,7 +17,10 @@ export class ProviderApplicationNotificationService {
     ProviderApplicationNotificationService.name,
   );
 
-  constructor(private readonly outbox: MailOutboxService) {}
+  constructor(
+    private readonly outbox: MailOutboxService,
+    private readonly push: PushOutboxService,
+  ) {}
 
   notifySubmitted(
     recipient: ApplicationEmailRecipient,
@@ -89,8 +94,15 @@ export class ProviderApplicationNotificationService {
     );
   }
 
-  async flushPending(source: string): Promise<void> {
-    await this.outbox.deliverPending(source);
+  flushPending(source: string): Promise<void> {
+    // Deliver in background so caller HTTP response is not blocked by SMTP/TLS latency
+    void this.outbox.deliverPending(source).catch(() => {
+      this.logger.error({
+        event: 'mail.outbox.background_flush_failed',
+        source,
+      });
+    });
+    return Promise.resolve();
   }
 
   private async sendSafely(
@@ -104,6 +116,14 @@ export class ProviderApplicationNotificationService {
     },
     transaction: Prisma.TransactionClient,
   ): Promise<void> {
+    await this.push.enqueue(transaction, {
+      userId: recipient.userId,
+      sourceId: `${recipient.applicationId}:${recipient.revisionNumber}:${content.event}`,
+      event: `APPLICATION_${content.event.toUpperCase().replaceAll('-', '_')}`,
+      entityType: 'APPLICATION',
+      entityId: recipient.applicationId,
+      recipientRole: 'CUSTOMER',
+    });
     if (!recipient.email) {
       this.logger.warn(
         `Skipped ${content.event} email for application ${recipient.applicationId}: no recipient email`,

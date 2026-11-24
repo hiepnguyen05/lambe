@@ -16,6 +16,21 @@ import {
 } from 'class-validator';
 
 export class ProviderSearchDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Giới hạn theo tổ chức/đối tác đã chọn.',
+  })
+  @IsUUID('4')
+  @IsOptional()
+  providerId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Nhân viên cụ thể đã chọn trước khi chọn dịch vụ.',
+  })
+  @IsUUID('4')
+  @IsOptional()
+  memberId?: string;
   @ApiPropertyOptional({ enum: BookingType, default: BookingType.ASAP })
   @IsOptional()
   @IsEnum(BookingType)

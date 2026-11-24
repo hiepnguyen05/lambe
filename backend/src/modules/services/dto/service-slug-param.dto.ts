@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsString, Matches, MaxLength, MinLength } from 'class-validator';
-import { normalizeServiceSlug } from './service-transformers';
+import { normalizeSlug as normalizeServiceSlug } from '../../../common/validation/string-transformers';
 
 export class ServiceSlugParamDto {
   @ApiProperty({ example: 'cat-toc-nam' })

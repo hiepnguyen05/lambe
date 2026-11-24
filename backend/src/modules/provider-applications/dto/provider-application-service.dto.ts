@@ -9,7 +9,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { trimOptionalString } from './provider-transformers';
+import { trimOptionalString } from '../../../common/validation/string-transformers';
 
 const MAX_PRICE_AMOUNT = 2_000_000_000;
 

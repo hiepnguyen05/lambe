@@ -110,10 +110,20 @@ describe('CustomerOnboardingService', () => {
     ).resolves.toMatchObject({ success: true });
 
     expect(customerCategoryInterest.createMany).toHaveBeenCalledWith({
-      data: [{ customerProfileId: 'profile-id', categoryId }],
+      data: [
+        expect.objectContaining({
+          customerProfileId: 'profile-id',
+          categoryId,
+        }),
+      ],
     });
     expect(customerServiceInterest.createMany).toHaveBeenCalledWith({
-      data: [{ customerProfileId: 'profile-id', serviceId }],
+      data: [
+        expect.objectContaining({
+          customerProfileId: 'profile-id',
+          serviceId,
+        }),
+      ],
     });
     expect(customerAddress.create).toHaveBeenCalledWith({
       data: expect.objectContaining({

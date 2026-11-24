@@ -29,9 +29,14 @@ import {
 } from '../../../common/openapi/api-response.decorators';
 import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 import { InternalAuthenticationService } from '../application/internal-authentication.service';
+import { InternalAccountSetupService } from '../application/internal-account-setup.service';
 import { InternalSessionService } from '../application/internal-session.service';
 import { CurrentInternalAccount } from '../decorators/current-internal-account.decorator';
 import { InternalLoginDto } from '../dto/internal-login.dto';
+import {
+  ActivateInternalAccountDto,
+  ChangeInternalPasswordDto,
+} from '../dto/internal-password.dto';
 import { InternalJwtAuthGuard } from '../guards/internal-jwt-auth.guard';
 import type { AuthenticatedInternalAccount } from '../types/authenticated-internal-account.type';
 
@@ -42,6 +47,7 @@ export class InternalAuthController {
     private readonly authenticationService: InternalAuthenticationService,
     private readonly sessionService: InternalSessionService,
     private readonly configService: ConfigService,
+    private readonly accountSetup: InternalAccountSetupService,
   ) {}
 
   private get cookieName(): string {
@@ -71,6 +77,15 @@ export class InternalAuthController {
   private getRefreshToken(request: Request): string | undefined {
     const cookies = parse(request.headers.cookie ?? '');
     return cookies[this.cookieName];
+  }
+
+  private clearRefreshCookie(response: Response): void {
+    response.clearCookie(this.cookieName, {
+      httpOnly: true,
+      secure: this.configService.get<string>('app.nodeEnv') === 'production',
+      sameSite: 'strict',
+      path: '/api/admin/auth',
+    });
   }
 
   @Post('login')
@@ -147,12 +162,7 @@ export class InternalAuthController {
       this.getRefreshToken(request),
       requestMetadata,
     );
-    response.clearCookie(this.cookieName, {
-      httpOnly: true,
-      secure: this.configService.get<string>('app.nodeEnv') === 'production',
-      sameSite: 'strict',
-      path: '/api/admin/auth',
-    });
+    this.clearRefreshCookie(response);
     return result;
   }
 
@@ -168,5 +178,54 @@ export class InternalAuthController {
   @ApiAuthenticationErrors()
   async me(@CurrentInternalAccount() account: AuthenticatedInternalAccount) {
     return this.authenticationService.getCurrentAccount(account.accountId);
+  }
+
+  @Post('activate')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  @Throttle({
+    short: { limit: 2, ttl: 1000 },
+    medium: { limit: 5, ttl: 60_000 },
+  })
+  @ApiOperation({
+    summary: 'Set an internal password with a one-time email token',
+  })
+  @ApiStandardOk({
+    description: 'Mat khau da thiet lap; token email bi vo hieu hoa.',
+    data: null,
+    message: 'Mat khau da duoc thiet lap. Vui long dang nhap.',
+  })
+  activate(
+    @Body() dto: ActivateInternalAccountDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.accountSetup.activate(dto.token, dto.password, request);
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(InternalJwtAuthGuard)
+  @ApiBearerAuth('internal-token')
+  @ApiOperation({ summary: 'Change own password and revoke sessions' })
+  @ApiStandardOk({
+    description: 'Mat khau da doi; moi session cu bi thu hoi.',
+    data: null,
+    message: 'Mat khau da doi. Vui long dang nhap lai.',
+  })
+  async changePassword(
+    @Body() dto: ChangeInternalPasswordDto,
+    @CurrentInternalAccount() account: AuthenticatedInternalAccount,
+    @CurrentRequestMetadata() request: RequestMetadata,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.accountSetup.changePassword(
+      account,
+      dto.currentPassword,
+      dto.newPassword,
+      request,
+    );
+    this.clearRefreshCookie(response);
+    return result;
   }
 }

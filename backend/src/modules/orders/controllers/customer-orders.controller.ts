@@ -31,6 +31,7 @@ import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type
 import { OrdersService } from '../application/orders.service';
 import { OrderCancellationService } from '../application/cancellation/order-cancellation.service';
 import { OrderReviewService } from '../application/reviews/order-review.service';
+import { OrderRescheduleService } from '../application/scheduling/order-reschedule.service';
 import {
   CancelOrderDto,
   CreateOrderReviewDto,
@@ -39,6 +40,7 @@ import {
   OrderParamDto,
   OrderQueryDto,
   OrderQuoteDto,
+  RequestOrderRescheduleDto,
 } from '../dto/order.dto';
 
 const quoteExample = {
@@ -47,11 +49,24 @@ const quoteExample = {
   expectedStartAt: '2026-10-14T07:00:00.000Z',
   expectedEndAt: '2026-10-14T08:00:00.000Z',
   provider: { id: 'provider-uuid', displayName: 'Nguyen Van A' },
+  memberId: '216a1b81-4061-42be-b08a-3497522fb430',
+  member: {
+    id: '216a1b81-4061-42be-b08a-3497522fb430',
+    displayName: 'Nguyễn Văn An',
+    avatarUrl: null,
+  },
   providerServiceId: 'provider-service-uuid',
   serviceName: 'Cắt tóc nam',
   servicePriceAmount: 150000,
-  travelFeeAmount: 0,
-  totalAmount: 150000,
+  travelFeeAmount: 12000,
+  travelDistanceKm: 5,
+  distanceSource: 'CONSERVATIVE_DISTANCE',
+  quoteToken: 'signed-quote-token',
+  subtotalAmount: 162000,
+  discountAmount: 0,
+  voucherCode: null,
+  voucherIssuer: null,
+  totalAmount: 162000,
   currencyCode: 'VND',
   durationMinutes: 60,
   distanceKm: 4.2,
@@ -78,14 +93,19 @@ export class CustomerOrdersController {
     private readonly orders: OrdersService,
     private readonly cancellations: OrderCancellationService,
     private readonly reviews: OrderReviewService,
+    private readonly reschedule: OrderRescheduleService,
   ) {}
 
   @Post('orders/quote')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Kiểm tra điều kiện và lấy báo giá đặt dịch vụ' })
+  @ApiOperation({
+    summary: 'Kiểm tra điều kiện và lấy báo giá đặt dịch vụ',
+    description:
+      'Đơn tổ chức bắt buộc memberId đã chọn, đơn cá nhân không gửi memberId. Token gắn người thực hiện, version membership, dịch vụ, địa chỉ, thời gian và voucher. Đổi lựa chọn phải báo giá lại; không tự phân công người khác.',
+  })
   @ApiStandardOk({
     description:
-      'Báo giá tức thời, chưa giữ lịch. Khi available=false, gợi ý trong suggestedSlots (khi available=true, mảng rỗng).',
+      'Báo giá có hiệu lực 5 phút, chưa giữ lịch. Gửi quoteToken khi tạo đơn; nếu available=false thì xem suggestedSlots.',
     data: quoteExample,
   })
   @ApiAuthenticationErrors()
@@ -102,7 +122,11 @@ export class CustomerOrdersController {
     description:
       '8-128 letters, digits, underscore or hyphen. Reuse only when retrying the same request.',
   })
-  @ApiOperation({ summary: 'Tạo yêu cầu đặt ngay hoặc đặt lịch trước' })
+  @ApiOperation({
+    summary: 'Tạo yêu cầu đặt ngay hoặc đặt lịch trước',
+    description:
+      'Giữ nguyên memberId và nội dung đã báo giá; bổ sung quoteToken, thông tin liên hệ và ghi chú. PENDING_PROVIDER là chờ đúng người được chọn chấp nhận, chưa phải đặt lịch thành công. Chỉ chuyển sang theo dõi khi ACCEPTED. Lưu snapshot tổ chức và chuyên viên; không đổi người sau khi tạo đơn.',
+  })
   @ApiStandardCreated({
     description: 'Đã tạo đơn ở trạng thái chờ nhà cung cấp phản hồi.',
     message: 'Đã gửi yêu cầu đặt dịch vụ tới nhà cung cấp.',
@@ -110,17 +134,23 @@ export class CustomerOrdersController {
       id: 'order-uuid',
       status: 'PENDING_PROVIDER',
       bookingType: 'SCHEDULED',
+      assignedMemberId: quoteExample.memberId,
+      assignedMember: {
+        id: quoteExample.memberId,
+        displayName: quoteExample.member.displayName,
+        avatarUrl: null,
+      },
       scheduledAt: quoteExample.scheduledAt,
       expectedStartAt: quoteExample.expectedStartAt,
       expectedEndAt: quoteExample.expectedEndAt,
-      totalAmount: 150000,
+      totalAmount: 162000,
       durationMinutes: 60,
       providerResponseDeadlineAt: '2026-10-12T07:30:00.000Z',
     },
   })
   @ApiConflictResponse({
     description:
-      'Lịch đã bị giữ, thợ bận/ngoài bán kính, ví không đủ hoặc Idempotency-Key đã dùng với nội dung khác. Client phải tải lại báo giá.',
+      'Lịch đã bị giữ, báo giá hết hạn hoặc thay đổi, thợ bận/ngoài bán kính, ví không đủ hoặc Idempotency-Key đã dùng với nội dung khác. Client phải tải lại báo giá.',
     schema: {
       type: 'object',
       properties: {
@@ -156,9 +186,32 @@ export class CustomerOrdersController {
     return this.orders.create(user.userId, dto, request, idempotencyKey);
   }
 
+  @Post('me/orders/:id/reschedule')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Đề xuất đổi giờ của đơn đặt trước đã được nhận' })
+  @ApiStandardOk({
+    description: 'Giữ giờ đề xuất tối đa 30 phút để thợ phản hồi.',
+    data: { id: 'request-uuid', status: 'PENDING' },
+  })
+  @ApiAuthenticationErrors()
+  @ApiValidationError()
+  @ApiNotFoundError('Đơn dịch vụ của khách')
+  requestReschedule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param() params: OrderParamDto,
+    @Body() dto: RequestOrderRescheduleDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.reschedule.request(user.userId, params.id, dto, request);
+  }
+
   @Get('me/orders')
   @ApiOperation({ summary: 'Lấy danh sách đơn của khách hàng hiện tại' })
-  @ApiStandardOk({ description: 'Danh sách tối đa 50 đơn gần nhất.', data: [] })
+  @ApiStandardOk({
+    description: 'Danh sách đơn phân trang bằng cursor, tối đa 50 đơn/trang.',
+    data: [],
+    meta: { nextCursor: null },
+  })
   @ApiAuthenticationErrors()
   findMine(
     @CurrentUser() user: AuthenticatedUser,
@@ -226,10 +279,28 @@ export class CustomerOrdersController {
   }
 
   @Post('me/orders/:id/review')
-  @ApiOperation({ summary: 'Đánh giá một đơn đã hoàn thành' })
+  @ApiOperation({
+    summary: 'Khách đánh giá một lần cho đơn đã hoàn thành',
+    description:
+      'Chỉ khách sở hữu đơn COMPLETED được gửi. Backend tự lấy tổ chức và chuyên viên từ phân công bất biến của đơn; không nhận memberId/providerId từ body. Một đánh giá đồng thời đóng góp cho tổ chức và chuyên viên, không nhập hai lần. Đơn chưa hoàn tất hoặc đã đánh giá trả 409.',
+  })
+  @ApiConflictResponse({
+    description: 'Đơn chưa hoàn tất hoặc đã được đánh giá.',
+  })
+  @ApiNotFoundError('Không tìm thấy đơn thuộc khách hàng hiện tại.')
   @ApiStandardCreated({
     description: 'Đã ghi nhận đánh giá.',
-    data: { id: 'review-uuid', rating: 5 },
+    data: {
+      id: 'review-uuid',
+      rating: 5,
+      comment: 'Dịch vụ tốt.',
+      createdAt: '2026-10-29T05:00:00.000Z',
+      assignedMember: {
+        id: 'member-uuid',
+        displayName: 'Nguyễn Văn An',
+        avatarUrl: null,
+      },
+    },
   })
   @ApiAuthenticationErrors()
   @ApiValidationError()

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../infrastructure/persistence/postgres/prisma.service';
 import type { ReportChatDto } from '../dto/chat.dto';
-import { findAccessibleChat, lockChat } from './chat.helpers';
+import { findAccessibleChat, lockAccessibleChat } from './chat.helpers';
 
 @Injectable()
 export class ChatModerationService {
@@ -9,8 +9,7 @@ export class ChatModerationService {
 
   async block(userId: string, id: string, blocked: boolean) {
     return this.prisma.$transaction(async (tx) => {
-      await findAccessibleChat(tx, id, userId);
-      await lockChat(tx, id);
+      await lockAccessibleChat(tx, id, userId);
       const state = await tx.chatParticipantState.update({
         where: { conversationId_userId: { conversationId: id, userId } },
         data: { blockedAt: blocked ? new Date() : null },

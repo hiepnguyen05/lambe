@@ -8,11 +8,11 @@ import { ReorderServicesDto } from './reorder-services.dto';
 import { ServiceQueryDto } from './service-query.dto';
 import { ServiceSlugParamDto } from './service-slug-param.dto';
 import {
-  normalizeServiceCode,
-  normalizeServiceSlug,
+  normalizeCode as normalizeServiceCode,
+  normalizeSlug as normalizeServiceSlug,
   trimOptionalString,
   trimString,
-} from './service-transformers';
+} from '../../../common/validation/string-transformers';
 import { UpdateServiceStatusDto } from './update-service-status.dto';
 import { UpdateServiceDto } from './update-service.dto';
 

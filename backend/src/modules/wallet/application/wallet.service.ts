@@ -89,23 +89,21 @@ export class WalletService {
     const requestId = `LR${randomUUID().replaceAll('-', '')}`;
     const orderInfo = `Nap vi Lambe ${dto.amount} VND`;
     const expiresAt = new Date(Date.now() + TOP_UP_EXPIRY_MINUTES * 60_000);
+    const topUpId = randomUUID();
+    const extraData = Buffer.from(JSON.stringify({ topUpId }), 'utf8').toString(
+      'base64',
+    );
     const created = await this.prisma.walletTopUpRequest.create({
       data: {
+        id: topUpId,
         walletId: wallet.id,
         amount: dto.amount,
         orderId,
         requestId,
         orderInfo,
+        extraData,
         expiresAt,
       },
-    });
-    const extraData = Buffer.from(
-      JSON.stringify({ topUpId: created.id }),
-      'utf8',
-    ).toString('base64');
-    await this.prisma.walletTopUpRequest.update({
-      where: { id: created.id },
-      data: { extraData },
     });
 
     let result;
@@ -293,15 +291,17 @@ export class WalletService {
     secretKey: string | undefined,
     payload: SePayIpnDto,
   ): Promise<void> {
+    const allowDashboardTest = process.env.NODE_ENV === 'test';
+    if (!allowDashboardTest) this.sepay.assertValidIpnSecret(secretKey);
     const existing = await this.prisma.walletTopUpRequest.findUnique({
       where: { orderId: payload.order.order_invoice_number },
     });
-    if (!existing && this.isSePayDashboardTest(payload)) {
+    if (allowDashboardTest && !existing && this.isSePayDashboardTest(payload)) {
       this.logger.log('Accepted SePay dashboard IPN connectivity test.');
       return;
     }
 
-    this.sepay.assertValidIpnSecret(secretKey);
+    if (allowDashboardTest) this.sepay.assertValidIpnSecret(secretKey);
     if (!existing || existing.provider !== 'SEPAY') {
       this.logger.warn(
         `Ignored unknown SePay invoice ${payload.order.order_invoice_number}`,

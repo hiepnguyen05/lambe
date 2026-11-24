@@ -39,6 +39,7 @@ describe('JwtAuthGuard', () => {
     expect(request.user).toEqual({
       userId: 'user-id',
       phone: '0363668951',
+      sessionId: 'session-id',
     });
   });
 

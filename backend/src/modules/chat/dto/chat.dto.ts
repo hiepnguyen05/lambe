@@ -62,6 +62,15 @@ export class SendChatMessageDto {
   providerServiceId?: string;
 }
 
+export class SendChatImagesDto {
+  @ApiProperty({
+    format: 'uuid',
+    description: 'ID duy nhất do client tạo để retry không sinh tin trùng.',
+  })
+  @IsUUID('4')
+  clientMessageId: string;
+}
+
 export class ChatIdParamDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID('4')
@@ -110,6 +119,18 @@ export class ChatMessagesQueryDto {
   @Max(100)
   @IsOptional()
   limit?: number;
+}
+
+export class ChatEventsQueryDto {
+  @ApiPropertyOptional({
+    minimum: 0,
+    description: 'Sequence cuối đã nhận; kết nối lại từ tin nhắn tiếp theo.',
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  afterSequence?: number;
 }
 
 export class MarkChatReadDto {

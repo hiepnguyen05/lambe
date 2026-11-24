@@ -6,8 +6,7 @@ import { AuthModule } from '../auth/auth.module';
 import { InternalAuthModule } from '../internal-auth/internal-auth.module';
 import { UploadModule } from '../upload/upload.module';
 import { ProviderApplicationDocumentsService } from './application/documents/provider-application-documents.service';
-import { KycCryptoService } from './application/kyc/kyc-crypto.service';
-import { LegacyKycMigrationService } from './application/kyc/legacy-kyc-migration.service';
+import { KycModule } from '../../infrastructure/kyc/kyc.module';
 import { ProviderApplicationReviewService } from './application/review/provider-application-review.service';
 import { ProviderApplicationNotificationService } from './application/notifications/provider-application-notification.service';
 import { ProviderApplicationsQueryService } from './application/applications/provider-applications-query.service';
@@ -16,11 +15,13 @@ import { ProviderApplicationServicesService } from './application/services/provi
 import { ProviderServiceSuggestionsService } from './application/services/provider-service-suggestions.service';
 import { ReviewProviderServiceSuggestionService } from './application/services/review-provider-service-suggestion.service';
 import { ServicesModule } from '../services/services.module';
+import { PushModule } from '../push/push.module';
 import { AdminProviderApplicationsController } from './controllers/admin-provider-applications.controller';
 import { ProviderApplicationsController } from './controllers/provider-applications.controller';
 
 @Module({
   imports: [
+    KycModule,
     PostgresModule,
     AuthModule,
     InternalAuthModule,
@@ -28,6 +29,7 @@ import { ProviderApplicationsController } from './controllers/provider-applicati
     AuditModule,
     MailModule,
     ServicesModule,
+    PushModule,
   ],
   controllers: [
     ProviderApplicationsController,
@@ -42,8 +44,6 @@ import { ProviderApplicationsController } from './controllers/provider-applicati
     ProviderApplicationDocumentsService,
     ProviderApplicationReviewService,
     ProviderApplicationNotificationService,
-    KycCryptoService,
-    LegacyKycMigrationService,
   ],
 })
 export class ProviderApplicationsModule {}

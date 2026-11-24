@@ -13,7 +13,10 @@ import { OrderCancellationService } from '../application/cancellation/order-canc
 import { OrderReviewService } from '../application/reviews/order-review.service';
 import { OrderEvidenceService } from '../application/evidence/order-evidence.service';
 import { OrderNotificationsService } from '../application/notifications/order-notifications.service';
+import { RedisCacheService } from '../../../infrastructure/cache/redis-cache.service';
+import { OrderPaymentDisputeService } from '../application/payments/order-payment-dispute.service';
 import { BookingAvailabilityService } from '../application/scheduling/booking-availability.service';
+import { OrderRescheduleService } from '../application/scheduling/order-reschedule.service';
 import { BookingCalendarController } from './booking-calendar.controller';
 import { CustomerOrdersController } from './customer-orders.controller';
 import { ProviderOrdersController } from './provider-orders.controller';
@@ -38,11 +41,14 @@ describe('booking OpenAPI contract', () => {
       providers: [
         { provide: OrdersService, useValue: {} },
         { provide: BookingAvailabilityService, useValue: {} },
+        { provide: OrderRescheduleService, useValue: {} },
         { provide: ProviderDiscoveryService, useValue: {} },
         { provide: OrderCancellationService, useValue: {} },
         { provide: OrderReviewService, useValue: {} },
         { provide: OrderEvidenceService, useValue: {} },
         { provide: OrderNotificationsService, useValue: {} },
+        { provide: RedisCacheService, useValue: {} },
+        { provide: OrderPaymentDisputeService, useValue: {} },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -59,6 +65,34 @@ describe('booking OpenAPI contract', () => {
     );
   });
   afterAll(async () => app?.close());
+
+  it('documents scoped public member reviews, bounded pagination and review creation conflicts', () => {
+    const member =
+      document.paths['/api/providers/{providerId}/members/{memberId}/reviews']
+        .get!;
+    expect(member.responses).toHaveProperty('200');
+    expect(member.responses).toHaveProperty('400');
+    expect(member.responses).toHaveProperty('404');
+    expect(member.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          in: 'path',
+          name: 'providerId',
+          required: true,
+        }),
+        expect.objectContaining({
+          in: 'path',
+          name: 'memberId',
+          required: true,
+        }),
+        expect.objectContaining({ in: 'query', name: 'limit' }),
+        expect.objectContaining({ in: 'query', name: 'cursor' }),
+      ]),
+    );
+    expect(
+      document.paths['/api/me/orders/{id}/review'].post!.responses,
+    ).toHaveProperty('409');
+  });
 
   it('documents a required idempotency header and conflict response on creation', () => {
     const create = document.paths['/api/orders'].post!;

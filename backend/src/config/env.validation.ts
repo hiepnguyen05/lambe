@@ -95,6 +95,35 @@ function requireHttpsUrl(config: Record<string, unknown>, key: string): URL {
   return url;
 }
 
+function validateRedisUrl(
+  config: Record<string, unknown>,
+  nodeEnv: string,
+): void {
+  const value = requireValue(config, 'REDIS_URL');
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error('REDIS_URL must be a valid redis:// or rediss:// URL');
+  }
+  if (!['redis:', 'rediss:'].includes(url.protocol)) {
+    throw new Error('REDIS_URL must use redis:// or rediss://');
+  }
+  if (!url.hostname) {
+    throw new Error('REDIS_URL must include a hostname');
+  }
+  if (nodeEnv === 'production') {
+    if (url.protocol !== 'rediss:') {
+      throw new Error('REDIS_URL must use rediss:// TLS in production');
+    }
+    if (!url.username || !url.password) {
+      throw new Error(
+        'REDIS_URL must include the Upstash username and password in production',
+      );
+    }
+  }
+}
+
 export function validateEnvironment(
   config: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -106,6 +135,11 @@ export function validateEnvironment(
   const firebaseEnabled = toStringValue(config.FIREBASE_ENABLED, 'false');
   const momoEnabled = toStringValue(config.MOMO_ENABLED, 'false');
   const sepayEnabled = toStringValue(config.SEPAY_ENABLED, 'false');
+  const geminiEnabled = toStringValue(config.GEMINI_ENABLED, 'false');
+  const geminiSearchEnabled = toStringValue(
+    config.GEMINI_WEB_SEARCH_ENABLED,
+    'false',
+  );
   const smtpSecure = toStringValue(config.SMTP_SECURE, 'true');
   const smtpPort = Number(config.SMTP_PORT ?? 465);
   const smtpConnectionTimeoutMs = Number(
@@ -130,28 +164,55 @@ export function validateEnvironment(
     throw new Error('PORT must be a valid TCP port');
   }
 
-  if (!['true', 'false'].includes(redisEnabled)) {
-    throw new Error('REDIS_ENABLED must be true or false');
+  for (const [key, value] of [
+    ['REDIS_ENABLED', redisEnabled],
+    ['FEED_CACHE_ENABLED', toStringValue(config.FEED_CACHE_ENABLED, 'false')],
+    ['FEED_SAFETY_ENABLED', toStringValue(config.FEED_SAFETY_ENABLED, 'true')],
+    [
+      'FEED_RECOMMENDATIONS_ENABLED',
+      toStringValue(config.FEED_RECOMMENDATIONS_ENABLED, 'false'),
+    ],
+    [
+      'FEED_CACHE_INDEX_ENABLED',
+      toStringValue(config.FEED_CACHE_INDEX_ENABLED, 'false'),
+    ],
+    ['CLOUDINARY_ENABLED', cloudinaryEnabled],
+    ['MAIL_ENABLED', mailEnabled],
+    ['FIREBASE_ENABLED', firebaseEnabled],
+    ['MOMO_ENABLED', momoEnabled],
+    ['SEPAY_ENABLED', sepayEnabled],
+    ['GEMINI_ENABLED', geminiEnabled],
+    ['GEMINI_WEB_SEARCH_ENABLED', geminiSearchEnabled],
+  ]) {
+    if (value !== 'true' && value !== 'false') {
+      throw new Error(`${key} must be true or false`);
+    }
   }
-
-  if (!['true', 'false'].includes(cloudinaryEnabled)) {
-    throw new Error('CLOUDINARY_ENABLED must be true or false');
-  }
-
-  if (!['true', 'false'].includes(mailEnabled)) {
-    throw new Error('MAIL_ENABLED must be true or false');
-  }
-
-  if (!['true', 'false'].includes(firebaseEnabled)) {
-    throw new Error('FIREBASE_ENABLED must be true or false');
-  }
-
-  if (!['true', 'false'].includes(momoEnabled)) {
-    throw new Error('MOMO_ENABLED must be true or false');
-  }
-
-  if (!['true', 'false'].includes(sepayEnabled)) {
-    throw new Error('SEPAY_ENABLED must be true or false');
+  requirePositiveIntegerInRange(
+    config,
+    'FEED_CACHE_POST_TTL_SECONDS',
+    120,
+    3600,
+  );
+  requirePositiveIntegerInRange(config, 'FEED_CACHE_TIMEOUT_MS', 100, 1000);
+  requirePositiveIntegerInRange(config, 'REDIS_COMMAND_TIMEOUT_MS', 1000, 5000);
+  requirePositiveIntegerInRange(
+    config,
+    'FEED_CACHE_INDEX_TTL_SECONDS',
+    300,
+    3600,
+  );
+  requirePositiveIntegerInRange(config, 'FEED_CACHE_LOCK_TTL_SECONDS', 5, 30);
+  requirePositiveIntegerInRange(config, 'FEED_CACHE_BATCH_SIZE', 50, 200);
+  requirePositiveIntegerInRange(
+    config,
+    'FEED_CACHE_WORKER_INTERVAL_MS',
+    5000,
+    60000,
+  );
+  if (geminiEnabled === 'true') {
+    requireValue(config, 'GEMINI_API_KEY');
+    requireValue(config, 'GEMINI_MODEL');
   }
 
   if (!['true', 'false'].includes(smtpSecure)) {
@@ -217,10 +278,7 @@ export function validateEnvironment(
   }
 
   if (redisEnabled === 'true') {
-    const redisUrl = requireValue(config, 'REDIS_URL');
-    if (!redisUrl.startsWith('redis://') && !redisUrl.startsWith('rediss://')) {
-      throw new Error('REDIS_URL must use redis:// or rediss://');
-    }
+    validateRedisUrl(config, nodeEnv);
   }
 
   if (mailEnabled === 'true') {
@@ -326,6 +384,8 @@ export function validateEnvironment(
     FIREBASE_ENABLED: firebaseEnabled,
     MOMO_ENABLED: momoEnabled,
     SEPAY_ENABLED: sepayEnabled,
+    GEMINI_ENABLED: geminiEnabled,
+    GEMINI_WEB_SEARCH_ENABLED: geminiSearchEnabled,
     SMTP_PORT: smtpPort,
     SMTP_SECURE: smtpSecure,
     SMTP_CONNECTION_TIMEOUT_MS: smtpConnectionTimeoutMs,

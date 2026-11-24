@@ -1,0 +1,81 @@
+{
+  "capturedAtUtc": "2026-11-10T05:53:29.9847702Z",
+  "package": "com.lambe.mobile",
+  "buildMode": "profile",
+  "device": {
+    "model": "RMX3261",
+    "android": "11",
+    "sdk": "30",
+    "abis": "arm64-v8a,armeabi-v7a,armeabi",
+    "totalRamKiB": 2842896
+  },
+  "battery": {
+    "usbPowered": true,
+    "level": 55,
+    "temperatureTenthsC": 271
+  },
+  "artifact": {
+    "bytes": 61774803,
+    "sha256": "BA5907CE1B4B7519277909623A617E9D63D2368C3B370451A524C4C8FF477EF4"
+  },
+  "settleSeconds": 10,
+  "samples": [
+    {
+      "run": 1,
+      "androidThisTimeMs": null,
+      "androidTotalTimeMs": 2091,
+      "androidWaitTimeMs": 2094,
+      "pssKiB": 156276,
+      "javaHeapKiB": 13328,
+      "nativeHeapKiB": 28772,
+      "graphicsKiB": 0
+    },
+    {
+      "run": 2,
+      "androidThisTimeMs": null,
+      "androidTotalTimeMs": 2114,
+      "androidWaitTimeMs": 2119,
+      "pssKiB": 158174,
+      "javaHeapKiB": 13460,
+      "nativeHeapKiB": 30296,
+      "graphicsKiB": 0
+    },
+    {
+      "run": 3,
+      "androidThisTimeMs": null,
+      "androidTotalTimeMs": 2136,
+      "androidWaitTimeMs": 2139,
+      "pssKiB": 159001,
+      "javaHeapKiB": 13572,
+      "nativeHeapKiB": 30608,
+      "graphicsKiB": 0
+    },
+    {
+      "run": 4,
+      "androidThisTimeMs": null,
+      "androidTotalTimeMs": 2116,
+      "androidWaitTimeMs": 2119,
+      "pssKiB": 156867,
+      "javaHeapKiB": 13152,
+      "nativeHeapKiB": 28856,
+      "graphicsKiB": 0
+    },
+    {
+      "run": 5,
+      "androidThisTimeMs": null,
+      "androidTotalTimeMs": 2090,
+      "androidWaitTimeMs": 2093,
+      "pssKiB": 158848,
+      "javaHeapKiB": 13136,
+      "nativeHeapKiB": 30232,
+      "graphicsKiB": 0
+    }
+  ],
+  "scope": "Cold process restarts; disk caches and user session preserved. Current landing screen only.",
+  "limitations": [
+    "am -W measures Android Activity startup, not time to interactive.",
+    "PSS is whole-process memory, not Dart heap alone.",
+    "USB charging prevents battery-drain conclusions.",
+    "These samples do not certify scrolling, video, maps, online idle or EN_ROUTE performance."
+  ]
+}

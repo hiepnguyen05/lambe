@@ -24,6 +24,11 @@ import {
   presentForProvider,
 } from '../persistence/order.presenter';
 import { BookingCalendarService } from '../scheduling/booking-calendar.service';
+import {
+  assertAssignedMemberActive,
+  orderServingUserId,
+  servingOrderWhere,
+} from '../persistence/order-actor.policy';
 
 const activeStatuses: ServiceOrderStatus[] = [
   ServiceOrderStatus.EN_ROUTE,
@@ -42,9 +47,12 @@ export class OrderCancellationService {
 
   async recordContactAttempt(userId: string, orderId: string) {
     const attempt = await this.prisma.$transaction(async (tx) => {
-      const current = await this.lockAndLoad(tx, orderId, {
-        provider: { userId },
-      });
+      const current = await this.lockAndLoad(
+        tx,
+        orderId,
+        servingOrderWhere(userId),
+        userId,
+      );
       if (current.status !== ServiceOrderStatus.ARRIVED)
         throw new ConflictException('Chỉ có thể thử gọi khi đã đến nơi.');
       if (current.cancellationRequest)
@@ -71,9 +79,12 @@ export class OrderCancellationService {
     metadata: RequestMetadata,
   ) {
     const order = await this.prisma.$transaction(async (tx) => {
-      const current = await this.lockAndLoad(tx, orderId, {
-        provider: { userId },
-      });
+      const current = await this.lockAndLoad(
+        tx,
+        orderId,
+        servingOrderWhere(userId),
+        userId,
+      );
       if (!activeStatuses.includes(current.status))
         throw new ConflictException(
           'Chỉ có thể yêu cầu hủy sau khi đã khởi hành.',
@@ -115,7 +126,12 @@ export class OrderCancellationService {
           );
       }
       await tx.orderCancellationRequest.create({
-        data: { orderId, reason: dto.reason, detail: dto.detail },
+        data: {
+          orderId,
+          reason: dto.reason,
+          detail: dto.detail,
+          requestedByUserId: userId,
+        },
       });
       await tx.orderNotification.create({
         data: {
@@ -154,9 +170,13 @@ export class OrderCancellationService {
       const current = await this.lockAndLoad(tx, orderId, {
         customerId: userId,
       });
+      const validStatuses: OrderCancellationStatus[] = [
+        OrderCancellationStatus.PENDING_CUSTOMER,
+        OrderCancellationStatus.SUPPORT_REVIEW,
+      ];
       if (
-        current.cancellationRequest?.status !==
-        OrderCancellationStatus.PENDING_CUSTOMER
+        !current.cancellationRequest ||
+        !validStatuses.includes(current.cancellationRequest.status)
       )
         throw new ConflictException(
           'Không có yêu cầu hủy đang chờ khách xử lý.',
@@ -166,6 +186,14 @@ export class OrderCancellationService {
       if (dto.approve) {
         await this.approve(tx, current, userId);
       } else {
+        if (
+          current.cancellationRequest.status ===
+          OrderCancellationStatus.SUPPORT_REVIEW
+        ) {
+          throw new ConflictException(
+            'Yêu cầu hủy đã đang được tổ hỗ trợ xem xét.',
+          );
+        }
         await tx.orderCancellationRequest.update({
           where: { orderId },
           data: {
@@ -174,9 +202,18 @@ export class OrderCancellationService {
           },
         });
       }
+      await tx.orderNotification.updateMany({
+        where: {
+          userId,
+          orderId,
+          event: 'CANCELLATION_REQUESTED',
+          readAt: null,
+        },
+        data: { readAt: new Date() },
+      });
       await tx.orderNotification.create({
         data: {
-          userId: current.provider.userId,
+          userId: orderServingUserId(current),
           orderId,
           event: dto.approve
             ? 'CANCELLATION_APPROVED'
@@ -206,7 +243,10 @@ export class OrderCancellationService {
 
   async supportQueue() {
     const requests = await this.prisma.orderCancellationRequest.findMany({
-      where: { status: OrderCancellationStatus.SUPPORT_REVIEW },
+      where: {
+        status: OrderCancellationStatus.SUPPORT_REVIEW,
+        order: { status: { not: ServiceOrderStatus.SAFETY_HOLD } },
+      },
       orderBy: { requestedAt: 'asc' },
       take: 100,
       select: {
@@ -219,6 +259,114 @@ export class OrderCancellationService {
       },
     });
     return { success: true, data: requests };
+  }
+
+  async supportCancelStale(
+    internalId: string,
+    alertId: string,
+    note: string,
+    metadata: RequestMetadata,
+  ) {
+    const result = await this.prisma.$transaction(async (tx) => {
+      const alert = await tx.orderOperationalAlert.findUnique({
+        where: { id: alertId },
+        select: { orderId: true, type: true, status: true },
+      });
+      if (!alert) throw new NotFoundException('Không tìm thấy cảnh báo.');
+      if (alert.status === 'RESOLVED')
+        throw new ConflictException('Cảnh báo đã được đóng.');
+      const allowed: Partial<Record<ServiceOrderStatus, string>> = {
+        ACCEPTED: 'ACCEPTED_START_OVERDUE',
+        EN_ROUTE: 'EN_ROUTE_OVERDUE',
+        ARRIVED: 'ARRIVAL_START_OVERDUE',
+      };
+      const current = await this.lockAndLoad(tx, alert.orderId);
+      if (allowed[current.status] !== alert.type)
+        throw new ConflictException(
+          'Trạng thái đơn không còn phù hợp với cảnh báo.',
+        );
+      if (
+        current.cancellationRequest &&
+        (current.cancellationRequest.status ===
+          OrderCancellationStatus.PENDING_CUSTOMER ||
+          current.cancellationRequest.status ===
+            OrderCancellationStatus.SUPPORT_REVIEW)
+      )
+        throw new ConflictException(
+          'Yêu cầu hủy đang được xử lý qua luồng riêng.',
+        );
+
+      await this.wallet.release(tx, current, 'SUPPORT_STALE_ORDER_CANCELLED');
+      await this.calendar.release(tx, current.id);
+      await tx.voucherRedemption.updateMany({
+        where: { orderId: current.id, status: 'RESERVED' },
+        data: { status: 'RELEASED' },
+      });
+      await tx.serviceOrder.update({
+        where: { id: current.id },
+        data: {
+          status: ServiceOrderStatus.CANCELLED,
+          cancelledAt: new Date(),
+          statusHistory: {
+            create: {
+              fromStatus: current.status,
+              toStatus: ServiceOrderStatus.CANCELLED,
+              reason: 'SUPPORT_STALE_ORDER_CANCELLED',
+            },
+          },
+        },
+      });
+      await tx.orderNotification.createMany({
+        data: [current.customerId, orderServingUserId(current)].map(
+          (userId) => ({
+            userId,
+            orderId: current.id,
+            event: 'ORDER_CANCELLED',
+          }),
+        ),
+      });
+      const closed = await tx.orderOperationalAlert.updateMany({
+        where: {
+          id: alertId,
+          status: { in: ['OPEN', 'ACKNOWLEDGED'] },
+        },
+        data: {
+          status: 'RESOLVED',
+          resolvedAt: new Date(),
+          resolvedById: internalId,
+          resolutionNote: note,
+        },
+      });
+      if (!closed.count)
+        throw new ConflictException('Cảnh báo đã được người khác xử lý.');
+      await tx.orderOperationalAlert.updateMany({
+        where: {
+          orderId: current.id,
+          id: { not: alertId },
+          status: { in: ['OPEN', 'ACKNOWLEDGED'] },
+        },
+        data: {
+          status: 'RESOLVED',
+          resolvedAt: new Date(),
+          resolvedById: internalId,
+          resolutionNote: note,
+        },
+      });
+      await this.audit.record(
+        {
+          actorInternalAccountId: internalId,
+          action: 'ORDER_STALE_CANCELLED',
+          resourceType: 'ServiceOrder',
+          resourceId: current.id,
+          result: 'SUCCESS',
+          metadata: { alertId, note },
+        },
+        metadata,
+        tx,
+      );
+      return { id: current.id, status: ServiceOrderStatus.CANCELLED };
+    });
+    return { success: true, data: result };
   }
 
   async supportDetail(orderId: string) {
@@ -258,11 +406,15 @@ export class OrderCancellationService {
         });
       }
       await tx.orderNotification.createMany({
-        data: [current.customerId, current.provider.userId].map((userId) => ({
-          userId,
-          orderId,
-          event: dto.approve ? 'CANCELLATION_APPROVED' : 'CANCELLATION_DENIED',
-        })),
+        data: [current.customerId, orderServingUserId(current)].map(
+          (userId) => ({
+            userId,
+            orderId,
+            event: dto.approve
+              ? 'CANCELLATION_APPROVED'
+              : 'CANCELLATION_DENIED',
+          }),
+        ),
       });
       await this.audit.record(
         {
@@ -293,6 +445,10 @@ export class OrderCancellationService {
     if (current.walletHold?.status === WalletHoldStatus.ACTIVE)
       await this.wallet.release(tx, current, 'CANCELLATION_APPROVED');
     await this.calendar.release(tx, current.id);
+    await tx.voucherRedemption.updateMany({
+      where: { orderId: current.id, status: 'RESERVED' },
+      data: { status: 'RELEASED' },
+    });
     await tx.serviceOrder.update({
       where: { id: current.id },
       data: {
@@ -317,14 +473,19 @@ export class OrderCancellationService {
   private async lockAndLoad(
     tx: Prisma.TransactionClient,
     orderId: string,
-    owner?: { customerId: string } | { provider: { userId: string } },
+    owner?: Prisma.ServiceOrderWhereInput,
+    actorUserId?: string,
   ) {
     const match = await tx.serviceOrder.findFirst({
       where: { id: orderId, ...owner },
-      select: { providerId: true },
+      select: { providerId: true, assignedMemberId: true },
     });
     if (!match) throw new NotFoundException('Không tìm thấy đơn dịch vụ.');
-    await this.calendar.lockProvider(tx, match.providerId);
+    await this.calendar.lockProvider(
+      tx,
+      match.providerId,
+      match.assignedMemberId,
+    );
     await tx.$queryRaw(
       Prisma.sql`SELECT "id" FROM "service_orders" WHERE "id" = ${orderId} FOR UPDATE`,
     );
@@ -332,6 +493,8 @@ export class OrderCancellationService {
       where: { id: orderId, ...owner },
       include: orderInclude,
     });
+    if (current && actorUserId)
+      await assertAssignedMemberActive(tx, current, actorUserId);
     if (!current) throw new NotFoundException('Không tìm thấy đơn dịch vụ.');
     return current;
   }

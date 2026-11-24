@@ -8,6 +8,7 @@ export default registerAs('cloudinary', () => ({
     process.env.CLOUDINARY_KYC_UPLOAD_PRESET ||
     process.env.CLOUDINARY_UPLOAD_PRESET ||
     '',
+  chatUploadPreset: process.env.CLOUDINARY_CHAT_UPLOAD_PRESET || '',
   privateUrlTtlSeconds: Number(
     process.env.CLOUDINARY_PRIVATE_URL_TTL_SECONDS || 300,
   ),

@@ -31,7 +31,6 @@ function createContext() {
     gender: null,
     email: 'provider@example.com',
     biography: null,
-    nationalIdNumber: null,
     nationalIdEncrypted: 'encrypted-national-id',
     experienceYears: 3,
     organizationName: null,
@@ -94,6 +93,8 @@ function createContext() {
   const service = { findFirst: jest.fn().mockResolvedValue(standardService) };
   const transaction = {
     $queryRaw: jest.fn().mockResolvedValue([{ id: applicationId }]),
+    providerProfile,
+    providerMember: { findFirst: jest.fn().mockResolvedValue(null) },
     providerApplicationTermsAcceptance,
     service,
     providerApplication,
@@ -146,11 +147,23 @@ function createContext() {
     baseApplication,
     standardService,
     notifications,
+    providerMember: transaction.providerMember,
   };
 }
 
 describe('ProviderApplicationsService', () => {
   beforeEach(() => jest.clearAllMocks());
+
+  it('does not create a separate provider application while a serving membership is reserved', async () => {
+    const { serviceUnderTest, providerMember, prisma } = createContext();
+    providerMember.findFirst.mockResolvedValue({ id: 'reserved-member' });
+    await expect(
+      serviceUnderTest.create(userId, {
+        providerType: ProviderType.INDIVIDUAL,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.providerApplication.create).not.toHaveBeenCalled();
+  });
 
   it('rejects a proposed price outside the admin range', async () => {
     const { applicationServices } = createContext();
@@ -250,6 +263,7 @@ describe('ProviderApplicationsService', () => {
     expect(notifications.notifySubmitted).toHaveBeenCalledWith(
       {
         applicationId,
+        userId,
         email: 'provider@example.com',
         displayName: 'Nguyen Van A',
         revisionNumber: 1,

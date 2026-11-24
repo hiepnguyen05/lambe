@@ -1,5 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
-import { ProviderServiceSuggestionStatus, ReviewStatus } from '@prisma/client';
+import {
+  ProviderServiceSuggestionStatus,
+  ProviderType,
+  ReviewStatus,
+} from '@prisma/client';
 import { REQUIRED_REVIEW_SECTIONS } from './provider-application.policy';
 import {
   assertProviderSubmissionComplete,
@@ -52,11 +56,13 @@ export function assertProviderApprovable(
     documents,
     serviceSuggestions: [],
   });
+  const isOrg = application.providerType === ProviderType.ORGANIZATION;
   for (const item of services)
     assertProviderServiceEligible(
       item,
       application.experienceYears,
       documents,
       true,
+      isOrg,
     );
 }

@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { v2 as cloudinary } from 'cloudinary';
 import { Writable } from 'stream';
 import { CloudinaryService } from './cloudinary.service';
@@ -27,6 +28,7 @@ describe('CloudinaryService', () => {
       'cloudinary.cloudName': 'lambe-cloud',
       'cloudinary.uploadPreset': 'lambe',
       'cloudinary.kycUploadPreset': 'lambe-kyc',
+      'cloudinary.chatUploadPreset': 'lambe-chat',
       'cloudinary.privateUrlTtlSeconds': 300,
       'cloudinary.apiKey': 'api-key',
       'cloudinary.apiSecret': 'api-secret',
@@ -41,7 +43,13 @@ describe('CloudinaryService', () => {
     return new CloudinaryService(configService);
   };
 
-  beforeEach(() => jest.clearAllMocks());
+  let logError: jest.SpyInstance;
+  beforeEach(() => {
+    jest.clearAllMocks();
+    logError = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+  });
   afterEach(() => jest.restoreAllMocks());
 
   it('rejects uploads when media storage is disabled', async () => {
@@ -89,7 +97,7 @@ describe('CloudinaryService', () => {
         folder: 'lambe/general',
         resource_type: 'image',
         type: 'upload',
-        allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+        allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'],
       }),
       expect.any(Function),
     );
@@ -120,6 +128,83 @@ describe('CloudinaryService', () => {
       expect.objectContaining({
         upload_preset: 'lambe-kyc',
         type: 'authenticated',
+        allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+      }),
+      expect.any(Function),
+    );
+  });
+
+  it('uses the chat preset and strips embedded metadata from chat images', async () => {
+    uploadStream.mockImplementation(
+      (
+        _options: unknown,
+        callback: (error: undefined, result: Record<string, unknown>) => void,
+      ) => {
+        callback(undefined, {
+          url: 'http://example.test/chat.webp',
+          secure_url: 'https://example.test/chat.webp',
+          public_id: 'lambe/chat/conversation/image',
+          format: 'webp',
+          width: 800,
+          height: 600,
+          resource_type: 'image',
+        });
+        return new Writable({ write: (_chunk, _encoding, done) => done() });
+      },
+    );
+    const service = createService(true);
+
+    await expect(
+      service.uploadChatImage(Buffer.from('image'), 'lambe/chat/conversation'),
+    ).resolves.toMatchObject({ deliveryType: 'authenticated' });
+    expect(uploadStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        upload_preset: 'lambe-chat',
+        type: 'authenticated',
+        transformation: [{ flags: 'strip_profile' }],
+      }),
+      expect.any(Function),
+    );
+  });
+
+  it('strips metadata from public feed images and short videos on upload', async () => {
+    uploadStream.mockImplementation(
+      (
+        options: { resource_type: string },
+        callback: (error: undefined, result: Record<string, unknown>) => void,
+      ) => {
+        callback(undefined, {
+          url: 'http://example.test/feed',
+          secure_url: 'https://example.test/feed',
+          public_id: 'lambe/feed/media',
+          format: options.resource_type === 'video' ? 'mp4' : 'webp',
+          resource_type: options.resource_type,
+          duration: options.resource_type === 'video' ? 24 : undefined,
+        });
+        return new Writable({ write: (_chunk, _encoding, done) => done() });
+      },
+    );
+    const service = createService(true);
+
+    await expect(
+      service.uploadFeedImage(Buffer.from('image'), 'lambe/feed'),
+    ).resolves.toMatchObject({ resourceType: 'image' });
+    await expect(
+      service.uploadFeedVideo(Buffer.from('video'), 'lambe/feed'),
+    ).resolves.toMatchObject({ resourceType: 'video', durationSeconds: 24 });
+    expect(uploadStream).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        resource_type: 'image',
+        transformation: [{ flags: 'force_strip' }],
+      }),
+      expect.any(Function),
+    );
+    expect(uploadStream).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        resource_type: 'video',
+        transformation: [{ flags: 'force_strip' }],
       }),
       expect.any(Function),
     );
@@ -208,5 +293,59 @@ describe('CloudinaryService', () => {
     await expect(service.deleteImage('public-id')).rejects.toThrow(
       'Image storage is temporarily unavailable',
     );
+  });
+
+  it('logs only operation events for upload, publication and deletion failures', async () => {
+    const privateId = 'private/user-email@example.test/asset';
+    const signedUrl = 'https://example.test/private?signature=secret-sentinel';
+    const providerError = Object.assign(
+      new Error(`provider credential detail ${signedUrl}`),
+      {
+        publicId: privateId,
+        stack: 'private-stack-sentinel',
+      },
+    );
+    uploadStream.mockImplementation(
+      (_options: unknown, callback: (error: Error) => void) => {
+        callback(providerError);
+        return new Writable({ write: (_chunk, _encoding, done) => done() });
+      },
+    );
+    destroy.mockRejectedValue(providerError);
+    privateDownloadUrl.mockReturnValue(signedUrl);
+    jest.spyOn(global, 'fetch').mockRejectedValue(providerError);
+    const service = createService(true);
+    const failures = [
+      {
+        run: () => service.uploadImage(Buffer.from('image'), privateId),
+        event: 'cloudinary.image.upload_failed',
+        message: 'Image storage is temporarily unavailable',
+      },
+      {
+        run: () => service.uploadFeedVideo(Buffer.from('video'), privateId),
+        event: 'cloudinary.video.upload_failed',
+        message: 'Video storage is temporarily unavailable',
+      },
+      {
+        run: () => service.publishPrivateImage(privateId, 'png', privateId),
+        event: 'cloudinary.image.publication_failed',
+        message: 'Image storage is temporarily unavailable',
+      },
+      {
+        run: () => service.deleteImage(privateId),
+        event: 'cloudinary.image.delete_failed',
+        message: 'Image storage is temporarily unavailable',
+      },
+      {
+        run: () => service.deleteFeedVideo(privateId),
+        event: 'cloudinary.video.delete_failed',
+        message: 'Video storage is temporarily unavailable',
+      },
+    ];
+    for (const failure of failures) {
+      await expect(failure.run()).rejects.toThrow(failure.message);
+    }
+    // Assert every argument, including any optional logger stack/context argument.
+    expect(logError.mock.calls).toEqual(failures.map(({ event }) => [event]));
   });
 });

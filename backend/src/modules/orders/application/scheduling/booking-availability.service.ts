@@ -17,6 +17,7 @@ import type {
 } from '../../dto/booking-calendar.dto';
 import { OrderEligibilityService } from '../order-eligibility.service';
 import { BookingCalendarService } from './booking-calendar.service';
+import { MemberServingService } from '../../../provider-members/application/booking/member-serving.service';
 
 @Injectable()
 export class BookingAvailabilityService {
@@ -24,6 +25,7 @@ export class BookingAvailabilityService {
     private readonly prisma: PrismaService,
     private readonly eligibility: OrderEligibilityService,
     private readonly calendar: BookingCalendarService,
+    private readonly members: MemberServingService,
   ) {}
 
   async findSlots(
@@ -44,17 +46,48 @@ export class BookingAvailabilityService {
       throw new BadRequestException('Chọn ngày từ hôm nay đến 30 ngày tới.');
     const loaded = await this.eligibility.load(userId, dto);
     const provider = loaded.providerService.provider;
+    const member = dto.memberId
+      ? await this.members.get(
+          dto.memberId,
+          loaded.providerService.id,
+          dayStart,
+          until,
+          this.prisma,
+          new Date(),
+        )
+      : null;
+    if (member?.member.userId === userId)
+      throw new BadRequestException('Không thể tự đặt lịch cho chính mình.');
     if (provider.id !== providerId)
       throw new NotFoundException('Dịch vụ không thuộc thợ đã chọn.');
-    await this.eligibility.distance(provider, loaded.address, 'SCHEDULED');
+    await this.eligibility.distance(
+      {
+        ...provider,
+        serviceRadiusKm: member?.radiusKm ?? provider.serviceRadiusKm,
+      },
+      loaded.address,
+      'SCHEDULED',
+    );
     const canRequest = this.eligibility.canReceiveNewOrder(
       provider.wallet,
       loaded.commissionAmount,
     );
     const blocks =
-      (await this.calendar.read([providerId], dayStart, until, now)).get(
-        providerId,
-      ) ?? [];
+      (
+        await this.calendar.read(
+          [providerId],
+          dayStart,
+          until,
+          now,
+          this.prisma,
+          undefined,
+          member ? new Map([[member.member.id, providerId]]) : undefined,
+        )
+      ).get(member?.member.id ?? providerId) ?? [];
+    if (member)
+      blocks.push(
+        ...member.timeOffs.map((t) => ({ startAt: t.startAt, endAt: t.endAt })),
+      );
     const slots = canRequest
       ? suggestSlots({
           startAt: new Date(
@@ -66,7 +99,7 @@ export class BookingAvailabilityService {
           until,
           point: loaded.address,
           durationMinutes: loaded.durationMinutes,
-          hours: provider.workingHours,
+          hours: member?.hours ?? provider.workingHours,
           blocks,
           limit: dto.limit ?? 20,
         })
@@ -80,7 +113,10 @@ export class BookingAvailabilityService {
         durationMinutes: loaded.durationMinutes,
         estimateSource: 'CONSERVATIVE_DISTANCE',
         requiresProviderConfirmation: true,
-        slots,
+        slots: member
+          ? slots.filter((s) => !this.members.blocker(member, s.endAt))
+          : slots,
+        memberId: member?.member.id ?? null,
         reason: canRequest ? null : 'PROVIDER_NOT_ACCEPTING_ORDERS',
       },
     };
@@ -121,6 +157,71 @@ export class BookingAvailabilityService {
       success: true,
       data,
       meta: { timezone: 'Asia/Ho_Chi_Minh', limit: 500 },
+    };
+  }
+
+  async findMemberCalendar(
+    userId: string,
+    memberId: string,
+    dto: CalendarRangeDto,
+  ) {
+    const member = await this.prisma.providerMember.findFirst({
+      where: {
+        id: memberId,
+        status: { not: 'LEFT' },
+        provider: { providerType: 'ORGANIZATION' },
+        OR: [{ userId }, { provider: { userId } }],
+      },
+      select: { providerId: true, membershipVersion: true },
+    });
+    if (!member)
+      throw new NotFoundException('Không tìm thấy lịch thành viên của bạn.');
+    const { from, to } = this.range(dto);
+    const [calendars, timeOffs] = await Promise.all([
+      this.calendar.read(
+        [member.providerId],
+        from,
+        to,
+        new Date(),
+        this.prisma,
+        undefined,
+        new Map([[memberId, member.providerId]]),
+      ),
+      this.prisma.providerMemberTimeOff.findMany({
+        where: {
+          memberId,
+          membershipVersion: member.membershipVersion,
+          cancelledAt: null,
+          startAt: { lt: to },
+          endAt: { gt: from },
+        },
+        select: { startAt: true, endAt: true },
+      }),
+    ]);
+    // Global legacy commitments are anonymous: workers must not learn another performer's order/address.
+    const items = [
+      ...(calendars.get(memberId) ?? []).map((b) => ({
+        startAt: b.startAt,
+        endAt: b.endAt,
+        kind: 'BUSY',
+        estimated: !!b.estimated,
+      })),
+      ...timeOffs.map((t) => ({
+        startAt: t.startAt,
+        endAt: t.endAt,
+        kind: 'TIME_OFF',
+        estimated: false,
+      })),
+    ].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+    return {
+      success: true,
+      data: items.slice(0, 500),
+      meta: {
+        memberId,
+        timezone: 'Asia/Ho_Chi_Minh',
+        limit: 500,
+        limited: items.length > 500,
+      },
     };
   }
 

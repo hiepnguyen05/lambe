@@ -13,6 +13,10 @@ describe('ImageContentValidator', () => {
       Buffer.alloc(4),
       Buffer.from('WEBP', 'ascii'),
     ]),
+    Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>',
+      'utf8',
+    ),
   ])('accepts a supported image signature', (buffer) => {
     expect(validator.isValid(file(buffer))).toBe(true);
   });
@@ -20,6 +24,29 @@ describe('ImageContentValidator', () => {
   it('rejects content that only claims to be an image', () => {
     expect(
       validator.isValid(file(Buffer.from('<script>alert(1)</script>'))),
+    ).toBe(false);
+  });
+
+  it('requires raster images for KYC while preserving SVG support for public icons', () => {
+    const svg = file(
+      Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
+    );
+    expect(new ImageContentValidator({ allowSvg: false }).isValid(svg)).toBe(
+      false,
+    );
+    expect(validator.isValid(svg)).toBe(true);
+  });
+
+  it('rejects an unsafe SVG with script', () => {
+    expect(
+      validator.isValid(
+        file(
+          Buffer.from(
+            '<svg><script>alert(1)</script><path d="M0 0"/></svg>',
+            'utf8',
+          ),
+        ),
+      ),
     ).toBe(false);
   });
 });

@@ -33,6 +33,7 @@ export function assertProviderServiceEligible(
   experienceYears: number | null,
   documents: EvidenceDocument[],
   requireVerified = false,
+  isOrganization = false,
 ): void {
   const service = item.service;
   if (
@@ -49,7 +50,7 @@ export function assertProviderServiceEligible(
       'Giá đăng ký không còn nằm trong giá sàn/trần của dịch vụ.',
     );
   }
-  if ((experienceYears ?? 0) < service.minExperienceYears) {
+  if (!isOrganization && (experienceYears ?? 0) < service.minExperienceYears) {
     throw new BadRequestException(
       'Kinh nghiệm chưa đáp ứng yêu cầu của dịch vụ.',
     );
@@ -65,6 +66,7 @@ export function assertProviderServiceEligible(
         : doc.status !== ReviewStatus.REJECTED),
   );
   if (
+    !isOrganization &&
     service.requiresCertificate &&
     !evidence.some(
       (doc) => doc.type === ProviderDocumentType.PROFESSIONAL_CERTIFICATE,
@@ -74,12 +76,14 @@ export function assertProviderServiceEligible(
       'Dịch vụ yêu cầu chứng chỉ nghề liên kết hợp lệ.',
     );
   }
-  const portfolioCount = evidence.filter(
-    (doc) => doc.type === ProviderDocumentType.PORTFOLIO,
-  ).length;
-  if (portfolioCount < service.minPortfolioImages) {
-    throw new BadRequestException(
-      `Dịch vụ yêu cầu ${service.minPortfolioImages} ảnh portfolio đã xác minh, hồ sơ hiện có ${portfolioCount}.`,
-    );
+  if (!isOrganization) {
+    const portfolioCount = evidence.filter(
+      (doc) => doc.type === ProviderDocumentType.PORTFOLIO,
+    ).length;
+    if (portfolioCount < service.minPortfolioImages) {
+      throw new BadRequestException(
+        `Dịch vụ yêu cầu ${service.minPortfolioImages} ảnh portfolio đã xác minh, hồ sơ hiện có ${portfolioCount}.`,
+      );
+    }
   }
 }

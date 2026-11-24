@@ -1,0 +1,23 @@
+{
+  "capturedAt": "2026-11-20T05:45:51.290Z",
+  "scope": "Local public HTTP on isolated PostgreSQL and Redis DB 15; no JWT/rate limiter/mobile in benchmark",
+  "fixturePosts": 23,
+  "samplesPerCase": 100,
+  "concurrency": 5,
+  "warmup": 20,
+  "measurements": [
+    { "mode": "off", "route": "list", "coldMs": 57.697, "postgresQueries": 600, "p50Ms": 9.284, "p95Ms": 22.195, "p99Ms": 57.444 },
+    { "mode": "off", "route": "detail", "coldMs": 8.618, "postgresQueries": 600, "p50Ms": 6.537, "p95Ms": 10.525, "p99Ms": 13.243 },
+    { "mode": "objects", "route": "list", "coldMs": 21.448, "postgresQueries": 200, "p50Ms": 7.732, "p95Ms": 12.425, "p99Ms": 15.097 },
+    { "mode": "objects", "route": "detail", "coldMs": 11.543, "postgresQueries": 200, "p50Ms": 5.305, "p95Ms": 7.362, "p99Ms": 9.538 },
+    { "mode": "objects-and-index", "route": "list", "coldMs": 19.938, "postgresQueries": 300, "p50Ms": 10.406, "p95Ms": 15.647, "p99Ms": 18.011 },
+    { "mode": "objects-and-index", "route": "detail", "coldMs": 14.174, "postgresQueries": 200, "p50Ms": 5.754, "p95Ms": 8.638, "p99Ms": 9.56 }
+  ],
+  "cache": { "listHits": 4800, "listMisses": 40, "detailHits": 240, "detailMisses": 2, "writeAttempts": 42, "timeouts": 0, "errors": 0 },
+  "limitations": [
+    "Synthetic small dataset and one machine; not a production SLA or representative scale test",
+    "Query reduction in this probe: objects 66.7%; objects-and-index list 50%",
+    "P95 gain for objects in this probe: list about 44%, detail about 30%; index adds latency relative to objects alone",
+    "Production staging soak, larger dataset, CPU/memory saturation, network-loss devices and A/B testing remain required"
+  ]
+}

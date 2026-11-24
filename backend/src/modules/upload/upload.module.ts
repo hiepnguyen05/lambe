@@ -14,6 +14,6 @@ import { UploadController } from './controllers/upload.controller';
     { provide: MEDIA_STORAGE, useExisting: CloudinaryService },
     UploadImageService,
   ],
-  exports: [MEDIA_STORAGE],
+  exports: [MEDIA_STORAGE, CloudinaryService],
 })
 export class UploadModule {}

@@ -6,7 +6,7 @@ import {
   ProviderType,
 } from '@prisma/client';
 import { CURRENT_PROVIDER_TERMS_VERSION } from '../constants/provider-terms.constants';
-import { assertProviderAdult } from './provider-birth-date.policy';
+import { assertProviderAdult } from '../../../common/validation/provider-birth-date.policy';
 import { assertProviderServiceEligible } from './provider-service-eligibility.policy';
 
 export type SubmittableApplication = Prisma.ProviderApplicationGetPayload<{
@@ -82,5 +82,7 @@ export function assertProviderSubmissionComplete(
       item,
       application.experienceYears,
       application.documents,
+      false,
+      !isIndividual,
     );
 }

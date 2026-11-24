@@ -23,6 +23,35 @@ describe('validateEnvironment', () => {
     });
   });
 
+  it.each([
+    'REDIS_ENABLED',
+    'FEED_CACHE_ENABLED',
+    'FEED_CACHE_INDEX_ENABLED',
+    'FEED_RECOMMENDATIONS_ENABLED',
+    'CLOUDINARY_ENABLED',
+    'MAIL_ENABLED',
+    'FIREBASE_ENABLED',
+    'MOMO_ENABLED',
+    'SEPAY_ENABLED',
+    'GEMINI_ENABLED',
+    'GEMINI_WEB_SEARCH_ENABLED',
+  ])('rejects an invalid %s flag', (key) => {
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, [key]: 'yes' }),
+    ).toThrow(`${key} must be true or false`);
+  });
+
+  it.each([
+    ['FEED_CACHE_POST_TTL_SECONDS', '0'],
+    ['FEED_CACHE_POST_TTL_SECONDS', '3601'],
+    ['FEED_CACHE_TIMEOUT_MS', 'NaN'],
+    ['FEED_CACHE_TIMEOUT_MS', '1001'],
+  ])('rejects an invalid %s value', (key, value) => {
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, [key]: value }),
+    ).toThrow(key);
+  });
+
   it.each(['0', '-1', '1.5', 'not-a-number'])(
     'rejects an invalid provider minimum receiving balance: %s',
     (PROVIDER_MIN_RECEIVING_BALANCE) => {
@@ -70,6 +99,12 @@ describe('validateEnvironment', () => {
 
   it('validates Redis settings only when cache is enabled', () => {
     expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        REDIS_COMMAND_TIMEOUT_MS: '0',
+      }),
+    ).toThrow('REDIS_COMMAND_TIMEOUT_MS must be an integer between 1 and 5000');
+    expect(() =>
       validateEnvironment({ ...validEnvironment, REDIS_ENABLED: 'yes' }),
     ).toThrow('REDIS_ENABLED must be true or false');
     expect(() =>
@@ -89,6 +124,28 @@ describe('validateEnvironment', () => {
         REDIS_URL: 'redis://localhost:6379',
       }),
     ).toMatchObject({ REDIS_ENABLED: 'true' });
+  });
+
+  it('requires an authenticated TLS Redis URL in production', () => {
+    const productionRedisEnvironment = {
+      ...validEnvironment,
+      NODE_ENV: 'production',
+      REDIS_ENABLED: 'true',
+    };
+    expect(() =>
+      validateEnvironment({
+        ...productionRedisEnvironment,
+        REDIS_URL: 'redis://default:token@redis.example.com:6379',
+      }),
+    ).toThrow('REDIS_URL must use rediss:// TLS in production');
+    expect(() =>
+      validateEnvironment({
+        ...productionRedisEnvironment,
+        REDIS_URL: 'rediss://redis.example.com:6379',
+      }),
+    ).toThrow(
+      'REDIS_URL must include the Upstash username and password in production',
+    );
   });
 
   it('requires valid SMTP credentials only when email is enabled', () => {
@@ -282,7 +339,7 @@ describe('validateEnvironment', () => {
         ...validEnvironment,
         NODE_ENV: 'production',
         REDIS_ENABLED: 'true',
-        REDIS_URL: 'redis://redis:6379',
+        REDIS_URL: 'rediss://default:test-token@lambe-test.upstash.io:6379',
         CORS_ORIGIN: 'https://admin.lambe.vn',
         FIREBASE_ENABLED: 'true',
         FIREBASE_PROJECT_ID: 'lambe-f7213',

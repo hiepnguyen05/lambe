@@ -4,11 +4,12 @@ import { FirebaseIdentityService } from './firebase-identity.service';
 
 @Module({
   providers: [
+    FirebaseIdentityService,
     {
       provide: FIREBASE_IDENTITY_VERIFIER,
-      useClass: FirebaseIdentityService,
+      useExisting: FirebaseIdentityService,
     },
   ],
-  exports: [FIREBASE_IDENTITY_VERIFIER],
+  exports: [FIREBASE_IDENTITY_VERIFIER, FirebaseIdentityService],
 })
 export class FirebaseModule {}

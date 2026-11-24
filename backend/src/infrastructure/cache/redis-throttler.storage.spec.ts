@@ -1,5 +1,6 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { RedisThrottlerStorage } from './redis-throttler.storage';
+import { runWithRequestId } from '../../common/http/request-context';
 
 describe('RedisThrottlerStorage', () => {
   const record = {
@@ -34,6 +35,7 @@ describe('RedisThrottlerStorage', () => {
       10,
       60_000,
       'medium',
+      undefined,
     );
     expect(fallback.increment).not.toHaveBeenCalled();
   });
@@ -55,5 +57,61 @@ describe('RedisThrottlerStorage', () => {
       storage.increment('key', 1000, 3, 1000, 'short'),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(fallback.increment).not.toHaveBeenCalled();
+  });
+
+  it('keeps public Feed reads available with a conservative local limit', async () => {
+    const { storage, fallback } = context('down');
+    await runWithRequestId(
+      'read',
+      () => storage.increment('feed-key', 60000, 120, 60000, 'medium'),
+      true,
+    );
+    expect(fallback.increment).toHaveBeenCalledWith(
+      'feed-key',
+      60000,
+      30,
+      60000,
+      'medium',
+    );
+  });
+
+  it('uses a native 100 ms command deadline for public Feed reads', async () => {
+    const { storage, redis, fallback } = context('up');
+    await runWithRequestId(
+      'feed-read',
+      () => storage.increment('feed-key', 1000, 10, 1000, 'short'),
+      true,
+    );
+    expect(redis.incrementRateLimit).toHaveBeenCalledWith(
+      'feed-key',
+      1000,
+      10,
+      1000,
+      'short',
+      100,
+    );
+    expect(fallback.increment).not.toHaveBeenCalled();
+  });
+
+  it('handles a Redis disconnect after readiness without relaxing write protection', async () => {
+    const { storage, redis, fallback } = context('up');
+    redis.incrementRateLimit.mockRejectedValue(new Error('socket closed'));
+    await runWithRequestId(
+      'read',
+      () => storage.increment('feed-key', 1000, 10, 1000, 'short'),
+      true,
+    );
+    expect(fallback.increment).toHaveBeenCalledWith(
+      'feed-key',
+      1000,
+      5,
+      1000,
+      'short',
+    );
+    await expect(
+      runWithRequestId('write', () =>
+        storage.increment('write-key', 1000, 10, 1000, 'short'),
+      ),
+    ).rejects.toThrow('socket closed');
   });
 });

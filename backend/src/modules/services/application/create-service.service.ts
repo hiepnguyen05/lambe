@@ -13,9 +13,9 @@ import { AuditService } from '../../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../../infrastructure/persistence/postgres/prisma.service';
 import type { CreateServiceDto } from '../dto/create-service.dto';
 import {
-  normalizeServiceName,
-  trimOptionalServiceField,
-} from '../domain/service-normalizer';
+  normalizeName as normalizeServiceName,
+  trimOptionalField as trimOptionalServiceField,
+} from '../../../common/utils/text-normalizer';
 import { assertValidPriceRange } from '../domain/service-status.policy';
 import { adminServiceSelect, toServiceAuditSnapshot } from './service.select';
 import { ServiceCacheService } from './service-cache.service';

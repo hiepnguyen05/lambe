@@ -22,13 +22,13 @@ import {
 } from '../../domain/provider-application.policy';
 import { applicantProviderApplicationSelect } from '../persistence/provider-application.select';
 import { ProviderApplicationNotificationService } from '../notifications/provider-application-notification.service';
-import { KycCryptoService } from '../kyc/kyc-crypto.service';
+import { KycCryptoService } from '../../../../infrastructure/kyc/kyc-crypto.service';
 import {
   lockProviderApplication,
   lockProviderCatalog,
 } from '../persistence/provider-application-lock';
-import { claimProviderIdentity } from '../persistence/provider-identity-claim';
-import { parseProviderBirthDate } from '../../domain/provider-birth-date.policy';
+import { claimProviderIdentity } from '../../../../infrastructure/kyc/provider-identity-claim';
+import { parseProviderBirthDate } from '../../../../common/validation/provider-birth-date.policy';
 import { buildProviderSnapshot } from '../../domain/provider-snapshot';
 import { assertProviderSubmissionComplete } from '../../domain/provider-submission.policy';
 
@@ -56,6 +56,18 @@ export class ProviderApplicationsService {
           });
           if (profile)
             throw new ConflictException('Tài khoản đã là nhà cung cấp.');
+          const membership = await transaction.providerMember.findFirst({
+            where: {
+              userId,
+              canProvideServices: true,
+              status: { not: 'LEFT' },
+            },
+            select: { id: true },
+          });
+          if (membership)
+            throw new ConflictException(
+              'Bạn đang có membership cung cấp dịch vụ; cần kết thúc trước khi đăng ký đối tác riêng.',
+            );
           const existing = await transaction.providerApplication.findFirst({
             where: {
               userId,
@@ -67,12 +79,29 @@ export class ProviderApplicationsService {
                 ],
               },
             },
-            select: { id: true },
+            select: { id: true, status: true, providerType: true },
           });
-          if (existing)
+          if (existing) {
+            // Cho phép chuyển đổi loại hình nếu hồ sơ còn ở trạng thái nháp hoặc cần bổ sung
+            if (
+              existing.status === ProviderApplicationStatus.DRAFT ||
+              existing.status === ProviderApplicationStatus.NEEDS_CHANGES
+            ) {
+              if (existing.providerType !== dto.providerType) {
+                await transaction.providerApplication.update({
+                  where: { id: existing.id },
+                  data: { providerType: dto.providerType },
+                });
+              }
+              return transaction.providerApplication.findUniqueOrThrow({
+                where: { id: existing.id },
+                select: applicantProviderApplicationSelect,
+              });
+            }
             throw new ConflictException(
               'Bạn đang có một hồ sơ đăng ký chưa kết thúc.',
             );
+          }
           return transaction.providerApplication.create({
             data: {
               userId,
@@ -151,7 +180,6 @@ export class ProviderApplicationsService {
               birthDate: parsedBirthDate,
             }),
             ...(nationalIdNumber !== undefined && {
-              nationalIdNumber: null,
               nationalIdEncrypted: protectedNationalId?.encrypted ?? null,
               nationalIdHash: protectedNationalId?.hash ?? null,
               nationalIdLast4: protectedNationalId?.last4 ?? null,
@@ -303,6 +331,7 @@ export class ProviderApplicationsService {
       await this.notifications.notifySubmitted(
         {
           applicationId: id,
+          userId,
           email: application.email,
           displayName:
             application.providerType === 'INDIVIDUAL'

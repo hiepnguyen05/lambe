@@ -9,7 +9,7 @@ import {
   internalProviderApplicationDetailInclude,
   providerApplicationListSelect,
 } from '../persistence/provider-application.select';
-import { KycCryptoService } from '../kyc/kyc-crypto.service';
+import { KycCryptoService } from '../../../../infrastructure/kyc/kyc-crypto.service';
 
 @Injectable()
 export class ProviderApplicationsQueryService {
@@ -67,10 +67,7 @@ export class ProviderApplicationsQueryService {
         this.kycCrypto.isConfigured()
       ) {
         conditions.push({
-          OR: [
-            { nationalIdHash: this.kycCrypto.hashNationalId(search) },
-            { nationalIdNumber: search },
-          ],
+          nationalIdHash: this.kycCrypto.hashNationalId(search),
         });
       }
       where.OR = conditions;
@@ -114,13 +111,12 @@ export class ProviderApplicationsQueryService {
       nationalIdEncrypted,
       nationalIdHash: _nationalIdHash,
       nationalIdLast4,
-      nationalIdNumber: legacyNationalId,
       ...safeApplication
     } = application;
     void _nationalIdHash;
     const nationalIdNumber = nationalIdEncrypted
       ? this.kycCrypto.revealNationalId(nationalIdEncrypted)
-      : legacyNationalId;
+      : null;
     await this.audit.record(
       {
         actorInternalAccountId: actorId,

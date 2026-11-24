@@ -12,7 +12,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { CreateServiceDto } from '../../services/dto/create-service.dto';
-import { trimOptionalString } from './provider-transformers';
+import { trimOptionalString } from '../../../common/validation/string-transformers';
 
 export class CreateProviderServiceSuggestionDto {
   @ApiProperty({ format: 'uuid' })

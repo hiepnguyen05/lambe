@@ -6,6 +6,17 @@ import {
 import { ProviderProfileStatus } from '@prisma/client';
 import { ProviderAvailabilityService } from './provider-availability.service';
 
+function location() {
+  const capturedAt = new Date();
+  return {
+    latitude: 10.7731,
+    longitude: 106.703,
+    accuracyMeters: 8,
+    capturedAt: capturedAt.toISOString(),
+    sequence: capturedAt.getTime(),
+  };
+}
+
 function context() {
   const provider: {
     id: string;
@@ -19,7 +30,7 @@ function context() {
       priceAmount: number;
       service: { minPriceAmount: number; maxPriceAmount: number };
     }>;
-    _count: { services: number; workingHours: number };
+    _count: { services: number; workingHours: number; orders: number };
   } = {
     id: 'provider-id',
     status: ProviderProfileStatus.ACTIVE,
@@ -34,12 +45,14 @@ function context() {
         service: { minPriceAmount: 50_000, maxPriceAmount: 300_000 },
       },
     ],
-    _count: { services: 1, workingHours: 1 },
+    _count: { services: 1, workingHours: 1, orders: 0 },
   };
   const session = {
     id: 'session-id',
     startedAt: new Date(),
     lastHeartbeatAt: new Date(),
+    lastCapturedAt: new Date(Date.now() - 1_000),
+    lastSequence: BigInt(Date.now() - 1_000),
   };
   const availabilitySessions = {
     findFirst: jest.fn().mockResolvedValue(session),
@@ -63,7 +76,7 @@ function context() {
   };
   const locations = {
     getPosition: jest.fn().mockResolvedValue(null),
-    upsert: jest.fn(),
+    upsert: jest.fn().mockResolvedValue(true),
     remove: jest.fn().mockResolvedValue(undefined),
     isOnline: jest.fn().mockResolvedValue(true),
     findNearby: jest.fn(),
@@ -83,6 +96,7 @@ function context() {
     provider,
     locations,
     availabilitySessions,
+    session,
     audit,
   };
 }
@@ -90,24 +104,36 @@ function context() {
 describe('ProviderAvailabilityService', () => {
   afterEach(() => jest.useRealTimers());
 
+  it('blocks online activation while a safety incident is open', async () => {
+    const { service, provider, locations } = context();
+    provider._count.orders = 1;
+    await expect(
+      service.goOnline('user-id', location(), {}),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(locations.upsert).not.toHaveBeenCalled();
+    expect(locations.remove).toHaveBeenCalledWith('provider-id');
+  });
+
   it('starts a traceable online session and stores location only in Redis', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-09-28T12:00:00.000Z'));
     const { service, locations, availabilitySessions, audit } = context();
-    await service.goOnline(
-      'user-id',
-      { latitude: 10.7731, longitude: 106.703 },
-      {},
-    );
+    await service.goOnline('user-id', location(), {});
 
-    expect(locations.upsert).toHaveBeenCalledWith(
-      'provider-id',
-      10.7731,
-      106.703,
-    );
+    expect(locations.upsert).toHaveBeenCalledWith({
+      providerId: 'provider-id',
+      sessionId: 'session-id',
+      latitude: 10.7731,
+      longitude: 106.703,
+      accuracyMeters: 8,
+      capturedAtMs: new Date('2026-09-28T12:00:00.000Z').getTime(),
+      sequence: new Date('2026-09-28T12:00:00.000Z').getTime(),
+    });
     expect(availabilitySessions.create).toHaveBeenCalledWith({
       data: {
         providerId: 'provider-id',
         lastHeartbeatAt: new Date('2026-09-28T12:00:00.000Z'),
+        lastCapturedAt: new Date('2026-09-28T12:00:00.000Z'),
+        lastSequence: BigInt(new Date('2026-09-28T12:00:00.000Z').getTime()),
       },
       select: { id: true, startedAt: true, lastHeartbeatAt: true },
     });
@@ -122,11 +148,7 @@ describe('ProviderAvailabilityService', () => {
     const { service, provider, locations } = context();
     provider.setupCompletedAt = null;
     await expect(
-      service.goOnline(
-        'user-id',
-        { latitude: 10.7731, longitude: 106.703 },
-        {},
-      ),
+      service.goOnline('user-id', location(), {}),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(locations.upsert).not.toHaveBeenCalled();
   });
@@ -135,11 +157,7 @@ describe('ProviderAvailabilityService', () => {
     const { service, provider } = context();
     provider.status = ProviderProfileStatus.SUSPENDED;
     await expect(
-      service.goOnline(
-        'user-id',
-        { latitude: 10.7731, longitude: 106.703 },
-        {},
-      ),
+      service.goOnline('user-id', location(), {}),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -148,11 +166,7 @@ describe('ProviderAvailabilityService', () => {
     provider.wallet = { balanceAmount: 60_000, heldAmount: 10_001 };
 
     try {
-      await service.goOnline(
-        'user-id',
-        { latitude: 10.7731, longitude: 106.703 },
-        {},
-      );
+      await service.goOnline('user-id', location(), {});
       throw new Error('Expected goOnline to reject a low wallet balance.');
     } catch (error: unknown) {
       if (!(error instanceof ConflictException)) throw error;
@@ -168,11 +182,7 @@ describe('ProviderAvailabilityService', () => {
     provider.status = ProviderProfileStatus.SUSPENDED;
 
     await expect(
-      service.goOnline(
-        'user-id',
-        { latitude: 10.7731, longitude: 106.703 },
-        {},
-      ),
+      service.goOnline('user-id', location(), {}),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(locations.upsert).not.toHaveBeenCalled();
     expect(availabilitySessions.create).not.toHaveBeenCalled();
@@ -182,25 +192,50 @@ describe('ProviderAvailabilityService', () => {
     const { service, availabilitySessions, locations } = context();
     availabilitySessions.findFirst.mockResolvedValue(null);
     await expect(
-      service.heartbeat('user-id', {
-        latitude: 10.7731,
-        longitude: 106.703,
-      }),
+      service.heartbeat('user-id', location()),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(locations.upsert).not.toHaveBeenCalled();
   });
 
   it('does not restore Redis location when the session closes before heartbeat update', async () => {
-    const { service, availabilitySessions, locations } = context();
+    const { service, availabilitySessions, locations, session } = context();
+    availabilitySessions.findFirst
+      .mockResolvedValueOnce(session)
+      .mockResolvedValueOnce(null);
     availabilitySessions.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await expect(
+      service.heartbeat('user-id', location()),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(locations.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects an older heartbeat without deleting the current Redis location', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-05T05:30:00.000Z'));
+    const { service, locations } = context();
+    const stale = new Date('2026-11-05T05:29:58.000Z');
 
     await expect(
       service.heartbeat('user-id', {
         latitude: 10.7731,
         longitude: 106.703,
+        accuracyMeters: 8,
+        capturedAt: stale.toISOString(),
+        sequence: stale.getTime(),
       }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toMatchObject({ response: { code: 'STALE_GPS' } });
     expect(locations.upsert).not.toHaveBeenCalled();
+    expect(locations.remove).not.toHaveBeenCalled();
+  });
+
+  it('does not delete a newer Redis location when an older write loses the race', async () => {
+    const { service, locations } = context();
+    locations.upsert.mockResolvedValueOnce(false);
+
+    await expect(
+      service.heartbeat('user-id', location()),
+    ).rejects.toMatchObject({ response: { code: 'STALE_GPS' } });
+    expect(locations.remove).not.toHaveBeenCalled();
   });
 
   it('ends the online session when wallet balance drops below the minimum', async () => {
@@ -209,10 +244,7 @@ describe('ProviderAvailabilityService', () => {
     provider.wallet = { balanceAmount: 49_999, heldAmount: 0 };
 
     await expect(
-      service.heartbeat('user-id', {
-        latitude: 10.7731,
-        longitude: 106.703,
-      }),
+      service.heartbeat('user-id', location()),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(availabilitySessions.updateMany).toHaveBeenCalledWith({
       where: { providerId: 'provider-id', endedAt: null },

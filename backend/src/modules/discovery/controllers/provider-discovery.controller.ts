@@ -40,12 +40,16 @@ export class ProviderDiscoveryController {
   @ApiOperation({
     summary: 'Tìm thợ cho đặt ngay hoặc đặt trước, kiểm tra bán kính và lịch',
     description:
-      'ASAP dùng GPS online; SCHEDULED dùng tâm khu vực phục vụ. Dùng POST body để tránh ghi tọa độ khách vào query/access log. available và suggestedSlots chỉ là gợi ý, không giữ lịch. Không trả tọa độ thật của thợ.',
+      'ASAP dùng GPS/heartbeat còn hạn của người thực hiện; SCHEDULED dùng tâm khu vực tổ chức và lịch riêng của member. Tổ chức có thể trả nhiều thẻ cùng providerId nhưng khác memberId; khóa thẻ bằng cặp providerId/memberId. Thẻ member có reviewSummary (count, averageRating nullable) là điểm riêng của người thực hiện, không dùng điểm tổ chức thay thế. Có thể lọc providerId/memberId khi chọn thợ trước. Gửi memberId cùng service.id (providerServiceId) khi báo giá và tạo đơn tổ chức. distanceKm là đường chim bay; estimatedTravelDistanceKm/estimatedTravelFeeAmount chỉ ước tính, /orders/quote là giá chính thức. available=false có thể kèm suggestedSlots, không giữ lịch. Không trả tọa độ thật hoặc KYC của thợ.',
   })
   @ApiStandardOk({
     description: 'Danh sách nhà cung cấp phù hợp với dịch vụ và vị trí khách.',
     data: providerSearchExample.data.map((item) => ({
       ...item,
+      providerId: item.id,
+      memberId: null,
+      member: null,
+      organization: null,
       available: true,
       reason: null,
       expectedStartAt: '2026-10-14T07:00:00.000Z',
@@ -57,7 +61,7 @@ export class ProviderDiscoveryController {
     meta: {
       ...providerSearchExample.meta,
       bookingType: 'SCHEDULED',
-      candidateLimit: 300,
+      candidateLimit: 600,
       searchLimited: false,
     },
   })
@@ -74,7 +78,11 @@ export class ProviderDiscoveryController {
   }
 
   @Get('providers/:id/public')
-  @ApiOperation({ summary: 'Xem hồ sơ công khai của nhà cung cấp' })
+  @ApiOperation({
+    summary: 'Xem hồ sơ công khai của nhà cung cấp',
+    description:
+      'stats.rating là điểm thực tế của đối tác, null khi chưa có đánh giá (stats.reviewCount=0); không mặc định 5 sao. reviews[].assignedMember là snapshot của người thực hiện, null với đơn cũ/cá nhân chưa gắn member.',
+  })
   @ApiStandardOk({
     description: 'Hồ sơ công khai của nhà cung cấp đang hoạt động.',
     data: publicProviderExample,

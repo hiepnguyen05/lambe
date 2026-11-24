@@ -84,7 +84,7 @@ export class FirebaseIdentityService
     return this.configService.get<boolean>('firebase.enabled') === true;
   }
 
-  private async getFirebaseApp(): Promise<App> {
+  async getFirebaseApp(): Promise<App> {
     if (this.app) return this.app;
 
     const { applicationDefault, getApps, initializeApp } =

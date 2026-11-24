@@ -25,10 +25,12 @@ import { InternalJwtAuthGuard } from '../../internal-auth/guards/internal-jwt-au
 import { InternalRolesGuard } from '../../internal-auth/guards/internal-roles.guard';
 import type { AuthenticatedInternalAccount } from '../../internal-auth/types/authenticated-internal-account.type';
 import { AdminProviderManagementService } from '../application/management/admin-provider-management.service';
+import { ProviderServicesService } from '../application/services/provider-services.service';
 import {
   AdminProviderQueryDto,
   UpdateAdminProviderStatusDto,
 } from '../dto/admin-provider-management.dto';
+import { SuspendProviderServiceDto } from '../dto/provider-service-management.dto';
 
 @ApiTags('Admin Providers')
 @ApiBearerAuth('internal-token')
@@ -36,7 +38,48 @@ import {
 @InternalRoles(InternalRole.ADMIN, InternalRole.MODERATOR, InternalRole.SUPPORT)
 @Controller('admin/providers')
 export class AdminProvidersController {
-  constructor(private readonly service: AdminProviderManagementService) {}
+  constructor(
+    private readonly service: AdminProviderManagementService,
+    private readonly providerServices: ProviderServicesService,
+  ) {}
+
+  @Post(':id/services/:serviceId/suspend')
+  @InternalRoles(InternalRole.ADMIN, InternalRole.MODERATOR)
+  @ApiOperation({ summary: 'Đình chỉ một dịch vụ của đối tác' })
+  suspendService(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('serviceId', new ParseUUIDPipe({ version: '4' })) serviceId: string,
+    @Body() dto: SuspendProviderServiceDto,
+    @CurrentInternalAccount() account: AuthenticatedInternalAccount,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.providerServices.suspend(
+      id,
+      serviceId,
+      dto.reason,
+      account.accountId,
+      request,
+    );
+  }
+
+  @Post(':id/services/:serviceId/restore')
+  @InternalRoles(InternalRole.ADMIN, InternalRole.MODERATOR)
+  @ApiOperation({
+    summary: 'Khôi phục dịch vụ đã đình chỉ về trạng thái tạm ngừng',
+  })
+  restoreService(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('serviceId', new ParseUUIDPipe({ version: '4' })) serviceId: string,
+    @CurrentInternalAccount() account: AuthenticatedInternalAccount,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.providerServices.restore(
+      id,
+      serviceId,
+      account.accountId,
+      request,
+    );
+  }
 
   @Get()
   @ApiOperation({

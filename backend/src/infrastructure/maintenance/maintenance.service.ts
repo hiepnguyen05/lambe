@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma, ServiceOrderStatus, WalletTopUpStatus } from '@prisma/client';
 import { PrismaService } from '../persistence/postgres/prisma.service';
+import { orderServingUserId } from '../../modules/orders/application/persistence/order-actor.policy';
 
 const CLEANUP_ADVISORY_LOCK_ID = 127_001_003;
 
@@ -32,6 +33,30 @@ export class MaintenanceService {
     if (result.count > 0) {
       this.logger.log(`Closed ${result.count} stale provider sessions`);
     }
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE, {
+    name: 'close-stale-member-sessions',
+    waitForCompletion: true,
+  })
+  async closeStaleMemberSessions(): Promise<void> {
+    const cutoff = new Date(
+      Date.now() -
+        this.config.get<number>('cache.providerLocationTtlSeconds', 120) * 1000,
+    );
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      WITH stale AS (
+        SELECT "id" FROM "provider_member_availability_sessions"
+        WHERE "endedAt" IS NULL AND "lastHeartbeatAt" <= ${cutoff}
+        ORDER BY "lastHeartbeatAt", "id" LIMIT 500 FOR UPDATE SKIP LOCKED
+      )
+      UPDATE "provider_member_availability_sessions" session
+      SET "endedAt" = CURRENT_TIMESTAMP, "endReason" = 'HEARTBEAT_EXPIRED'
+      FROM stale WHERE session."id" = stale."id" AND session."endedAt" IS NULL
+      RETURNING session."id"
+    `);
+    if (rows.length)
+      this.logger.log(`Closed ${rows.length} stale member sessions`);
   }
 
   @Cron(CronExpression.EVERY_MINUTE, {
@@ -73,6 +98,10 @@ export class MaintenanceService {
         where: { orderId: { in: ids }, active: true },
         data: { active: false },
       });
+      await transaction.voucherRedemption.updateMany({
+        where: { orderId: { in: ids }, status: 'RESERVED' },
+        data: { status: 'RELEASED' },
+      });
       const owners = await transaction.serviceOrder.findMany({
         where: { id: { in: ids } },
         select: { id: true, customerId: true },
@@ -89,6 +118,48 @@ export class MaintenanceService {
     if (count > 0) {
       this.logger.log(`Expired ${count} pending service orders`);
     }
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE, {
+    name: 'expire-order-add-ons',
+    waitForCompletion: true,
+  })
+  async expireOrderAddOns(): Promise<void> {
+    const count = await this.prisma.$transaction(async (tx) => {
+      const expired = await tx.$queryRaw<Array<{ orderId: string }>>(Prisma.sql`
+        WITH due AS (
+          SELECT "id" FROM "order_add_ons"
+          WHERE "status" = 'PENDING' AND "expiresAt" <= NOW()
+          ORDER BY "expiresAt", "id"
+          LIMIT 500 FOR UPDATE SKIP LOCKED
+        )
+        UPDATE "order_add_ons" AS item
+        SET "status" = 'EXPIRED', "respondedAt" = NOW()
+        FROM due WHERE item."id" = due."id"
+        RETURNING item."orderId"
+      `);
+      if (!expired.length) return 0;
+      const orders = await tx.serviceOrder.findMany({
+        where: { id: { in: expired.map((item) => item.orderId) } },
+        select: {
+          id: true,
+          customerId: true,
+          assignedMemberUserId: true,
+          provider: { select: { userId: true } },
+        },
+      });
+      await tx.orderNotification.createMany({
+        data: orders.flatMap((order) =>
+          [order.customerId, orderServingUserId(order)].map((userId) => ({
+            userId,
+            orderId: order.id,
+            event: 'ORDER_ADD_ON_EXPIRED',
+          })),
+        ),
+      });
+      return expired.length;
+    });
+    if (count) this.logger.log(`Expired ${count} order add-on requests`);
   }
 
   @Cron(CronExpression.EVERY_10_MINUTES, {
@@ -118,12 +189,13 @@ export class MaintenanceService {
         select: {
           id: true,
           customerId: true,
+          assignedMemberUserId: true,
           provider: { select: { userId: true } },
         },
       });
       await tx.orderNotification.createMany({
         data: orders.flatMap((order) =>
-          [order.customerId, order.provider.userId].map((userId) => ({
+          [order.customerId, orderServingUserId(order)].map((userId) => ({
             userId,
             orderId: order.id,
             event: 'CANCELLATION_ESCALATED',
@@ -165,6 +237,7 @@ export class MaintenanceService {
     try {
       const now = new Date();
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       const result = await this.prisma.$transaction(async (transaction) => {
         const [lock] = await transaction.$queryRaw<
           Array<{ acquired: boolean }>
@@ -173,6 +246,16 @@ export class MaintenanceService {
         );
 
         if (!lock?.acquired) return null;
+
+        const deletedSetupTokens =
+          await transaction.internalSetupToken.deleteMany({
+            where: {
+              OR: [
+                { expiresAt: { lt: now } },
+                { consumedAt: { lt: sevenDaysAgo } },
+              ],
+            },
+          });
 
         const deletedSessions = await transaction.internalSession.deleteMany({
           where: {
@@ -190,10 +273,18 @@ export class MaintenanceService {
             ],
           },
         });
+        const deletedPushRows = await transaction.pushOutbox.deleteMany({
+          where: {
+            createdAt: { lt: thirtyDaysAgo },
+            OR: [{ sentAt: { not: null } }, { failedAt: { not: null } }],
+          },
+        });
 
         return {
+          setupTokenCount: deletedSetupTokens.count,
           internalSessionCount: deletedSessions.count,
           userSessionCount: deletedUserSessions.count,
+          pushOutboxCount: deletedPushRows.count,
         };
       });
 
@@ -205,7 +296,7 @@ export class MaintenanceService {
       }
 
       this.logger.log(
-        `Cleanup completed: removed ${result.internalSessionCount} internal sessions and ${result.userSessionCount} user sessions`,
+        `Cleanup completed: removed ${result.setupTokenCount} setup tokens, ${result.internalSessionCount} internal sessions, ${result.userSessionCount} user sessions and ${result.pushOutboxCount} push rows`,
       );
     } catch (error: unknown) {
       const message =

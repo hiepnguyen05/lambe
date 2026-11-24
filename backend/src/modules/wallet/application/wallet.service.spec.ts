@@ -90,3 +90,72 @@ describe('WalletService MoMo IPN', () => {
     });
   });
 });
+
+describe('WalletService MoMo top-up creation', () => {
+  it('persists the signed callback reference in the initial write', async () => {
+    const create = jest
+      .fn()
+      .mockImplementation(({ data }: { data: object }) =>
+        Promise.resolve({ ...data, status: WalletTopUpStatus.CREATED }),
+      );
+    const update = jest
+      .fn()
+      .mockImplementation(
+        ({ where, data }: { where: { id: string }; data: object }) =>
+          Promise.resolve({
+            id: where.id,
+            amount: 100000,
+            provider: 'MOMO',
+            orderId: 'order-id',
+            expiresAt: new Date(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            paidAt: null,
+            momoTransId: null,
+            sepayTransId: null,
+            ...data,
+          }),
+      );
+    const prisma = {
+      providerProfile: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ wallet: { id: 'wallet-id' } }),
+      },
+      walletTopUpRequest: { create, update },
+    };
+    const momo = {
+      createPayment: jest.fn().mockResolvedValue({
+        resultCode: 0,
+        payUrl: 'https://example.com/pay',
+        message: 'Successful',
+      }),
+    };
+    const service = new WalletService(
+      prisma as never,
+      momo as never,
+      {} as never,
+      {} as never,
+      { record: jest.fn() } as never,
+    );
+
+    await service.createMomoTopUp('provider-user', { amount: 100000 }, {});
+
+    const calls = create.mock.calls as unknown as [
+      { data: { id: string; extraData: string } },
+    ][];
+    const saved = calls[0][0].data;
+    expect(saved.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(
+      JSON.parse(
+        Buffer.from(saved.extraData, 'base64').toString('utf8'),
+      ) as unknown,
+    ).toEqual({
+      topUpId: saved.id,
+    });
+    expect(momo.createPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ extraData: saved.extraData }),
+    );
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+});

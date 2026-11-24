@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ProviderNotificationsModule } from './modules/provider-notifications/provider-notifications.module';
 import {
   minutes,
   seconds,
@@ -23,6 +24,7 @@ import sepayConfig from './config/sepay.config';
 import { validateEnvironment } from './config/env.validation';
 
 import { AuthModule } from './modules/auth/auth.module';
+import { AiConsultationModule } from './modules/ai-consultation/ai-consultation.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { CustomerOnboardingModule } from './modules/customer-onboarding/customer-onboarding.module';
@@ -31,14 +33,19 @@ import { DiscoveryModule } from './modules/discovery/discovery.module';
 import { HealthModule } from './modules/health/health.module';
 import { InternalAuthModule } from './modules/internal-auth/internal-auth.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { RematchModule } from './modules/rematch/rematch.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { ProviderApplicationsModule } from './modules/provider-applications/provider-applications.module';
 import { ProvidersModule } from './modules/providers/providers.module';
+import { ProviderMembersModule } from './modules/provider-members/provider-members.module';
 import { ServicesModule } from './modules/services/services.module';
+import { PushModule } from './modules/push/push.module';
+import { SocialFeedModule } from './modules/social-feed/social-feed.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { MaintenanceModule } from './infrastructure/maintenance/maintenance.module';
 import { CacheModule } from './infrastructure/cache/cache.module';
 import { RedisThrottlerStorage } from './infrastructure/cache/redis-throttler.storage';
+import { ObservabilityModule } from './infrastructure/observability/observability.module';
 
 @Module({
   imports: [
@@ -60,6 +67,7 @@ import { RedisThrottlerStorage } from './infrastructure/cache/redis-throttler.st
       validate: validateEnvironment,
     }),
     ScheduleModule.forRoot(),
+    ObservabilityModule,
     ThrottlerModule.forRootAsync({
       imports: [CacheModule],
       inject: [RedisThrottlerStorage],
@@ -82,16 +90,22 @@ import { RedisThrottlerStorage } from './infrastructure/cache/redis-throttler.st
       }),
     }),
     AuthModule,
+    AiConsultationModule,
     InternalAuthModule,
     CategoriesModule,
     ChatModule,
     ServicesModule,
+    PushModule,
+    ProviderNotificationsModule,
+    SocialFeedModule,
     CustomerOnboardingModule,
     CustomersModule,
     ProviderApplicationsModule,
     ProvidersModule,
+    ProviderMembersModule,
     DiscoveryModule,
     OrdersModule,
+    RematchModule,
     WalletModule,
     HealthModule,
     MaintenanceModule,

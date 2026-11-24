@@ -35,11 +35,44 @@ import { OrderParamDto } from '../dto/order.dto';
 export class BookingCalendarController {
   constructor(private readonly availability: BookingAvailabilityService) {}
 
+  @Get('me/provider/memberships/:id/calendar')
+  @ApiOperation({
+    summary:
+      'Member xem lịch bận/nghỉ của mình; owner xem đúng thành viên tổ chức',
+    description:
+      'Tối đa 31 ngày, 500 khoảng. Gồm đơn đang giữ/đã nhận, lịch đổi đang chờ, nghỉ phép và legacy commitment ẩn danh; không trả đơn/địa chỉ của người khác. Không giữ lịch khi đọc.',
+  })
+  @ApiStandardOk({
+    description:
+      'Lịch bận tổng hợp; dùng danh sách đơn của mình để mở chi tiết công việc.',
+    data: [
+      {
+        startAt: '2026-11-01T07:00:00.000Z',
+        endAt: '2026-11-01T08:00:00.000Z',
+        kind: 'BUSY',
+        estimated: false,
+      },
+    ],
+    meta: {
+      memberId: '216a1b81-4061-42be-b08a-3497522fb430',
+      timezone: 'Asia/Ho_Chi_Minh',
+      limit: 500,
+      limited: false,
+    },
+  })
+  memberCalendar(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param() params: OrderParamDto,
+    @Query() dto: CalendarRangeDto,
+  ) {
+    return this.availability.findMemberCalendar(user.userId, params.id, dto);
+  }
+
   @Get('providers/:id/availability')
   @ApiOperation({
     summary: 'Gợi ý khung giờ trống cho dịch vụ và địa chỉ đã chọn',
     description:
-      'Slots are advisory, not held. Suggestions respect the provider service radius, working hours, pending/confirmed bookings and travel buffers. A provider still must accept the order.',
+      'Gửi memberId khi chọn chuyên viên tổ chức; chỉ xét lịch, nghỉ, năng lực và khoảng đệm di chuyển của người đó, cộng lịch legacy chung. Bán kính hiệu lực lấy min(member,organization). Query hiện yêu cầu customerAddressId; địa chỉ nhập ngay dùng discovery/quote. Slot chỉ là gợi ý, không giữ lịch; người được chọn vẫn phải nhận đơn.',
   })
   @ApiStandardOk({
     description: 'Available 15-minute start times in Vietnam time.',
@@ -48,6 +81,7 @@ export class BookingCalendarController {
       timezone: 'Asia/Ho_Chi_Minh',
       durationMinutes: 60,
       providerServiceId: 'provider-service-uuid',
+      memberId: '216a1b81-4061-42be-b08a-3497522fb430',
       reason: null,
       requiresProviderConfirmation: true,
       estimateSource: 'CONSERVATIVE_DISTANCE',

@@ -112,15 +112,12 @@ export class AdminProviderManagementService {
     const summaryWhere = this.buildWhere({
       search: query.search,
     });
-    const [
-      providers,
-      total,
-      setupRequired,
-      active,
-      suspended,
-      individuals,
-      organizations,
-    ] = await this.prisma.$transaction([
+    const groupedCounts = this.prisma.providerProfile.groupBy({
+      by: ['status', 'providerType'],
+      where: summaryWhere,
+      _count: { _all: true },
+    });
+    const [providers, groups] = await this.prisma.$transaction([
       this.prisma.providerProfile.findMany({
         where,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -128,26 +125,37 @@ export class AdminProviderManagementService {
         take: query.limit,
         select: providerListSelect,
       }),
-      this.prisma.providerProfile.count({ where }),
-      this.prisma.providerProfile.count({
-        where: {
-          ...summaryWhere,
-          status: ProviderProfileStatus.SETUP_REQUIRED,
-        },
-      }),
-      this.prisma.providerProfile.count({
-        where: { ...summaryWhere, status: ProviderProfileStatus.ACTIVE },
-      }),
-      this.prisma.providerProfile.count({
-        where: { ...summaryWhere, status: ProviderProfileStatus.SUSPENDED },
-      }),
-      this.prisma.providerProfile.count({
-        where: { ...summaryWhere, providerType: ProviderType.INDIVIDUAL },
-      }),
-      this.prisma.providerProfile.count({
-        where: { ...summaryWhere, providerType: ProviderType.ORGANIZATION },
-      }),
+      groupedCounts,
     ]);
+
+    const summary = {
+      total: 0,
+      setupRequired: 0,
+      active: 0,
+      suspended: 0,
+      individuals: 0,
+      organizations: 0,
+    };
+    let total = 0;
+    for (const group of groups) {
+      const count = group._count._all;
+      summary.total += count;
+      if (group.status === ProviderProfileStatus.SETUP_REQUIRED)
+        summary.setupRequired += count;
+      if (group.status === ProviderProfileStatus.ACTIVE)
+        summary.active += count;
+      if (group.status === ProviderProfileStatus.SUSPENDED)
+        summary.suspended += count;
+      if (group.providerType === ProviderType.INDIVIDUAL)
+        summary.individuals += count;
+      if (group.providerType === ProviderType.ORGANIZATION)
+        summary.organizations += count;
+      if (
+        (!query.status || group.status === query.status) &&
+        (!query.providerType || group.providerType === query.providerType)
+      )
+        total += count;
+    }
 
     return {
       success: true,
@@ -157,14 +165,7 @@ export class AdminProviderManagementService {
         limit: query.limit,
         total,
         totalPages: Math.ceil(total / query.limit),
-        summary: {
-          total: setupRequired + active + suspended,
-          setupRequired,
-          active,
-          suspended,
-          individuals,
-          organizations,
-        },
+        summary,
       },
     };
   }
@@ -282,6 +283,7 @@ export class AdminProviderManagementService {
     providerId: string,
     actorId: string | undefined,
     request: RequestMetadata,
+    onlyIfMissing = false,
   ) {
     const provider = await this.prisma.providerProfile.findUnique({
       where: { id: providerId },
@@ -335,6 +337,15 @@ export class AdminProviderManagementService {
         await transaction.$queryRaw(
           Prisma.sql`SELECT "id" FROM "provider_profiles" WHERE "id" = ${providerId} FOR UPDATE`,
         );
+        if (onlyIfMissing) {
+          const current = await transaction.providerProfile.findUnique({
+            where: { id: providerId },
+            select: { avatarUrl: true, user: { select: { avatarUrl: true } } },
+          });
+          if (current?.avatarUrl && current.user.avatarUrl) {
+            throw new BadRequestException('Avatar already synchronized.');
+          }
+        }
         const currentPortrait =
           await transaction.providerApplicationDocument.findFirst({
             where: {
@@ -403,30 +414,72 @@ export class AdminProviderManagementService {
     }
   }
 
-  async backfillMissingAvatars() {
-    const providers = await this.prisma.providerProfile.findMany({
-      where: {
-        OR: [{ avatarUrl: null }, { user: { is: { avatarUrl: null } } }],
-      },
-      select: { id: true },
-      orderBy: { createdAt: 'asc' },
-    });
+  async backfillMissingAvatars(
+    options: { cursor?: string; limit?: number } = {},
+  ) {
+    const limit = options.limit ?? 100;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+      throw new BadRequestException(
+        'Backfill limit must be between 1 and 500.',
+      );
+    }
+    const missingAvatar: Prisma.ProviderProfileWhereInput = {
+      OR: [{ avatarUrl: null }, { user: { is: { avatarUrl: null } } }],
+    };
+    let cursor = options.cursor;
+    let cursorCreatedAt: Date | undefined;
+    if (cursor) {
+      const existing = await this.prisma.providerProfile.findUnique({
+        where: { id: cursor },
+        select: { createdAt: true },
+      });
+      if (!existing)
+        throw new BadRequestException('Backfill cursor not found.');
+      cursorCreatedAt = existing.createdAt;
+    }
+    let scanned = 0;
     let updated = 0;
-    const failed: Array<{ providerId: string; reason: string }> = [];
-    for (const provider of providers) {
-      try {
-        await this.syncAvatar(provider.id, undefined, {
-          requestId: 'provider-avatar-backfill',
-        });
-        updated += 1;
-      } catch (error: unknown) {
-        failed.push({
-          providerId: provider.id,
-          reason: error instanceof Error ? error.message : 'Unknown error',
-        });
+    let skipped = 0;
+    let failed = 0;
+    while (scanned < limit) {
+      const providers = await this.prisma.providerProfile.findMany({
+        where: cursorCreatedAt
+          ? {
+              AND: [
+                missingAvatar,
+                {
+                  OR: [
+                    { createdAt: { gt: cursorCreatedAt } },
+                    { createdAt: cursorCreatedAt, id: { gt: cursor } },
+                  ],
+                },
+              ],
+            }
+          : missingAvatar,
+        select: { id: true, createdAt: true },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: Math.min(25, limit - scanned),
+      });
+      if (!providers.length) break;
+      for (const provider of providers) {
+        cursor = provider.id;
+        cursorCreatedAt = provider.createdAt;
+        scanned += 1;
+        try {
+          await this.syncAvatar(
+            provider.id,
+            undefined,
+            { requestId: 'provider-avatar-backfill' },
+            true,
+          );
+          updated += 1;
+        } catch (error: unknown) {
+          if (error instanceof BadRequestException) skipped += 1;
+          else failed += 1;
+        }
       }
     }
-    return { scanned: providers.length, updated, failed };
+    return { scanned, updated, skipped, failed, nextCursor: cursor ?? null };
   }
 
   private buildWhere(

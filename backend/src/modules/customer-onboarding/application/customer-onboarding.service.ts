@@ -5,6 +5,7 @@ import {
   ServiceCategoryStatus,
   ServiceStatus,
 } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../../../infrastructure/persistence/postgres/prisma.service';
 import type { UpdateCustomerOnboardingDto } from '../dto/update-customer-onboarding.dto';
 
@@ -110,47 +111,57 @@ export class CustomerOnboardingService {
       );
     }
 
-    await this.prisma.$transaction(async (transaction) => {
-      const profile = await transaction.customerProfile.upsert({
-        where: { userId },
-        update: {},
-        create: { userId },
-        select: { id: true, onboardingStatus: true },
-      });
+    await this.prisma.$transaction(
+      async (transaction) => {
+        const profile = await transaction.customerProfile.upsert({
+          where: { userId },
+          update: {},
+          create: { userId },
+          select: { id: true, onboardingStatus: true },
+        });
 
-      await this.replaceCategoryInterests(
-        transaction,
-        profile.id,
-        dto.categoryIds,
-      );
-      await this.replaceServiceInterests(
-        transaction,
-        profile.id,
-        dto.serviceIds,
-      );
+        await this.replaceCategoryInterests(
+          transaction,
+          profile.id,
+          dto.categoryIds,
+        );
+        await this.replaceServiceInterests(
+          transaction,
+          profile.id,
+          dto.serviceIds,
+        );
 
-      await transaction.customerProfile.update({
-        where: { id: profile.id },
-        data: {
-          ...(dto.gender !== undefined ? { gender: dto.gender } : {}),
-          ...(dto.preferredAudience !== undefined
-            ? { preferredAudience: dto.preferredAudience }
-            : {}),
-          ...(dto.pricePreference !== undefined
-            ? { pricePreference: dto.pricePreference }
-            : {}),
-          onboardingStatus:
-            profile.onboardingStatus === CustomerOnboardingStatus.COMPLETED
-              ? CustomerOnboardingStatus.COMPLETED
-              : CustomerOnboardingStatus.IN_PROGRESS,
-          skippedAt: null,
-        },
-      });
+        await transaction.customerProfile.update({
+          where: { id: profile.id },
+          data: {
+            ...(dto.gender !== undefined ? { gender: dto.gender } : {}),
+            ...(dto.preferredAudience !== undefined
+              ? { preferredAudience: dto.preferredAudience }
+              : {}),
+            ...(dto.pricePreference !== undefined
+              ? { pricePreference: dto.pricePreference }
+              : {}),
+            onboardingStatus:
+              profile.onboardingStatus === CustomerOnboardingStatus.COMPLETED
+                ? CustomerOnboardingStatus.COMPLETED
+                : CustomerOnboardingStatus.IN_PROGRESS,
+            skippedAt: null,
+          },
+        });
 
-      if (dto.defaultAddress) {
-        await this.saveDefaultAddress(transaction, userId, dto.defaultAddress);
-      }
-    });
+        if (dto.defaultAddress) {
+          await this.saveDefaultAddress(
+            transaction,
+            userId,
+            dto.defaultAddress,
+          );
+        }
+      },
+      {
+        maxWait: 10000,
+        timeout: 15000,
+      },
+    );
 
     const profile = await this.loadProfile(userId);
     return {
@@ -252,6 +263,7 @@ export class CustomerOnboardingService {
     if (categoryIds.length) {
       await transaction.customerCategoryInterest.createMany({
         data: categoryIds.map((categoryId) => ({
+          id: randomUUID(),
           customerProfileId,
           categoryId,
         })),
@@ -265,6 +277,13 @@ export class CustomerOnboardingService {
     serviceIds?: string[],
   ): Promise<void> {
     if (serviceIds === undefined) return;
+
+    if (serviceIds.length === 0) {
+      await transaction.customerServiceInterest.deleteMany({
+        where: { customerProfileId },
+      });
+      return;
+    }
 
     const count = await transaction.service.count({
       where: {
@@ -282,14 +301,13 @@ export class CustomerOnboardingService {
     await transaction.customerServiceInterest.deleteMany({
       where: { customerProfileId },
     });
-    if (serviceIds.length) {
-      await transaction.customerServiceInterest.createMany({
-        data: serviceIds.map((serviceId) => ({
-          customerProfileId,
-          serviceId,
-        })),
-      });
-    }
+    await transaction.customerServiceInterest.createMany({
+      data: serviceIds.map((serviceId) => ({
+        id: randomUUID(),
+        customerProfileId,
+        serviceId,
+      })),
+    });
   }
 
   private async saveDefaultAddress(

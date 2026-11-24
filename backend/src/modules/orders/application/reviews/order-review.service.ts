@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -8,6 +9,12 @@ import type { RequestMetadata } from '../../../../common/http/types/request-meta
 import { AuditService } from '../../../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../../../infrastructure/persistence/postgres/prisma.service';
 import type { CreateOrderReviewDto } from '../../dto/order.dto';
+import type { ProviderReviewQueryDto } from '../../dto/provider-review-query.dto';
+import {
+  presentReview,
+  publicReviewSelect,
+  type ReviewSummary,
+} from './order-review.presenter';
 
 @Injectable()
 export class OrderReviewService {
@@ -30,6 +37,10 @@ export class OrderReviewService {
         where: { id: orderId, customerId },
         select: {
           providerId: true,
+          assignedMemberId: true,
+          assignedMemberVersion: true,
+          assignedMemberName: true,
+          assignedMemberAvatarUrl: true,
           status: true,
           review: { select: { id: true } },
         },
@@ -43,10 +54,14 @@ export class OrderReviewService {
           orderId,
           customerId,
           providerId: order.providerId,
+          memberId: order.assignedMemberId,
+          membershipVersion: order.assignedMemberVersion,
+          memberDisplayName: order.assignedMemberName,
+          memberAvatarUrl: order.assignedMemberAvatarUrl,
           rating: dto.rating,
           comment: dto.comment,
         },
-        select: { id: true, rating: true, comment: true, createdAt: true },
+        select: publicReviewSelect,
       });
       await this.audit.record(
         {
@@ -61,34 +76,108 @@ export class OrderReviewService {
       );
       return created;
     });
-    return { success: true, data: review };
+    return { success: true, data: presentReview(review) };
   }
 
-  async findForProvider(providerId: string) {
+  async findForProvider(
+    providerId: string,
+    query: ProviderReviewQueryDto = {},
+  ) {
     const provider = await this.prisma.providerProfile.findUnique({
       where: { id: providerId },
       select: { id: true },
     });
     if (!provider) throw new NotFoundException('Không tìm thấy thợ.');
-    const [summary, reviews] = await Promise.all([
-      this.prisma.orderReview.aggregate({
-        where: { providerId },
-        _count: { id: true },
-        _avg: { rating: true },
-      }),
-      this.prisma.orderReview.findMany({
-        where: { providerId },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-        select: { id: true, rating: true, comment: true, createdAt: true },
-      }),
-    ]);
+    return this.findReviews({ providerId }, query);
+  }
+
+  async findForMember(
+    providerId: string,
+    memberId: string,
+    query: ProviderReviewQueryDto,
+  ) {
+    const member = await this.prisma.providerMember.findFirst({
+      where: {
+        id: memberId,
+        providerId,
+        provider: { providerType: 'ORGANIZATION' },
+      },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Không tìm thấy chuyên viên.');
+    return this.findReviews({ providerId, memberId }, query);
+  }
+
+  async memberSummaries(memberIds: readonly string[]) {
+    const uniqueIds = [...new Set(memberIds)];
+    const summaries = new Map<string, ReviewSummary>(
+      uniqueIds.map((id) => [id, { count: 0, averageRating: null }]),
+    );
+    if (uniqueIds.length === 0) return summaries;
+    const groups = await this.prisma.orderReview.groupBy({
+      by: ['memberId'],
+      where: { memberId: { in: uniqueIds } },
+      _count: { id: true },
+      _avg: { rating: true },
+    });
+    for (const group of groups) {
+      if (group.memberId)
+        summaries.set(group.memberId, {
+          count: group._count.id,
+          averageRating: group._avg.rating,
+        });
+    }
+    return summaries;
+  }
+
+  private async findReviews(
+    where: Prisma.OrderReviewWhereInput,
+    query: ProviderReviewQueryDto,
+  ) {
+    const cursor = query.cursor
+      ? await this.prisma.orderReview.findFirst({
+          where: { AND: [where, { id: query.cursor }] },
+          select: { id: true, createdAt: true },
+        })
+      : null;
+    if (query.cursor && !cursor)
+      throw new BadRequestException('Con trỏ đánh giá không hợp lệ.');
+    const limit = query.limit ?? 20;
+    const [summary, reviews] = await this.prisma.$transaction(
+      [
+        this.prisma.orderReview.aggregate({
+          where,
+          _count: { id: true },
+          _avg: { rating: true },
+        }),
+        this.prisma.orderReview.findMany({
+          where: cursor
+            ? {
+                AND: [
+                  where,
+                  {
+                    OR: [
+                      { createdAt: { lt: cursor.createdAt } },
+                      { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+                    ],
+                  },
+                ],
+              }
+            : where,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: limit + 1,
+          select: publicReviewSelect,
+        }),
+      ],
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
     return {
       success: true,
       data: {
         count: summary._count.id,
         averageRating: summary._avg.rating,
-        reviews,
+        reviews: reviews.slice(0, limit).map(presentReview),
+        nextCursor: reviews.length > limit ? reviews[limit - 1].id : null,
       },
     };
   }

@@ -1,0 +1,26 @@
+[
+    {
+        "suite":  "e2e",
+        "exitCode":  -1073740791,
+        "passed":  78,
+        "failed":  2,
+        "pending":  0,
+        "durationSeconds":  11.188699
+    },
+    {
+        "suite":  "ai-consultation",
+        "exitCode":  1,
+        "passed":  22,
+        "failed":  3,
+        "pending":  0,
+        "durationSeconds":  4.2113838
+    },
+    {
+        "suite":  "feed-cache",
+        "exitCode":  0,
+        "passed":  14,
+        "failed":  0,
+        "pending":  0,
+        "durationSeconds":  3.8046027999999996
+    }
+]

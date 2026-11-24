@@ -12,7 +12,7 @@ import {
   ServiceCategoryStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../../../infrastructure/persistence/postgres/prisma.service';
-import { normalizeServiceName } from '../../../services/domain/service-normalizer';
+import { normalizeName as normalizeServiceName } from '../../../../common/utils/text-normalizer';
 import type {
   CreateProviderServiceSuggestionDto,
   UpdateProviderServiceSuggestionDto,

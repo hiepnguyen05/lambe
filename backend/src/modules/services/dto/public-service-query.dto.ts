@@ -12,7 +12,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { normalizeServiceSlug } from './service-transformers';
+import { normalizeSlug as normalizeServiceSlug } from '../../../common/validation/string-transformers';
 
 export class PublicServiceQueryDto {
   @ApiPropertyOptional({ example: 'toc', minLength: 2, maxLength: 120 })

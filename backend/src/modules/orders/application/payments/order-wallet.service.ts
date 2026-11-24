@@ -97,5 +97,26 @@ export class OrderWalletService {
         idempotencyKey: `order:${order.id}:commission`,
       },
     });
+    if (order.platformFundedAmount > 0) {
+      const reimbursedBalance = balanceAfter + order.platformFundedAmount;
+      await transaction.providerWallet.update({
+        where: { id: wallet.id },
+        data: { balanceAmount: reimbursedBalance },
+      });
+      await transaction.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          orderId: order.id,
+          type: WalletTransactionType.VOUCHER_REIMBURSEMENT,
+          amount: order.platformFundedAmount,
+          balanceBeforeAmount: balanceAfter,
+          balanceAfterAmount: reimbursedBalance,
+          heldBeforeAmount: heldAfter,
+          heldAfterAmount: heldAfter,
+          idempotencyKey: `order:${order.id}:voucher-reimbursement`,
+          reason: 'PLATFORM_VOUCHER',
+        },
+      });
+    }
   }
 }

@@ -74,6 +74,7 @@ describe('ProviderApplicationDocumentsService', () => {
         resourceType: 'image',
         deliveryType: 'authenticated' as const,
       }),
+      uploadChatImage: jest.fn(),
       publishPrivateImage: jest.fn(),
       createPrivateDownloadUrl: jest
         .fn()

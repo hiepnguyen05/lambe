@@ -33,6 +33,11 @@ import {
   RejectOrderDto,
   RequestOrderCancellationDto,
 } from '../dto/order.dto';
+import { OrderLocationDto } from '../dto/order-location.dto';
+import { OpenPaymentDisputeDto } from '../dto/order.dto';
+import { OrderPaymentDisputeService } from '../application/payments/order-payment-dispute.service';
+import { OrderRescheduleService } from '../application/scheduling/order-reschedule.service';
+import { DecideOrderRescheduleDto } from '../dto/order.dto';
 
 @ApiTags('Provider Orders')
 @ApiBearerAuth('user-token')
@@ -42,7 +47,28 @@ export class ProviderOrdersController {
   constructor(
     private readonly orders: OrdersService,
     private readonly cancellations: OrderCancellationService,
+    private readonly paymentDisputes: OrderPaymentDisputeService,
+    private readonly reschedule: OrderRescheduleService,
   ) {}
+
+  @Post(':id/reschedule/decision')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Thợ chấp nhận hoặc từ chối giờ khách đề xuất' })
+  @ApiStandardOk({
+    description: 'Lịch chỉ đổi khi thợ chấp nhận và giờ đề xuất còn trống.',
+    data: { id: 'request-uuid', status: 'ACCEPTED' },
+  })
+  @ApiAuthenticationErrors()
+  @ApiValidationError()
+  @ApiNotFoundError('Đơn dịch vụ của thợ')
+  decideReschedule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param() params: OrderParamDto,
+    @Body() dto: DecideOrderRescheduleDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.reschedule.decide(user.userId, params.id, dto, request);
+  }
 
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
@@ -103,8 +129,16 @@ export class ProviderOrdersController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Lấy các đơn được gửi tới nhà cung cấp hiện tại' })
-  @ApiStandardOk({ description: 'Danh sách tối đa 50 đơn.', data: [] })
+  @ApiOperation({
+    summary: 'Worker xem đơn của mình; owner xem đơn của tổ chức',
+    description:
+      'Đơn có assignedMemberId chỉ người được chọn mới được nhận/từ chối/cập nhật trạng thái, GPS, bằng chứng hoặc đề xuất dịch vụ phát sinh. Owner có quyền đọc không được thao tác thay worker. Đơn legacy chưa gắn member giữ quyền provider cũ.',
+  })
+  @ApiStandardOk({
+    description: 'Danh sách đơn phân trang bằng cursor, tối đa 50 đơn/trang.',
+    data: [],
+    meta: { nextCursor: null },
+  })
   @ApiAuthenticationErrors()
   findMine(
     @CurrentUser() user: AuthenticatedUser,
@@ -116,8 +150,13 @@ export class ProviderOrdersController {
   @Get(':id')
   @ApiOperation({ summary: 'Xem chi tiết một đơn được gửi tới nhà cung cấp' })
   @ApiStandardOk({
-    description: 'Ẩn địa chỉ chính xác cho tới khi nhà cung cấp nhận đơn.',
-    data: { id: 'order-uuid', status: 'PENDING_PROVIDER' },
+    description:
+      'Ẩn địa chỉ chính xác cho tới khi nhà cung cấp nhận đơn. commissionHold chỉ có trong projection phía đối tác: amount/status thực tế của khoản giữ cho đơn; null khi chưa có khoản giữ. Không trả số dư ví hoặc ghi chú đối soát nội bộ.',
+    data: {
+      id: 'order-uuid',
+      status: 'ACCEPTED',
+      commissionHold: { amount: 30000, status: 'ACTIVE' },
+    },
   })
   @ApiAuthenticationErrors()
   @ApiNotFoundError('Đơn dịch vụ')
@@ -188,19 +227,21 @@ export class ProviderOrdersController {
 
   @Post(':id/arrive')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Báo đã đến địa chỉ khách hàng' })
+  @ApiOperation({ summary: 'Báo đã đến địa chỉ khách hàng bằng GPS hiện tại' })
   @ApiStandardOk({
     description: 'Chuyển EN_ROUTE sang ARRIVED.',
     data: { id: 'order-uuid', status: 'ARRIVED' },
   })
   @ApiAuthenticationErrors()
+  @ApiValidationError()
   @ApiConflictError('Đơn không ở trạng thái đang di chuyển.')
   markArrived(
     @CurrentUser() user: AuthenticatedUser,
     @Param() params: OrderParamDto,
+    @Body() location: OrderLocationDto,
     @CurrentRequestMetadata() request: RequestMetadata,
   ) {
-    return this.orders.markArrived(user.userId, params.id, request);
+    return this.orders.markArrived(user.userId, params.id, location, request);
   }
 
   @Post(':id/start')
@@ -238,5 +279,40 @@ export class ProviderOrdersController {
     @CurrentRequestMetadata() request: RequestMetadata,
   ) {
     return this.orders.complete(user.userId, params.id, request);
+  }
+
+  @Post(':id/payment-dispute')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Báo đã làm xong nhưng chưa nhận đủ tiền mặt' })
+  @ApiStandardOk({
+    description: 'Đơn chuyển sang PAYMENT_DISPUTE; hoa hồng vẫn tạm giữ.',
+    data: {
+      id: 'order-uuid',
+      status: 'PAYMENT_DISPUTE',
+      totalAmount: 200000,
+      currencyCode: 'VND',
+      paymentDisputeReason: 'Khách chưa thanh toán đủ tiền mặt.',
+      paymentDisputeOpenedAt: '2026-11-02T08:00:00.000Z',
+      paymentDisputeDecidedAt: null,
+      commissionHold: { amount: 30000, status: 'ACTIVE' },
+    },
+  })
+  @ApiAuthenticationErrors()
+  @ApiValidationError()
+  @ApiConflictError(
+    'Đơn chưa đang thực hiện, thiếu ảnh AFTER_WORK hoặc đang chờ hủy.',
+  )
+  openPaymentDispute(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param() params: OrderParamDto,
+    @Body() dto: OpenPaymentDisputeDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.paymentDisputes.open(
+      user.userId,
+      params.id,
+      dto.reason,
+      request,
+    );
   }
 }

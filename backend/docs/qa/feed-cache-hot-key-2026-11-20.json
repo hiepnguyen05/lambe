@@ -1,0 +1,260 @@
+{
+  "context": "local public HTTP probe; same provider/post; existing isolated fixtures; includes validation/envelope, excludes JWT/rate limiter and mobile; CPU includes API and load generator; Redis memory is shared across all DBs",
+  "profile": "hot-key",
+  "samples": 500,
+  "concurrency": 20,
+  "fixturePosts": 23,
+  "at": "2026-11-20T06:03:07.672Z",
+  "measurements": [
+    {
+      "mode": "off",
+      "route": "list",
+      "coldMs": 153.436,
+      "coldBurst": {
+        "latencyMs": {
+          "samples": 20,
+          "p50": 120.11,
+          "p95": 130.498,
+          "p99": 134.293
+        },
+        "elapsedMs": 153.32,
+        "concurrency": 20
+      },
+      "postgresQueries": 3000,
+      "postgresQueryTotalMs": 442,
+      "processCpuMs": {
+        "user": 2250,
+        "system": 578
+      },
+      "redisProcessMemory": {
+        "before": {
+          "usedBytes": 1477360,
+          "peakBytes": 1573616
+        },
+        "after": {
+          "usedBytes": 1503072,
+          "peakBytes": 1573616
+        }
+      },
+      "latencyMs": {
+        "samples": 500,
+        "p50": 27.868,
+        "p95": 40.133,
+        "p99": 48.046
+      },
+      "elapsedMs": 736.15,
+      "concurrency": 20
+    },
+    {
+      "mode": "off",
+      "route": "detail",
+      "coldMs": 24.153,
+      "coldBurst": {
+        "latencyMs": {
+          "samples": 20,
+          "p50": 18.223,
+          "p95": 21.8,
+          "p99": 23.346
+        },
+        "elapsedMs": 24.146,
+        "concurrency": 20
+      },
+      "postgresQueries": 3000,
+      "postgresQueryTotalMs": 567,
+      "processCpuMs": {
+        "user": 1688,
+        "system": 265
+      },
+      "redisProcessMemory": {
+        "before": {
+          "usedBytes": 1503072,
+          "peakBytes": 1573616
+        },
+        "after": {
+          "usedBytes": 1503072,
+          "peakBytes": 1573616
+        }
+      },
+      "latencyMs": {
+        "samples": 500,
+        "p50": 17.069,
+        "p95": 21.7,
+        "p99": 24.069
+      },
+      "elapsedMs": 438.922,
+      "concurrency": 20
+    },
+    {
+      "mode": "objects",
+      "route": "list",
+      "coldMs": 47.664,
+      "coldBurst": {
+        "latencyMs": {
+          "samples": 20,
+          "p50": 42.706,
+          "p95": 46.449,
+          "p99": 47.309
+        },
+        "elapsedMs": 47.657,
+        "concurrency": 20
+      },
+      "postgresQueries": 1000,
+      "postgresQueryTotalMs": 749,
+      "processCpuMs": {
+        "user": 1344,
+        "system": 188
+      },
+      "redisProcessMemory": {
+        "before": {
+          "usedBytes": 1514144,
+          "peakBytes": 1573616
+        },
+        "after": {
+          "usedBytes": 1528480,
+          "peakBytes": 1579960
+        }
+      },
+      "latencyMs": {
+        "samples": 500,
+        "p50": 23.297,
+        "p95": 28.904,
+        "p99": 30.872
+      },
+      "elapsedMs": 601.179,
+      "concurrency": 20
+    },
+    {
+      "mode": "objects",
+      "route": "detail",
+      "coldMs": 23.877,
+      "coldBurst": {
+        "latencyMs": {
+          "samples": 20,
+          "p50": 22.524,
+          "p95": 22.986,
+          "p99": 23.677
+        },
+        "elapsedMs": 23.869,
+        "concurrency": 20
+      },
+      "postgresQueries": 1000,
+      "postgresQueryTotalMs": 112,
+      "processCpuMs": {
+        "user": 906,
+        "system": 109
+      },
+      "redisProcessMemory": {
+        "before": {
+          "usedBytes": 1518912,
+          "peakBytes": 1579960
+        },
+        "after": {
+          "usedBytes": 1518912,
+          "peakBytes": 1579960
+        }
+      },
+      "latencyMs": {
+        "samples": 500,
+        "p50": 14.444,
+        "p95": 19.428,
+        "p99": 21.104
+      },
+      "elapsedMs": 377.149,
+      "concurrency": 20
+    },
+    {
+      "mode": "objects-and-index",
+      "route": "list",
+      "coldMs": 38.881,
+      "coldBurst": {
+        "latencyMs": {
+          "samples": 20,
+          "p50": 36.768,
+          "p95": 38.292,
+          "p99": 38.481
+        },
+        "elapsedMs": 38.865,
+        "concurrency": 20
+      },
+      "postgresQueries": 1500,
+      "postgresQueryTotalMs": 1171,
+      "processCpuMs": {
+        "user": 1906,
+        "system": 328
+      },
+      "redisProcessMemory": {
+        "before": {
+          "usedBytes": 1553768,
+          "peakBytes": 1579960
+        },
+        "after": {
+          "usedBytes": 1565424,
+          "peakBytes": 1608832
+        }
+      },
+      "latencyMs": {
+        "samples": 500,
+        "p50": 26.695,
+        "p95": 33.247,
+        "p99": 36.572
+      },
+      "elapsedMs": 696.091,
+      "concurrency": 20
+    },
+    {
+      "mode": "objects-and-index",
+      "route": "detail",
+      "coldMs": 20.529,
+      "coldBurst": {
+        "latencyMs": {
+          "samples": 20,
+          "p50": 19.356,
+          "p95": 19.909,
+          "p99": 20.365
+        },
+        "elapsedMs": 20.521,
+        "concurrency": 20
+      },
+      "postgresQueries": 1000,
+      "postgresQueryTotalMs": 37,
+      "processCpuMs": {
+        "user": 843,
+        "system": 266
+      },
+      "redisProcessMemory": {
+        "before": {
+          "usedBytes": 1555888,
+          "peakBytes": 1608832
+        },
+        "after": {
+          "usedBytes": 1555888,
+          "peakBytes": 1608832
+        }
+      },
+      "latencyMs": {
+        "samples": 500,
+        "p50": 13.188,
+        "p95": 17.686,
+        "p99": 19.333
+      },
+      "elapsedMs": 340.784,
+      "concurrency": 20
+    }
+  ],
+  "cache": {
+    "list": {
+      "hits": 20800,
+      "misses": 800
+    },
+    "detail": {
+      "hits": 1040,
+      "misses": 40
+    },
+    "writeAttempts": 840,
+    "timeouts": 0,
+    "errors": 0,
+    "bytesAttempted": 245280,
+    "operationMs": 12692.700500000004,
+    "writeMs": 5288.490099999994
+  }
+}

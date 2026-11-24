@@ -6,7 +6,7 @@ import {
   ProviderApplicationSection,
   ProviderDocumentType,
 } from '@prisma/client';
-import { KycCryptoService } from '../src/modules/provider-applications/application/kyc/kyc-crypto.service';
+import { KycCryptoService } from '../src/infrastructure/kyc/kyc-crypto.service';
 import { ARGON2_OPTIONS } from '../src/modules/internal-auth/constants/password.constants';
 import { createTestApp, type TestAppContext } from './support/create-test-app';
 
@@ -121,10 +121,16 @@ describe('Provider registration upgrade (e2e)', () => {
           },
         });
         if (userId) {
+          await context.prisma.providerOperationalNotification.deleteMany({
+            where: { provider: { userId } },
+          });
           await context.prisma.providerService.deleteMany({
             where: { provider: { userId } },
           });
           await context.prisma.providerWallet.deleteMany({
+            where: { provider: { userId } },
+          });
+          await context.prisma.providerMember.deleteMany({
             where: { provider: { userId } },
           });
           await context.prisma.providerProfile.deleteMany({

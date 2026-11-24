@@ -8,8 +8,9 @@ import { PrismaService } from '../../src/infrastructure/persistence/postgres/pri
 import { FIREBASE_IDENTITY_VERIFIER } from '../../src/modules/auth/application/firebase-identity-verifier.port';
 import { MEDIA_STORAGE } from '../../src/modules/upload/application/media-storage.port';
 import { MailService } from '../../src/infrastructure/mail/mail.service';
+import { requireIsolatedTestDatabase } from './isolated-test-database';
 
-interface TestFirebaseIdentity {
+export interface TestFirebaseIdentity {
   uid: string;
   signInProvider: 'phone' | 'google.com' | 'facebook.com';
   phoneNumber?: string;
@@ -33,6 +34,7 @@ export interface TestAppContext {
 }
 
 export async function createTestApp(): Promise<TestAppContext> {
+  requireIsolatedTestDatabase(process.env);
   let verifiedIdentity: TestFirebaseIdentity = {
     uid: 'firebase-e2e-user',
     signInProvider: 'phone',

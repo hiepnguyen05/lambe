@@ -1,0 +1,21 @@
+{
+  "rootDir": "..",
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "testEnvironment": "node",
+  "testTimeout": 60000,
+  "testMatch": [
+    "<rootDir>/src/**/*.spec.ts",
+    "<rootDir>/test/**/*.integration-spec.ts",
+    "<rootDir>/test/**/*.e2e-spec.ts"
+  ],
+  "testPathIgnorePatterns": [
+    "<rootDir>/test/redis-recovery.integration-spec.ts"
+  ],
+  "transform": { "^.+\\.(t|j)s$": "ts-jest" },
+  "collectCoverageFrom": ["<rootDir>/src/**/*.(t|j)s", "!<rootDir>/src/**/testing/**"],
+  "coverageDirectory": "<rootDir>/coverage-matrix",
+  "coverageReporters": ["json-summary", "text-summary"],
+  "coverageThreshold": {
+    "global": { "branches": 75, "functions": 80, "lines": 80, "statements": 80 }
+  }
+}

@@ -87,6 +87,9 @@ export const serviceExample = {
   currencyCode: 'VND',
   defaultDurationMinutes: 45,
   targetAudience: 'MEN',
+  requiresCertificate: false,
+  minPortfolioImages: 1,
+  minExperienceYears: 1,
   sortOrder: 1,
   category: {
     id: uuidExample,
@@ -99,9 +102,7 @@ export const serviceExample = {
 export const adminServiceExample = {
   ...serviceExample,
   categoryId: uuidExample,
-  requiresCertificate: false,
-  minPortfolioImages: 1,
-  minExperienceYears: 1,
+  category: { ...serviceExample.category, status: 'ACTIVE' },
   status: 'ACTIVE',
   createdAt: isoDateExample,
   updatedAt: isoDateExample,
@@ -408,6 +409,8 @@ export const providerSearchExample = {
       experienceYears: 5,
       serviceAreaName: 'Quận Cầu Giấy, Hà Nội',
       distanceKm: 2.4,
+      estimatedTravelDistanceKm: 3.6,
+      estimatedTravelFeeAmount: 7000,
       service: {
         id: uuidExample,
         priceAmount: 150000,

@@ -35,9 +35,13 @@ describe('UserSessionService', () => {
           return Promise.resolve({ count: 1 });
         }),
     };
-    const transaction = { userSession };
+    const userPushDevice = {
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    };
+    const transaction = { userSession, userPushDevice };
     const prisma = {
       userSession,
+      userPushDevice,
       $transaction: jest.fn(
         async (callback: (client: typeof transaction) => Promise<unknown>) =>
           callback(transaction),
@@ -61,6 +65,7 @@ describe('UserSessionService', () => {
       ),
       prisma,
       userSession,
+      userPushDevice,
       audit,
       tokens,
       session,
@@ -134,7 +139,8 @@ describe('UserSessionService', () => {
   });
 
   it('revokes a session when an old signed refresh token is replayed', async () => {
-    const { service, userSession, audit, captured } = context();
+    const { service, userSession, userPushDevice, audit, captured, session } =
+      context();
     userSession.findUnique
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ userId: TEST_USER.id });
@@ -153,10 +159,14 @@ describe('UserSessionService', () => {
       {},
       expect.anything(),
     );
+    expect(userPushDevice.updateMany).toHaveBeenCalledWith({
+      where: { sessionId: session.id, revokedAt: null },
+      data: { revokedAt: now },
+    });
   });
 
   it('revokes the current session on logout', async () => {
-    const { service, audit, captured } = context();
+    const { service, audit, userPushDevice, captured, session } = context();
 
     await expect(service.logout('refresh-token', {})).resolves.toEqual({
       success: true,
@@ -171,5 +181,9 @@ describe('UserSessionService', () => {
       {},
       expect.anything(),
     );
+    expect(userPushDevice.updateMany).toHaveBeenCalledWith({
+      where: { sessionId: session.id, revokedAt: null },
+      data: { revokedAt: now },
+    });
   });
 });

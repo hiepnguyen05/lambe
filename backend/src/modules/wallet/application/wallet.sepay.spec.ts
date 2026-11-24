@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { WalletTopUpStatus } from '@prisma/client';
 import { WalletService } from './wallet.service';
 
@@ -14,7 +14,11 @@ function createContext() {
   const prisma = {
     walletTopUpRequest: { findUnique: jest.fn().mockResolvedValue(topUp) },
   };
-  const sepay = { assertValidIpnSecret: jest.fn() };
+  const sepay = {
+    assertValidIpnSecret: jest.fn((secret?: string) => {
+      if (secret !== 'secret') throw new UnauthorizedException();
+    }),
+  };
   const settlement = { succeed: jest.fn(), fail: jest.fn() };
   const service = new WalletService(
     prisma as never,
@@ -62,6 +66,33 @@ describe('WalletService SePay IPN', () => {
     expect(settlement.succeed).not.toHaveBeenCalled();
     expect(settlement.fail).not.toHaveBeenCalled();
   });
+
+  it.each(['development', 'production'])(
+    'requires the secret for a dashboard-shaped payload in %s',
+    async (nodeEnv) => {
+      const previousEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = nodeEnv;
+      try {
+        const { service, prisma, sepay, settlement, payload } = createContext();
+        prisma.walletTopUpRequest.findUnique.mockResolvedValueOnce(null);
+        await expect(
+          service.processSePayIpn(undefined, {
+            ...payload,
+            notification_type: 'PAYMENT_SUCCESS',
+            order: {
+              ...payload.order,
+              custom_data: { test_mode: true, webhook_test: true },
+            },
+          }),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+        expect(sepay.assertValidIpnSecret).toHaveBeenCalledWith(undefined);
+        expect(prisma.walletTopUpRequest.findUnique).not.toHaveBeenCalled();
+        expect(settlement.succeed).not.toHaveBeenCalled();
+      } finally {
+        process.env.NODE_ENV = previousEnv;
+      }
+    },
+  );
 
   it('validates the secret and settles a captured payment', async () => {
     const { service, sepay, settlement, payload, topUp } = createContext();

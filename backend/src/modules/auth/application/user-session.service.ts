@@ -107,6 +107,10 @@ export class UserSessionService {
           data: { revokedAt: new Date(), revokeReason: 'LOGOUT' },
         });
         if (revoked.count === 0) return;
+        await transaction.userPushDevice.updateMany({
+          where: { sessionId: session.id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
         await this.audit.record(
           {
             actorUserId: session.userId,
@@ -141,6 +145,10 @@ export class UserSessionService {
         data: { revokedAt: new Date(), revokeReason: 'REFRESH_REPLAY' },
       });
       if (revoked.count === 0) return;
+      await transaction.userPushDevice.updateMany({
+        where: { sessionId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
       const session = await transaction.userSession.findUnique({
         where: { id: sessionId },
         select: { userId: true },

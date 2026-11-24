@@ -40,6 +40,7 @@ COPY --from=production-dependencies /usr/src/app/package*.json ./
 # Copy built code from builder
 COPY --from=production-dependencies /usr/src/app/dist ./dist
 COPY --from=production-dependencies /usr/src/app/node_modules ./node_modules
+COPY --from=builder /usr/src/app/scripts/monitor-health.mjs ./scripts/monitor-health.mjs
 
 EXPOSE 5000
 

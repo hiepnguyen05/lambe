@@ -10,7 +10,12 @@ describe('order privacy projections', () => {
     clientRequestId: 'private-key',
     commissionAmount: 10000,
     commissionRateBps: 1000,
-    walletHold: { id: 'hold' },
+    walletHold: {
+      id: 'hold',
+      amount: 10000,
+      status: 'ACTIVE',
+      walletId: 'private-wallet',
+    },
     provider: {
       id: 'provider',
       userId: 'provider-account',
@@ -34,6 +39,7 @@ describe('order privacy projections', () => {
         reason: null,
       },
     ],
+    rescheduleRequests: [],
   } as unknown as OrderRecord;
 
   it.each(['PENDING_PROVIDER', 'REJECTED', 'EXPIRED', 'CANCELLED'] as const)(
@@ -70,11 +76,42 @@ describe('order privacy projections', () => {
       'commissionAmount',
       'commissionRateBps',
       'walletHold',
+      'commissionHold',
       'requestHash',
       'clientRequestId',
     ])
       expect(result).not.toHaveProperty(field);
     expect(result.provider).not.toHaveProperty('wallet');
     expect(result.provider).not.toHaveProperty('userId');
+  });
+
+  it('does not expose fields added to the persistence models by default', () => {
+    const record = {
+      ...order,
+      futurePrivateField: 'secret',
+      provider: { ...order.provider, futurePrivateField: 'provider-secret' },
+    } as OrderRecord & { futurePrivateField: string };
+
+    for (const result of [
+      presentForCustomer(record),
+      presentForProvider(record),
+    ]) {
+      expect(result).not.toHaveProperty('futurePrivateField');
+      expect(result.provider).not.toHaveProperty('futurePrivateField');
+    }
+  });
+
+  it('exposes only the actual per-order hold amount/status to the provider', () => {
+    const result = presentForProvider({
+      ...order,
+      status: 'PAYMENT_DISPUTE',
+      walletHold: { ...order.walletHold!, amount: 12500 },
+    });
+    expect(result.commissionHold).toEqual({ amount: 12500, status: 'ACTIVE' });
+    expect(result.commissionHold).not.toHaveProperty('id');
+    expect(result.commissionHold).not.toHaveProperty('walletId');
+    expect(
+      presentForProvider({ ...order, walletHold: null }).commissionHold,
+    ).toBeNull();
   });
 });

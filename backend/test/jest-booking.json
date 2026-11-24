@@ -2,7 +2,7 @@
   "moduleFileExtensions": ["js", "json", "ts"],
   "rootDir": ".",
   "testEnvironment": "node",
-  "testRegex": "booking.integration-spec.ts$",
+  "testRegex": "[/\\\\]booking\\.integration-spec\\.ts$",
   "transform": { "^.+\\.(t|j)s$": "ts-jest" },
   "testTimeout": 60000
 }

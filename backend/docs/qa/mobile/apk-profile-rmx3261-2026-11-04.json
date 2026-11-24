@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-04",
+  "buildMode": "profile",
+  "abi": "arm64-v8a",
+  "bytes": 61774803,
+  "sha256": "1BD2791A9E923F7F2F04CFC32EAFDC8D168F9B05DCD2DC0B45FCE98FC26055A3",
+  "entryCount": 702,
+  "compressedEntriesBytes": 46582259,
+  "largestEntries": [
+    {
+      "path": "lib/arm64-v8a/libapp.so",
+      "bytes": 15991688,
+      "compressedBytes": 15991688
+    },
+    {
+      "path": "lib/arm64-v8a/libflutter.so",
+      "bytes": 12568184,
+      "compressedBytes": 12568184
+    },
+    {
+      "path": "classes.dex",
+      "bytes": 10997460,
+      "compressedBytes": 4554363
+    },
+    {
+      "path": "classes21.dex",
+      "bytes": 9479232,
+      "compressedBytes": 3711619
+    },
+    {
+      "path": "classes20.dex",
+      "bytes": 7968560,
+      "compressedBytes": 3195295
+    },
+    {
+      "path": "lib/arm64-v8a/libvmservice_snapshot.so",
+      "bytes": 1639304,
+      "compressedBytes": 1639304
+    },
+    {
+      "path": "resources.arsc",
+      "bytes": 677692,
+      "compressedBytes": 677692
+    },
+    {
+      "path": "assets/flutter_assets/fonts/MaterialIcons-Regular.otf",
+      "bytes": 1645184,
+      "compressedBytes": 593046
+    }
+  ],
+  "limitation": "Profile APK produced by flutter run; not release/AAB download size."
+}

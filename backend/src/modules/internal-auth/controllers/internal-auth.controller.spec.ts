@@ -20,6 +20,7 @@ describe('InternalAuthController', () => {
       }),
       logout: jest.fn().mockResolvedValue({ success: true }),
       getCurrentAccount: jest.fn().mockResolvedValue({ success: true }),
+      changePassword: jest.fn().mockResolvedValue({ success: true }),
     };
     const config = new Map<string, unknown>([
       ['internalAuth.refreshCookieName', 'internal_refresh'],
@@ -35,6 +36,7 @@ describe('InternalAuthController', () => {
       internalAuthService as never,
       internalAuthService as never,
       configService as never,
+      internalAuthService as never,
     );
     const createRequest = (cookie?: string) =>
       ({
@@ -176,6 +178,38 @@ describe('InternalAuthController', () => {
     ).resolves.toEqual({ success: true });
     expect(internalAuthService.getCurrentAccount).toHaveBeenCalledWith(
       'account-id',
+    );
+  });
+
+  it('clears the stale refresh cookie after a successful password change', async () => {
+    const { controller, internalAuthService, response, responseMock } =
+      createController();
+    const account = {
+      accountId: 'account-id',
+      username: 'admin',
+      roles: ['ADMIN'] as const,
+      sessionId: 'session-id',
+    };
+    await expect(
+      controller.changePassword(
+        {
+          currentPassword: 'old-password',
+          newPassword: 'a-strong-new-password-2026',
+        },
+        account as never,
+        requestMetadata,
+        response,
+      ),
+    ).resolves.toEqual({ success: true });
+    expect(internalAuthService.changePassword).toHaveBeenCalledWith(
+      account,
+      'old-password',
+      'a-strong-new-password-2026',
+      requestMetadata,
+    );
+    expect(responseMock.clearCookie).toHaveBeenCalledWith(
+      'internal_refresh',
+      expect.objectContaining({ httpOnly: true, path: '/api/admin/auth' }),
     );
   });
 });

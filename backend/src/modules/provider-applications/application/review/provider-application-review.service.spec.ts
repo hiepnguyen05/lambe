@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import {
   ProviderApplicationSection,
   ProviderApplicationStatus,
@@ -116,6 +116,7 @@ function createContext() {
     user,
     userRoleAssignment,
     providerProfile,
+    providerMember: { findFirst: jest.fn().mockResolvedValue(null) },
     providerApplicationCheck,
     providerApplicationDocument,
     providerApplicationService,
@@ -141,6 +142,7 @@ function createContext() {
   const mediaStorage = {
     uploadImage: jest.fn(),
     uploadPrivateImage: jest.fn(),
+    uploadChatImage: jest.fn(),
     publishPrivateImage: jest.fn().mockResolvedValue({
       url: 'http://example.test/public-avatar.webp',
       secureUrl: 'https://example.test/public-avatar.webp',
@@ -161,6 +163,7 @@ function createContext() {
     ),
     application,
     providerProfile,
+    providerMember: transaction.providerMember,
     userRoleAssignment,
     notifications,
     mediaStorage,
@@ -239,6 +242,7 @@ describe('ProviderApplicationReviewService', () => {
     expect(notifications.notifyApproved).toHaveBeenCalledWith(
       {
         applicationId,
+        userId,
         email: 'provider@example.com',
         displayName: 'Nguyen Van A',
         revisionNumber: 1,
@@ -249,6 +253,29 @@ describe('ProviderApplicationReviewService', () => {
       'provider-application-approval',
     );
     expect(result.data.id).toBe('provider-id');
+    expect(providerProfile.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          members: {
+            create: expect.objectContaining({
+              userId,
+              role: 'OWNER',
+              status: 'ACTIVE',
+              canProvideServices: true,
+            }) as object,
+          },
+        }) as object,
+      }),
+    );
+  });
+
+  it('rejects approval when the applicant has joined a serving membership', async () => {
+    const { review, providerMember, providerProfile } = createContext();
+    providerMember.findFirst.mockResolvedValue({ id: 'reserved-member' });
+    await expect(
+      review.approve(applicationId, actorId, {}),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(providerProfile.create).not.toHaveBeenCalled();
   });
 
   it('bulk verifies pending documents, eligible services and checks', async () => {

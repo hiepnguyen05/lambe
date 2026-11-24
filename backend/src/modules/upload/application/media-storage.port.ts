@@ -16,6 +16,7 @@ export interface UploadResult {
 export interface MediaStorage {
   uploadImage(buffer: Buffer, folder: string): Promise<UploadResult>;
   uploadPrivateImage(buffer: Buffer, folder: string): Promise<UploadResult>;
+  uploadChatImage(buffer: Buffer, folder: string): Promise<UploadResult>;
   publishPrivateImage(
     publicId: string,
     format: string,

@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-31",
+  "status": "compatible-after-manual-review",
+  "inventory": {
+    "before": {
+      "paths": 271,
+      "operations": 312,
+      "schemas": 101
+    },
+    "after": {
+      "paths": 272,
+      "operations": 313,
+      "schemas": 101
+    },
+    "addedOperations": 1,
+    "protectedSchemas": 101
+  },
+  "missingOperations": 0,
+  "changedReferencedSchemas": 0,
+  "acceptedDifferences": [
+    {
+      "operation": "POST /api/provider-applications/{id}/documents/{type}",
+      "classification": "enum-order-only",
+      "accepted": true,
+      "reason": "Same enum strings, parameter types, required flags and locations; no ordinal values or default changed."
+    },
+    {
+      "operation": "PATCH /api/admin/provider-applications/{id}/checks/{section}",
+      "classification": "enum-order-only",
+      "accepted": true,
+      "reason": "Same enum strings, parameter types, required flags and locations; no ordinal values or default changed."
+    },
+    {
+      "operation": "POST /api/me/provider/service-change-requests/{id}/documents/{type}",
+      "classification": "enum-order-only",
+      "accepted": true,
+      "reason": "Same enum strings, parameter types, required flags and locations; no ordinal values or default changed."
+    }
+  ],
+  "sourceHashes": {
+    "before": "a382874abae3287af025f666e38266461a73e079e10df2cda07e647294abb538",
+    "after": "1ed1a01f1bc33ed3fbf3a230bfa9162b7218eeae86c1dacc0b120be11f1ddba7"
+  }
+}

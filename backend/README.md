@@ -5,6 +5,20 @@ số điện thoại, Google hoặc Facebook; backend kiểm tra Firebase ID tok
 khi cấp JWT riêng của Lambe. Mọi tài khoản Lambe vẫn phải có số điện thoại đã
 xác minh.
 
+Chat/AI cập nhật 30/10: mobile hỗ trợ gửi lại text/ảnh/thẻ dịch vụ bằng cùng
+clientMessageId; AI có API kiểm tra lại card và giá trước thao tác, refresh
+lịch sử theo batch, lọc dữ liệu trước Gemini và fallback khi nhà cung cấp lỗi.
+Xem [AI API](docs/ai-consultation-api.md) và
+[Chat contract](docs/customer-provider-chat-design.md). Cập nhật 13/11 thêm
+migration và API đánh giá câu trả lời AI.
+
+Hướng dẫn test bằng Docker/DB riêng, ma trận hai thiết bị và đánh giá Gemini
+opt-in: [Kiểm chứng chat/AI](docs/chat-ai-verification.md). Các số test ghi
+trong tài liệu là kết quả của đợt 30/10, không phải kiểm tra được chạy lại
+trong lần chỉ cập nhật tài liệu.
+
+Backup/restore thử và cảnh báo API: [Hướng dẫn vận hành](docs/operations-backup-monitoring.md).
+
 ## Stack
 
 - NestJS 11
@@ -15,6 +29,56 @@ xác minh.
 - Firebase Authentication (Phone, Google, Facebook)
 
 ## Architecture
+
+P6 bổ sung `infrastructure/observability`: middleware HTTP/SSE, metrics cục bộ,
+API đọc tổng hợp và leaf `ObservabilityMetricsModule`. Push/Orders/Rematch/AI
+import leaf module này; không phụ thuộc ngược vào dashboard hoặc internal
+authentication chỉ để ghi counter. Request context ở `common/http/request-context.ts`.
+DB vẫn giữ dữ liệu nghiệp vụ/hàng chờ, Redis giữ cache/vị trí/tín hiệu; không
+thêm tracing backend hoặc kho time series. [Contract](docs/observability-api.md)
+và [runbook](docs/quality-operations-runbook.md) mô tả giới hạn hiện tại.
+
+Tài liệu API thành viên đối tác tổ chức (membership, lời mời, quyền owner/worker):
+[Provider Members API](docs/provider-members-api.md) và
+[KYC/lifecycle thành viên](docs/provider-member-verification-api.md). P5A.2 có
+KYC, kiểm duyệt từng ảnh, duyệt/bổ sung/từ chối, gia hạn và đình chỉ/khôi phục.
+[Năng lực thành viên P5B](docs/provider-member-capabilities-api.md) có cấp dịch vụ,
+lịch tuần/nghỉ phép, bán kính, online/GPS/heartbeat và tạm dừng nhận đơn chung.
+[Đặt lịch theo thành viên P5C](docs/organization-booking-api.md) nối Discovery,
+quote, lịch riêng, rematch và thực hiện đơn vào đúng worker. Nhiều worker của
+một tổ chức nhận được đơn cùng giờ; ví và giá vẫn thuộc tổ chức. Đơn cũ không
+gắn member được giữ nguyên theo cơ chế legacy. Quyền chat/review/feed theo
+member đang triển khai P5E; [chat theo đơn P5E.1](docs/organization-order-chat-api.md)
+đã có phòng riêng và thu hồi quyền theo lifecycle. [Tài chính và tiền thu hộ P5D](docs/organization-finance-api.md)
+có báo cáo owner theo kỳ/nhân viên/đơn và lịch sử thu hộ riêng của worker;
+không có ví/lương cá nhân hay xác nhận bàn giao tiền mặt nội bộ.
+
+[Đánh giá theo chuyên viên P5E.2](docs/organization-member-reviews-api.md) ghi
+một review cho cả đối tác và người thực hiện; có điểm riêng từng member,
+phân trang công khai và giữ snapshot của đơn cũ. Khi chưa có đánh giá, điểm
+là `null`; client cần hiển thị trạng thái chưa được đánh giá.
+
+[Feed theo nhân viên P5E.3](docs/organization-member-feed-api.md) cho worker
+đăng sản phẩm dưới tổ chức, kiểm tra chuyên môn, chờ owner duyệt và duyệt lại
+sau khi sửa. Cổng duyệt nội bộ độc lập với việc Lambe ẩn bài; Feed/AI/portfolio
+cùng lọc quyền công khai. Snapshot tác giả và bài cá nhân/legacy được giữ.
+
+[Thông báo vận hành P5E.4](docs/provider-operational-notifications-api.md) tách
+inbox owner khỏi thông báo đơn của worker. Có cảnh báo ví thấp, thành viên
+khóa/nghỉ/tài khoản hạn chế và đối tác đình chỉ; push kiểm tra lại quyền trước
+khi gửi. REST/SSE mới dùng User Access Token của chủ hồ sơ đối tác:
+
+```text
+GET   /api/me/provider/notifications?limit=20&cursor=<UUID>
+GET   /api/me/provider/notifications/events?after=<SSE notice UUID>
+GET   /api/me/provider/notifications/:id
+PATCH /api/me/provider/notifications/:id/read
+```
+
+Push có thêm `notificationId` để dedupe. `PROVIDER_OWNER` mở notice rồi đọc
+deepLink tài nguyên hiện tại; không nhầm với `PROVIDER` thực hiện đơn. SSE
+owner có thứ tự sau commit; cần REST refresh cho readAt/resolvedAt. Chi tiết
+envelope, lỗi quyền, reconnect và migration nằm trong tài liệu trên.
 
 Backend sử dụng modular monolith: mỗi nghiệp vụ nằm trong một NestJS module và
 không truy cập trực tiếp vào chi tiết nội bộ của module khác.
@@ -41,7 +105,8 @@ guards/       # Authentication/authorization tại transport boundary
 Controller không chứa nghiệp vụ. Application service không gọi controller.
 Chi tiết PostgreSQL, Redis và Firebase chỉ đi qua các provider trong
 `infrastructure`. Giao dịch thay đổi dữ liệu và audit log được ghi chung một
-Prisma transaction. Redis chỉ làm cache-aside và không phải nguồn dữ liệu gốc.
+Prisma transaction. Redis làm cache-aside và giữ vị trí thời gian thực có TTL;
+trạng thái đơn và dữ liệu giao dịch vẫn do PostgreSQL quyết định.
 
 ## Setup
 
@@ -96,10 +161,14 @@ http://localhost:5000/api
 
 ## Docker Runtime
 
-Stack Docker gồm backend NestJS, PostgreSQL và Redis. Service `migrate`
-chạy `prisma migrate deploy` một lần sau khi PostgreSQL healthy; API chỉ khởi động
-khi migration hoàn tất và Redis đã sẵn sàng. Image chạy API không chứa Prisma CLI
-hay các dependency phục vụ build/test.
+PostgreSQL chạy trên Neon và Redis chạy trên Upstash. Docker Compose chỉ chạy
+backend NestJS, migration, monitor và OSRM (tùy chọn); không tạo PostgreSQL hay
+Redis container cho ứng dụng. Tham khảo [cấu hình Upstash](docs/upstash-redis.md).
+
+API dùng `DATABASE_URL` (Neon pooled), migration dùng `DIRECT_URL` (Neon direct).
+`REDIS_URL` phải là TCP TLS `rediss://` của Upstash. Cả ba URL nằm trong
+`backend/.env`; không đưa chúng vào lệnh hoặc log. Chỉ chạy migration khi đã
+xác nhận đúng Neon database đích.
 
 ```bash
 docker compose up -d --build
@@ -107,28 +176,15 @@ docker compose ps
 docker compose logs -f lambe_server
 ```
 
-Các địa chỉ truy cập từ máy host:
+API mặc định: `http://localhost:5000/api`. Nếu cổng 5000 đã được dùng,
+đặt `LAMBE_API_HOST_PORT=5001` trong `backend/.env` trước khi khởi động
+Compose. Health: `http://localhost:5000/api/health` (hoặc cổng host đã chọn).
 
-```text
-API:        http://localhost:5000/api
-Health:     http://localhost:5000/api/health
-PostgreSQL: localhost:5433
-Redis:     localhost:6379
-```
-
-Trong mạng Docker, backend kết nối PostgreSQL tại `postgres:5432` và Redis tại
-`redis:6379`. Các giá trị này được khai báo trực tiếp trong
-`docker-compose.yml`, vì vậy `.env` vẫn có thể giữ địa chỉ `localhost` để dùng
-cho công cụ chạy trực tiếp trên Windows khi cần.
-
-Dừng stack nhưng giữ dữ liệu:
-
-```bash
-docker compose down
-```
-
-Không thêm `-v` vào lệnh trên nếu muốn giữ volume PostgreSQL và Redis.
-
+OSRM tùy chọn chạy qua `docker compose --profile routing up -d --build`;
+xem [theo dõi đơn hàng](docs/order-tracking.md) để chuẩn bị dữ liệu bản đồ.
+`docker compose down` chỉ dừng các service ứng dụng; dữ liệu Neon và Upstash
+ở ngoài Docker. `docker-compose.test.yml` là stack PostgreSQL/Redis tạm thời
+dành riêng cho kiểm thử có cô lập, không phải cấu hình runtime.
 ## Auth API
 
 ```text
@@ -280,6 +336,7 @@ CLOUDINARY_ENABLED="true"
 CLOUDINARY_CLOUD_NAME="your-cloud-name"
 CLOUDINARY_UPLOAD_PRESET="your-signed-upload-preset"
 CLOUDINARY_KYC_UPLOAD_PRESET="your-signed-authenticated-preset"
+CLOUDINARY_CHAT_UPLOAD_PRESET="your-signed-authenticated-chat-preset"
 CLOUDINARY_PRIVATE_URL_TTL_SECONDS="300"
 CLOUDINARY_API_KEY="your-api-key"
 CLOUDINARY_API_SECRET="your-api-secret"
@@ -514,6 +571,9 @@ Chưa bật tự động xóa KYC của hồ sơ cũ: cần chốt thời hạn 
 nại và quy trình xóa Cloudinary trước. Các thử nghiệm tự động dùng dữ liệu giả,
 database kiểm thử riêng và mock email/upload, không gửi SMS/email thật.
 
+Sau khi được duyệt, đối tác quản lý dịch vụ đang cung cấp và gửi đề xuất thêm/sửa
+dịch vụ qua API; xem [quản lý dịch vụ đối tác](docs/provider-service-management-api.md).
+
 ## Customer Addresses And Provider Discovery
 
 Khách hàng quản lý tối đa 10 địa chỉ. Mọi thao tác đều kiểm tra quyền sở hữu;
@@ -622,12 +682,19 @@ POST /api/orders/quote
 POST /api/orders
 GET  /api/me/orders
 GET  /api/me/orders/:id
+GET  /api/me/orders/:id/tracking
+GET  /api/me/orders/:id/tracking/events
 POST /api/me/orders/:id/cancel
 POST /api/me/orders/:id/cancellation/decision
 POST /api/me/orders/:id/review
+POST /api/me/orders/:id/safety/sos
+GET  /api/me/orders/:id/safety
+POST /api/me/orders/:id/safety/evidence
+GET  /api/me/orders/:id/safety/evidence/:evidenceId
 
 GET  /api/me/provider/orders
 GET  /api/me/provider/orders/:id
+PUT  /api/me/provider/orders/:id/location
 POST /api/me/provider/orders/:id/accept
 POST /api/me/provider/orders/:id/reject
 POST /api/me/provider/orders/:id/cancel
@@ -638,16 +705,26 @@ POST /api/me/provider/orders/:id/complete
 POST /api/me/provider/orders/:id/evidence/:type
 POST /api/me/provider/orders/:id/contact-attempt
 POST /api/me/provider/orders/:id/cancellation-request
+POST /api/me/provider/orders/:id/safety/sos
+GET  /api/me/provider/orders/:id/safety
+POST /api/me/provider/orders/:id/safety/evidence
+GET  /api/me/provider/orders/:id/safety/evidence/:evidenceId
 
 GET   /api/orders/:id/evidence/:evidenceId
 GET   /api/me/notifications
 PATCH /api/me/notifications/:id/read
 GET   /api/providers/:id/reviews
+GET   /api/providers/:providerId/members/:memberId/reviews
 
 GET  /api/admin/orders/cancellation-requests
 GET  /api/admin/orders/cancellation-requests/:id
 GET  /api/admin/orders/cancellation-requests/:id/evidence/:evidenceId
 POST /api/admin/orders/cancellation-requests/:id/decision
+
+GET  /api/admin/safety/incidents
+GET  /api/admin/safety/incidents/:id
+GET  /api/admin/safety/incidents/:id/evidence/:evidenceId
+POST /api/admin/safety/incidents/:id/close
 
 GET    /api/providers/:id/availability
 GET    /api/me/provider/calendar
@@ -672,10 +749,17 @@ Yêu cầu `PENDING_PROVIDER` quá `providerResponseDeadlineAt` được tác v�
 chuyển sang `EXPIRED` mỗi phút và ghi `OrderStatusHistory`. API chỉ cho chuyển
 tuần tự `ACCEPTED -> EN_ROUTE -> ARRIVED -> IN_PROGRESS -> COMPLETED`; thao tác
 không còn hợp lệ trả `409 Conflict`.
-Các bước đến nơi/bắt đầu/hoàn thành yêu cầu ảnh riêng tư tương ứng. Sau khi đã
+Đến nơi dùng GPS hợp lệ, không bắt buộc chụp ảnh; bắt đầu/hoàn thành vẫn cần
+ảnh riêng tư theo workflow. Sau khi đã
 khởi hành, thợ gửi yêu cầu hủy để khách duyệt hoặc chuyển hỗ trợ; yêu cầu chưa
-được quyết định vẫn giữ lịch và khoản HOLD. Thông báo hiện lưu trong PostgreSQL
-để client tải định kỳ, chưa phát push. Khách đánh giá một lần sau khi hoàn thành.
+được quyết định vẫn giữ lịch và khoản HOLD. Thông báo lưu trong PostgreSQL,
+có SSE và push outbox; nhận FCM trên thiết bị còn phụ thuộc cấu hình và quyền
+thông báo. Khách đánh giá một lần sau khi hoàn thành.
+
+Khách hoặc thợ có thể gửi SOS không cần ảnh khi đơn đang hoạt động. Backend đưa
+đơn vào `SAFETY_HOLD`, giữ lịch/HOLD và chặn thợ nhận đơn khác cho tới khi
+`ADMIN` hoặc `SUPPORT` đóng hồ sơ. Ảnh SOS lưu riêng tư và tách khỏi evidence
+`INCIDENT` dùng cho yêu cầu hủy thông thường.
 
 Schema được triển khai bởi migration:
 
@@ -685,6 +769,7 @@ Schema được triển khai bởi migration:
 20261012123000_booking_pending_index
 20261013140000_order_workflow
 20261013143000_order_contact_attempts
+20261021180000_order_safety_incidents
 ```
 
 PostgreSQL dùng exclusion constraint GiST ngăn các khoảng lịch active chồng nhau;
@@ -696,6 +781,8 @@ API/traffic. Một hồ sơ thợ hiện chỉ có năng lực phục vụ một
 
 Contract, ví dụ request/response, giới hạn và cách chạy test PostgreSQL thật:
 [Booking API](docs/booking-api.md). Swagger tương ứng tại `/docs`.
+Tích hợp SOS, mobile/admin contract và giới hạn vận hành:
+[Order Safety API](docs/order-safety-api.md).
 
 ## Provider Wallet, MoMo And SePay Sandbox
 
@@ -793,11 +880,11 @@ expects SePay's `X-Secret-Key` header and returns HTTP `200` after successful
 processing. Migration: `20261009190000_sepay_wallet_top_ups`.
 
 The SePay dashboard connectivity test sends a mock `PAYMENT_SUCCESS/CAPTURE`
-payload without `X-Secret-Key`. Lambe accepts that specific request only when
-both `custom_data.test_mode` and `custom_data.webhook_test` are `true` and the
-invoice does not match any stored top-up. This path never mutates wallet data.
-Every IPN that can match or settle a real top-up still requires the configured
-secret.
+payload without `X-Secret-Key`. Lambe accepts that specific request only inside
+the automated test process (`NODE_ENV=test`), when both
+`custom_data.test_mode` and `custom_data.webhook_test` are `true`, and the
+invoice does not match any stored top-up. Every running backend requires the
+configured secret for every IPN. This test path never mutates wallet data.
 
 For local Docker development, expose port `5000` and use the generated HTTPS
 domain as both `SEPAY_PUBLIC_BASE_URL` and the base of `SEPAY_IPN_URL`:
@@ -835,11 +922,136 @@ Troubleshooting:
 - `404` from ngrok: verify the tunnel targets host port `5000` and the URL ends
   with `/api/payments/sepay/ipn`.
 - `400`: the dashboard payload does not match the accepted SePay schema.
-- `401`: a real IPN is missing or has an invalid `X-Secret-Key`.
+- `401`: a real IPN, or any production IPN, is missing or has an invalid `X-Secret-Key`.
 - `404` for a real invoice: `invoice_no` does not match a stored top-up.
 - `409`: amount, currency, or payment state does not match the pending top-up.
 - A dashboard test returning `200` never means money was added. Verify a real
   sandbox payment through the top-up status and wallet transaction.
+
+## Internal account operations
+
+Hợp đồng API, ma trận role, quy tắc redaction và bằng chứng kiểm thử chi tiết:
+[`docs/operations-api.md`](docs/operations-api.md).
+
+After the database migration, an existing admin can manage staff using an
+internal Bearer access token. `MAIL_ENABLED=true` and working SMTP are required
+to invite staff or send a password setup/reset email. The API never returns a
+setup token; the recipient receives a one-time token by email. An admin can
+bootstrap the first account with `npm run admin:create`.
+
+| Method | Path                                              | Purpose                                                                             |
+| ------ | ------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| GET    | `/api/admin/internal-accounts`                    | Filtered, paginated account list                                                    |
+| GET    | `/api/admin/internal-accounts/:id`                | Account detail                                                                      |
+| POST   | `/api/admin/internal-accounts`                    | Invite staff; body `username`, `fullName`, `email`, `roles[]`                       |
+| PATCH  | `/api/admin/internal-accounts/:id`                | Update name/email                                                                   |
+| PUT    | `/api/admin/internal-accounts/:id/roles`          | Replace roles; body `roles[]`                                                       |
+| POST   | `/api/admin/internal-accounts/:id/disable`        | Disable and revoke sessions                                                         |
+| POST   | `/api/admin/internal-accounts/:id/enable`         | Re-enable a disabled account                                                        |
+| POST   | `/api/admin/internal-accounts/:id/password-reset` | Email a new setup token                                                             |
+| POST   | `/api/admin/auth/activate`                        | Set password with emailed `token` and `password`                                    |
+| POST   | `/api/admin/auth/change-password`                 | Change own password with `currentPassword`, `newPassword`; all sessions are revoked |
+| GET    | `/api/admin/audit-logs`                           | Filtered, paginated redacted audit log                                              |
+| GET    | `/api/admin/audit-logs/:id`                       | Redacted audit record                                                               |
+
+Only `ADMIN` can use internal-account and audit endpoints. Setup tokens expire
+after 24 hours for an invitation and 1 hour for a password reset. Disabling an
+account or changing its email invalidates outstanding setup tokens. The last
+active admin cannot lose the `ADMIN` role or be disabled. The audit read API
+never returns free-form metadata, IP addresses, or user-agent strings.
+
+## Order operations
+
+`ADMIN`, `SUPPORT`, and `MODERATOR` can call `GET /api/admin/orders` with
+optional `status`, `bookingType`, `customerId`, `providerId`, `from`, `to`,
+`page`, and `limit`. `GET /api/admin/orders/:id` returns an order detail with a
+chronological `timeline` assembled from status changes, evidence captures, and
+cancellation requests. Lists never include contact details or exact addresses.
+Only `ADMIN` receives contact details, exact address coordinates, and commission
+fields in the detail response; those reads are audited. Support and moderator
+responses omit them. `GET /api/admin/orders/:id/evidence/:evidenceId` is
+admin-only and returns a short-lived signed URL for private evidence after an
+audit entry is written. No public Cloudinary identifier is returned.
+
+## Beauty Feed
+
+Module `social-feed` provides a public beauty portfolio feed and authenticated
+social actions. Public routes support cursor pagination, post detail, comments,
+and replies:
+
+```text
+GET /api/feed/posts
+GET /api/feed/posts/:id
+GET /api/feed/posts/:id/comments
+GET /api/feed/posts/:id/comments/:commentId/replies
+```
+
+Authenticated user routes use the normal Lambe user access token:
+
+```text
+GET    /api/me/feed/posts
+POST   /api/me/feed/posts
+PATCH  /api/me/feed/posts/:id
+DELETE /api/me/feed/posts/:id
+GET    /api/me/feed/following
+GET    /api/me/feed/saved
+GET    /api/me/feed/mine
+GET    /api/me/feed/posts/:id
+GET    /api/me/feed/posts/:id/manage
+POST   /api/me/feed/posts/:id/organization-review
+PUT    /api/me/feed/posts/:id/like
+DELETE /api/me/feed/posts/:id/like
+PUT    /api/me/feed/posts/:id/save
+DELETE /api/me/feed/posts/:id/save
+PUT    /api/me/feed/providers/:id/follow
+DELETE /api/me/feed/providers/:id/follow
+POST   /api/me/feed/posts/:id/comments
+DELETE /api/me/feed/posts/:id/comments/:commentId
+POST   /api/me/feed/posts/:id/reports
+```
+
+An active provider owner or a qualified active organization worker can create
+posts. Worker posts require owner approval; edits require approval again.
+Platform HIDDEN and organization PENDING/REJECTED are independent visibility
+gates shared by Feed, AI and provider portfolios. Creating a post uses
+`multipart/form-data`: `caption`, `providerServiceIds` as a JSON array,
+`includesCustomer`, `hasCustomerConsent`, and repeated `files`. A post accepts
+either 1-6 JPEG/PNG/WEBP images (5 MB each, 30 MB total) or one MP4 (30 MB,
+60 seconds). It must reference 1-5 active services owned by that provider. When
+customer imagery is present, consent must be explicitly confirmed. Cloudinary
+uploads strip EXIF/GPS metadata.
+
+The optional `memberId` chooses the caller's own organization membership;
+authorship/version are derived by the backend. `/me/feed/mine` is scoped to
+owner organization posts or the worker's own current membership/version.
+Use `/posts/:id/manage` for pending/hidden/private management. Owner decisions
+require the current `revisionNumber`; see [P5E.3 API contract](docs/organization-member-feed-api.md).
+
+Authenticated discovery `/api/me/feed/posts` uses the same public visibility
+and cursor rules, with batched viewer flags; its response is `private, no-store`.
+The public list intentionally has false viewer flags even when a token is sent.
+See [Beauty Feed integration](docs/beauty-feed-api.md) for mobile contracts and
+remaining device QA. This endpoint does not alter moderation or organization scope.
+
+Internal moderation uses the internal access token and requires `ADMIN` or
+`MODERATOR`:
+
+```text
+GET   /api/internal/feed/reports
+PATCH /api/internal/feed/posts/:id/status
+PATCH /api/internal/feed/reports/:id
+```
+
+Post states are `PUBLISHED`, `HIDDEN`, and `DELETED`. Provider deletion is soft;
+moderation actions are audited. Feed media currently uses public Cloudinary
+delivery URLs, so hiding a post stops API distribution but does not revoke a URL
+that was already shared. No extra feed-specific upload preset is required: the
+existing `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and
+`CLOUDINARY_API_SECRET` configuration is used for signed backend uploads.
+
+The database schema is created by migration
+`20261023000000_social_feed`. Swagger contains the full request contracts under
+`Beauty Feed`, `Beauty Feed Moderation` and `Organization Feed Management`.
 
 ## Scripts
 
@@ -861,6 +1073,25 @@ npm run prisma:studio
 npm run admin:create -- --username admin --name "System Admin"
 ```
 
+## Quality and operations — P6 (2026-10-31)
+
+Quality/operations P6 adds ADMIN-only `GET /api/admin/observability`, bounded
+HTTP/SSE/queue metrics, worker health and Redis reconnect recovery. The full
+response contract, field units, errors and frontend rules are in
+[Observability API](docs/observability-api.md). See the
+[operations runbook](docs/quality-operations-runbook.md),
+[verification report](docs/quality-verification-2026-10-30.md),
+[security evidence](docs/quality-security-evidence.md),
+[performance baseline](docs/quality-performance-baseline.md), and
+[OpenAPI compatibility checks](docs/quality-openapi-compatibility.md).
+P5 development remains paused. These checks do not move payment gateways out
+of sandbox or add payouts.
+
+The P6 deployed snapshot had 313 HTTP operations / 101 schemas. P6 closed
+27 of 39 QA items; the remaining work is explicitly retained in the plan.
+Use the UI/operations documentation for the proposed Admin screen: the new
+backend endpoint does not mean that screen has been built.
+
 ## Notes
 
 - Prisma schema chính nằm ở `prisma/schema.prisma`.
@@ -873,5 +1104,8 @@ npm run admin:create -- --username admin --name "System Admin"
 - Refresh token quản trị mới gắn với session bằng chữ ký. Dùng lại token đã xoay
   sẽ thu hồi session và ghi audit. Token cũ tạo trước bản nâng cấp vẫn dùng được
   đến lần refresh tiếp theo nhưng chưa phát hiện được replay.
-- Giới hạn tốc độ hiện dùng bộ nhớ từng tiến trình; khi chạy nhiều replica cần
-  chuyển sang storage dùng chung để giới hạn chính xác trên toàn hệ thống.
+- Khi Redis được bật, global rate limiting dùng Redis storage dùng chung.
+  Redis hỏng thì các route được bảo vệ fail-closed 503; không tự rơi về bộ nhớ
+  để bỏ qua giới hạn. Chỉ khi Redis bị vô hiệu hóa trong development/test mới
+  dùng memory storage mỗi tiến trình. Production yêu cầu Redis. Health được
+  miễn riêng hai cửa sổ throttle để vẫn báo được tình trạng dependency.

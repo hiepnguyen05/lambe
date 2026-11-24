@@ -40,9 +40,14 @@ export class TransformInterceptor<T> implements NestInterceptor<
           };
         }
 
-        if (typeof res === 'object' && res !== null && 'success' in res) {
+        if (
+          typeof res === 'object' &&
+          res !== null &&
+          'success' in res &&
+          typeof res.success === 'boolean'
+        ) {
           const customRes = res as Record<string, unknown>;
-          const { success, message, data, meta } = customRes;
+          const { message, data, meta } = customRes;
           const remainingData = { ...customRes };
           delete remainingData.success;
           delete remainingData.message;
@@ -55,7 +60,7 @@ export class TransformInterceptor<T> implements NestInterceptor<
           return {
             statusCode: response.statusCode,
             timestamp: new Date().toISOString(),
-            success: Boolean(success),
+            success: res.success,
             message: typeof message === 'string' ? message : undefined,
             data: (hasRemainingData
               ? data && typeof data === 'object' && !Array.isArray(data)

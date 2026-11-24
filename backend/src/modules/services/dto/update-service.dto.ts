@@ -18,10 +18,10 @@ import {
 import { IsIcon } from '../../../common/validation/icon.validator';
 import { ServiceEvidenceRequirementsDto } from './service-evidence-requirements.dto';
 import {
-  normalizeServiceSlug,
+  normalizeSlug as normalizeServiceSlug,
   trimOptionalString,
   trimString,
-} from './service-transformers';
+} from '../../../common/validation/string-transformers';
 
 const MAX_PRICE_AMOUNT = 2_000_000_000;
 

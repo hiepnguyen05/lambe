@@ -14,6 +14,13 @@ import {
 } from 'class-validator';
 
 export class BookingAvailabilityQueryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Bắt buộc khi chọn nhân viên tổ chức.',
+  })
+  @IsUUID('4')
+  @IsOptional()
+  memberId?: string;
   @ApiProperty({ format: 'uuid' })
   @IsUUID('4')
   providerServiceId: string;

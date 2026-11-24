@@ -14,6 +14,12 @@ import {
   type MediaStorage,
 } from '../../../upload/application/media-storage.port';
 import type { OrderEvidenceLocationDto } from '../../dto/order-evidence.dto';
+import {
+  assertAssignedMemberActive,
+  providerOrderReadWhere,
+  servingOrderWhere,
+} from '../persistence/order-actor.policy';
+import { lockBookingResource } from '../persistence/booking-resource.lock';
 
 const allowedStatuses: Record<OrderEvidenceType, ServiceOrderStatus[]> = {
   ARRIVAL: [ServiceOrderStatus.EN_ROUTE],
@@ -51,15 +57,20 @@ export class OrderEvidenceService {
     if (type === OrderEvidenceType.ARRIVAL && location.latitude === undefined)
       throw new BadRequestException('Ảnh đến nơi cần tọa độ thiết bị.');
     const owned = await this.prisma.serviceOrder.findFirst({
-      where: { id: orderId, provider: { userId } },
+      where: { id: orderId, ...servingOrderWhere(userId) },
       select: {
         status: true,
+        providerId: true,
+        assignedMemberId: true,
+        assignedMemberVersion: true,
+        assignedMemberUserId: true,
         addressLatitude: true,
         addressLongitude: true,
         evidence: { select: { type: true } },
       },
     });
     if (!owned) throw new NotFoundException('Không tìm thấy đơn dịch vụ.');
+    await assertAssignedMemberActive(this.prisma, owned, userId);
     this.assertCanUpload(
       owned.status,
       type,
@@ -86,15 +97,23 @@ export class OrderEvidenceService {
       if (uploaded.deliveryType !== 'authenticated' || !uploaded.format)
         throw new ConflictException('Ảnh bằng chứng phải được lưu riêng tư.');
       const evidence = await this.prisma.$transaction(async (tx) => {
+        await lockBookingResource(tx, owned.providerId, owned.assignedMemberId);
         await tx.$queryRaw(
           Prisma.sql`SELECT "id" FROM "service_orders" WHERE "id" = ${orderId} FOR UPDATE`,
         );
         const current = await tx.serviceOrder.findFirst({
-          where: { id: orderId, provider: { userId } },
-          select: { status: true, evidence: { select: { type: true } } },
+          where: { id: orderId, ...servingOrderWhere(userId) },
+          select: {
+            status: true,
+            assignedMemberId: true,
+            assignedMemberVersion: true,
+            assignedMemberUserId: true,
+            evidence: { select: { type: true } },
+          },
         });
         if (!current)
           throw new NotFoundException('Không tìm thấy đơn dịch vụ.');
+        await assertAssignedMemberActive(tx, current, userId);
         this.assertCanUpload(
           current.status,
           type,
@@ -103,6 +122,7 @@ export class OrderEvidenceService {
         return tx.orderEvidence.create({
           data: {
             orderId,
+            uploadedByUserId: userId,
             type,
             publicId: uploaded.publicId,
             fileFormat: uploaded.format,
@@ -132,7 +152,7 @@ export class OrderEvidenceService {
         id: evidenceId,
         orderId,
         order: {
-          OR: [{ customerId: userId }, { provider: { userId } }],
+          OR: [{ customerId: userId }, providerOrderReadWhere(userId)],
         },
       },
       select: {

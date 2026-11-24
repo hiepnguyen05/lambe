@@ -286,7 +286,8 @@ export class ProviderApplicationsController {
     @Param('type', new ParseEnumPipe(ProviderDocumentType))
     type: ProviderDocumentType,
     @Query() query: ProviderDocumentQueryDto,
-    @UploadedFile(createImageUploadPipe()) file: Express.Multer.File,
+    @UploadedFile(createImageUploadPipe({ allowSvg: false }))
+    file: Express.Multer.File,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.documents.upload(id, user.userId, type, query, file.buffer);

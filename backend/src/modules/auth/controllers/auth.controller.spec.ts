@@ -86,6 +86,7 @@ describe('AuthController', () => {
       controller.getCurrentUser({
         userId: 'user-id',
         phone: '0363668951',
+        sessionId: 'session-id',
       }),
     ).resolves.toEqual({ success: true });
     expect(authService.getCurrentUser).toHaveBeenCalledWith('user-id');
@@ -98,7 +99,7 @@ describe('AuthController', () => {
 
     await expect(
       controller.updateCurrentUser(
-        { userId: 'user-id', phone: '0363668951' },
+        { userId: 'user-id', phone: '0363668951', sessionId: 'session-id' },
         dto,
         request,
       ),
@@ -118,7 +119,7 @@ describe('AuthController', () => {
 
     await expect(
       controller.uploadAvatar(
-        { userId: 'user-id', phone: '0363668951' },
+        { userId: 'user-id', phone: '0363668951', sessionId: 'session-id' },
         file,
         request,
       ),
@@ -137,7 +138,7 @@ describe('AuthController', () => {
 
     await expect(
       controller.removeAvatar(
-        { userId: 'user-id', phone: '0363668951' },
+        { userId: 'user-id', phone: '0363668951', sessionId: 'session-id' },
         request,
       ),
     ).resolves.toEqual({ success: true });

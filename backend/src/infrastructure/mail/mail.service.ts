@@ -9,6 +9,37 @@ export interface SendMailInput {
   html: string;
 }
 
+const SMTP_ERROR_CODES = new Set([
+  'EAUTH',
+  'ECONNECTION',
+  'ESOCKET',
+  'ETIMEDOUT',
+  'EDNS',
+  'EENVELOPE',
+  'EMESSAGE',
+  'ESTREAM',
+  'ETLS',
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+]);
+
+export function smtpErrorDetails(error: unknown): {
+  code?: string;
+  responseCode?: number;
+} {
+  if (!error || typeof error !== 'object') return {};
+  const { code, responseCode } = error as Record<string, unknown>;
+  return {
+    ...(typeof code === 'string' && SMTP_ERROR_CODES.has(code) && { code }),
+    ...(typeof responseCode === 'number' &&
+      Number.isInteger(responseCode) &&
+      responseCode >= 100 &&
+      responseCode <= 599 && { responseCode }),
+  };
+}
+
 @Injectable()
 export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
@@ -47,24 +78,24 @@ export class MailService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     if (!this.transporter) {
-      this.logger.warn('Email delivery is disabled.');
+      this.logger.warn('mail.delivery.disabled');
       return;
     }
 
     try {
       await this.transporter.verify();
-      this.logger.log(`SMTP connected successfully: ${this.fromAddress}`);
+      this.logger.log('mail.smtp.verified');
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`SMTP connection verification failed: ${message}`);
+      this.logger.error({
+        event: 'mail.smtp.verify_failed',
+        ...smtpErrorDetails(error),
+      });
     }
   }
 
   async send(input: SendMailInput): Promise<void> {
     if (!this.transporter) {
-      this.logger.warn(
-        `Skipped email because mail is disabled: ${input.subject}`,
-      );
+      this.logger.warn('mail.delivery.skipped_disabled');
       return;
     }
 

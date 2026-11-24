@@ -5,15 +5,21 @@ export interface ProviderLocationPoint {
   distanceKm: number;
 }
 
+export interface ProviderPosition {
+  providerId: string;
+  sessionId: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number;
+  capturedAtMs: number;
+  sequence: number;
+}
+
 export interface ProviderLocationStore {
   getPosition(
     providerId: string,
   ): Promise<{ latitude: number; longitude: number } | null>;
-  upsert(
-    providerId: string,
-    latitude: number,
-    longitude: number,
-  ): Promise<void>;
+  upsert(position: ProviderPosition): Promise<boolean>;
   remove(providerId: string): Promise<void>;
   isOnline(providerId: string): Promise<boolean>;
   findNearby(

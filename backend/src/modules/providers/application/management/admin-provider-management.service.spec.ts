@@ -1,5 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { ProviderProfileStatus } from '@prisma/client';
+import { Prisma, ProviderProfileStatus, ProviderType } from '@prisma/client';
 import { AdminProviderStatusAction } from '../../dto/admin-provider-management.dto';
 import { AdminProviderManagementService } from './admin-provider-management.service';
 
@@ -81,7 +81,7 @@ describe('AdminProviderManagementService', () => {
     const prisma = {
       providerProfile: {
         findMany: jest.fn().mockResolvedValue([]),
-        count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
       $transaction: jest.fn((operations: Array<Promise<unknown>>) =>
         Promise.all(operations),
@@ -97,6 +97,7 @@ describe('AdminProviderManagementService', () => {
     const result = await service.findAll({ page: 1, limit: 20 });
 
     expect(result.data).toEqual([]);
+    expect(prisma.$transaction.mock.calls[0][0]).toHaveLength(2);
     expect(result).not.toHaveProperty('summary');
     expect(result.meta).toMatchObject({
       page: 1,
@@ -108,6 +109,86 @@ describe('AdminProviderManagementService', () => {
         suspended: 0,
         individuals: 0,
         organizations: 0,
+      },
+    });
+  });
+
+  it('derives filtered pagination and search-wide summary from grouped counts', async () => {
+    const groups = [
+      {
+        status: ProviderProfileStatus.SETUP_REQUIRED,
+        providerType: ProviderType.INDIVIDUAL,
+        _count: { _all: 2 },
+      },
+      {
+        status: ProviderProfileStatus.ACTIVE,
+        providerType: ProviderType.INDIVIDUAL,
+        _count: { _all: 3 },
+      },
+      {
+        status: ProviderProfileStatus.ACTIVE,
+        providerType: ProviderType.ORGANIZATION,
+        _count: { _all: 4 },
+      },
+      {
+        status: ProviderProfileStatus.SUSPENDED,
+        providerType: ProviderType.ORGANIZATION,
+        _count: { _all: 5 },
+      },
+    ];
+    let groupingWhere: Prisma.ProviderProfileWhereInput | undefined;
+    const prisma = {
+      providerProfile: {
+        findMany: jest.fn().mockResolvedValue([]),
+        groupBy: jest.fn(
+          (args: { where: Prisma.ProviderProfileWhereInput }) => {
+            groupingWhere = args.where;
+            return Promise.resolve(groups);
+          },
+        ),
+      },
+      $transaction: jest.fn((operations: Array<Promise<unknown>>) =>
+        Promise.all(operations),
+      ),
+    };
+    const service = new AdminProviderManagementService(
+      prisma as never,
+      { record: jest.fn() } as never,
+      { remove: jest.fn() } as never,
+      { publishPrivateImage: jest.fn(), deleteImage: jest.fn() } as never,
+    );
+
+    const result = await service.findAll({
+      page: 2,
+      limit: 3,
+      search: '  An  ',
+      status: ProviderProfileStatus.ACTIVE,
+      providerType: ProviderType.ORGANIZATION,
+    });
+
+    expect(prisma.providerProfile.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: ProviderProfileStatus.ACTIVE,
+          providerType: ProviderType.ORGANIZATION,
+        }) as object,
+        skip: 3,
+        take: 3,
+      }),
+    );
+    expect(groupingWhere?.OR).toHaveLength(5);
+    expect(groupingWhere?.status).toBeUndefined();
+    expect(groupingWhere?.providerType).toBeUndefined();
+    expect(result.meta).toMatchObject({
+      total: 4,
+      totalPages: 2,
+      summary: {
+        total: 14,
+        setupRequired: 2,
+        active: 7,
+        suspended: 5,
+        individuals: 5,
+        organizations: 9,
       },
     });
   });
@@ -208,5 +289,182 @@ describe('AdminProviderManagementService', () => {
         request,
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('bounds avatar backfill, continues past invalid portraits and returns a resume cursor', async () => {
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const providerProfile = {
+      findMany: jest
+        .fn()
+        .mockResolvedValueOnce(
+          Array.from({ length: 25 }, (_, index) => ({
+            id: `provider-${index}`,
+            createdAt,
+          })),
+        )
+        .mockResolvedValueOnce([
+          { id: 'provider-25', createdAt },
+          { id: 'provider-26', createdAt },
+        ]),
+    };
+    const service = new AdminProviderManagementService(
+      { providerProfile } as never,
+      { record: jest.fn() } as never,
+      { remove: jest.fn() } as never,
+      { publishPrivateImage: jest.fn(), deleteImage: jest.fn() } as never,
+    );
+    const sync = jest.spyOn(service, 'syncAvatar').mockImplementation((id) => {
+      if (id === 'provider-0')
+        return Promise.reject(new BadRequestException('No portrait'));
+      if (id === 'provider-1') return Promise.reject(new Error('private info'));
+      return Promise.resolve({} as never);
+    });
+
+    await expect(
+      service.backfillMissingAvatars({ limit: 27 }),
+    ).resolves.toEqual({
+      scanned: 27,
+      updated: 25,
+      skipped: 1,
+      failed: 1,
+      nextCursor: 'provider-26',
+    });
+    expect(sync).toHaveBeenCalledTimes(27);
+    expect(providerProfile.findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        take: 2,
+        where: {
+          AND: [
+            {
+              OR: [{ avatarUrl: null }, { user: { is: { avatarUrl: null } } }],
+            },
+            {
+              OR: [
+                { createdAt: { gt: createdAt } },
+                { createdAt, id: { gt: 'provider-24' } },
+              ],
+            },
+          ],
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      }),
+    );
+  });
+
+  it('resumes avatar backfill from a cursor and rejects unbounded limits', async () => {
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const providerProfile = {
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue({ createdAt }),
+    };
+    const service = new AdminProviderManagementService(
+      { providerProfile } as never,
+      { record: jest.fn() } as never,
+      { remove: jest.fn() } as never,
+      { publishPrivateImage: jest.fn(), deleteImage: jest.fn() } as never,
+    );
+
+    await expect(
+      service.backfillMissingAvatars({ limit: 501 }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(providerProfile.findMany).not.toHaveBeenCalled();
+    await expect(
+      service.backfillMissingAvatars({ cursor: 'resume-id', limit: 1 }),
+    ).resolves.toEqual({
+      scanned: 0,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
+      nextCursor: 'resume-id',
+    });
+    expect(providerProfile.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        take: 1,
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            {
+              OR: [
+                { createdAt: { gt: createdAt } },
+                { createdAt, id: { gt: 'resume-id' } },
+              ],
+            },
+          ]) as object[],
+        }) as object,
+      }),
+    );
+  });
+
+  it('does not replace an avatar published by another backfill while media was uploading', async () => {
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    const transaction = {
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'provider-id' }]),
+      providerProfile: {
+        findUnique: jest.fn().mockResolvedValue({
+          avatarUrl: 'https://example.test/current.webp',
+          user: { avatarUrl: 'https://example.test/current.webp' },
+        }),
+        update: jest
+          .fn()
+          .mockResolvedValue(detail(ProviderProfileStatus.ACTIVE)),
+      },
+      providerApplicationDocument: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'portrait-id' }),
+      },
+      user: { update: jest.fn() },
+    };
+    const prisma = {
+      providerProfile: {
+        findMany: jest
+          .fn()
+          .mockResolvedValueOnce([{ id: 'provider-id', createdAt }])
+          .mockResolvedValueOnce([]),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'provider-id',
+          userId: 'user-id',
+          sourceApplicationId: 'application-id',
+          user: { avatarPublicId: null },
+          sourceApplication: {
+            documents: [
+              {
+                id: 'portrait-id',
+                publicId: 'private-portrait',
+                fileFormat: 'webp',
+                deliveryType: 'authenticated',
+              },
+            ],
+          },
+        }),
+      },
+      $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
+        callback(transaction),
+      ),
+    };
+    const mediaStorage = {
+      publishPrivateImage: jest.fn().mockResolvedValue({
+        publicId: 'new-upload',
+        secureUrl: 'https://example.test/new.webp',
+      }),
+      deleteImage: jest.fn().mockResolvedValue(true),
+    };
+    const service = new AdminProviderManagementService(
+      prisma as never,
+      { record: jest.fn() } as never,
+      { remove: jest.fn() } as never,
+      mediaStorage as never,
+    );
+
+    await expect(service.backfillMissingAvatars({ limit: 1 })).resolves.toEqual(
+      {
+        scanned: 1,
+        updated: 0,
+        skipped: 1,
+        failed: 0,
+        nextCursor: 'provider-id',
+      },
+    );
+    expect(transaction.user.update).not.toHaveBeenCalled();
+    expect(transaction.providerProfile.update).not.toHaveBeenCalled();
+    expect(mediaStorage.deleteImage).toHaveBeenCalledWith('new-upload');
   });
 });

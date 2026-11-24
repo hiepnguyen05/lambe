@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   Prisma,
@@ -14,6 +15,7 @@ import {
 import type { RequestMetadata } from '../../../common/http/types/request-metadata.type';
 import { AuditService } from '../../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../../infrastructure/persistence/postgres/prisma.service';
+import { ObservabilityMetrics } from '../../../infrastructure/observability/observability-metrics.service';
 import type {
   CancelOrderDto,
   CreateOrderDto,
@@ -26,10 +28,20 @@ import { OrderWalletService } from './payments/order-wallet.service';
 import { OrderBookingService } from './booking/order-booking.service';
 import {
   orderInclude,
+  orderViewInclude,
   presentForCustomer,
   presentForProvider,
+  providerOrderViewInclude,
 } from './persistence/order.presenter';
 import { MINUTE } from '../domain/booking-calendar.policy';
+import { calculateDistanceKm } from '../../discovery/domain/distance';
+import type { OrderLocationDto } from '../dto/order-location.dto';
+import {
+  assertAssignedMemberActive,
+  orderServingUserId,
+  providerOrderReadWhere,
+  servingOrderWhere,
+} from './persistence/order-actor.policy';
 
 @Injectable()
 export class OrdersService {
@@ -40,6 +52,7 @@ export class OrdersService {
     private readonly calendar: BookingCalendarService,
     private readonly payments: OrderWalletService,
     private readonly booking: OrderBookingService,
+    @Optional() private readonly metrics?: ObservabilityMetrics,
   ) {}
 
   quote(customerId: string, dto: OrderQuoteDto) {
@@ -56,57 +69,108 @@ export class OrdersService {
   }
 
   async findMine(customerId: string, query: OrderQueryDto) {
+    const limit = query.limit ?? 50;
+    const cursor = await this.resolveCursor(query.cursor, { customerId });
     const orders = await this.prisma.serviceOrder.findMany({
-      where: { customerId, status: query.status },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-      include: orderInclude,
+      where: {
+        customerId,
+        status: query.status,
+        ...(cursor
+          ? {
+              OR: [
+                { createdAt: { lt: cursor.createdAt } },
+                { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      include: orderViewInclude,
     });
+    const page = orders.slice(0, limit);
     return {
       success: true,
-      data: orders.map((item) => presentForCustomer(item)),
+      data: page.map((item) => presentForCustomer(item)),
+      meta: { nextCursor: orders.length > limit ? page.at(-1)?.id : null },
     };
   }
 
   async findMineById(customerId: string, id: string) {
     const order = await this.prisma.serviceOrder.findFirst({
       where: { id, customerId },
-      include: orderInclude,
+      include: orderViewInclude,
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn dịch vụ.');
     return { success: true, data: presentForCustomer(order) };
   }
 
   async findProviderOrders(userId: string, query: OrderQueryDto) {
-    const provider = await this.findProvider(userId);
+    const scope = providerOrderReadWhere(userId);
+    const limit = query.limit ?? 50;
+    const cursor = await this.resolveCursor(query.cursor, scope);
     const orders = await this.prisma.serviceOrder.findMany({
-      where: { providerId: provider.id, status: query.status },
-      orderBy: [{ scheduledAt: 'asc' }, { createdAt: 'desc' }],
-      take: 50,
-      include: orderInclude,
+      where: {
+        ...scope,
+        status: query.status,
+        ...(cursor
+          ? {
+              AND: [
+                {
+                  OR: [
+                    { createdAt: { lt: cursor.createdAt } },
+                    { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+                  ],
+                },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      include: providerOrderViewInclude,
     });
+    const page = orders.slice(0, limit);
     return {
       success: true,
-      data: orders.map((item) => presentForProvider(item)),
+      data: page.map((item) => presentForProvider(item)),
+      meta: { nextCursor: orders.length > limit ? page.at(-1)?.id : null },
     };
   }
 
   async findProviderOrder(userId: string, id: string) {
-    const provider = await this.findProvider(userId);
     const order = await this.prisma.serviceOrder.findFirst({
-      where: { id, providerId: provider.id },
-      include: orderInclude,
+      where: { id, ...providerOrderReadWhere(userId) },
+      include: providerOrderViewInclude,
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn dịch vụ.');
     return { success: true, data: presentForProvider(order) };
   }
 
   async accept(userId: string, id: string, request: RequestMetadata) {
-    const provider = await this.findProvider(userId);
+    const provider = await this.findProvider(userId, id);
+    const originOrder = await this.prisma.serviceOrder.findUniqueOrThrow({
+      where: { id },
+      select: {
+        providerServiceId: true,
+        assignedMemberId: true,
+        bookingType: true,
+      },
+    });
+    const liveOrigin = await this.eligibility.captureOrigin({
+      providerServiceId: originOrder.providerServiceId,
+      memberId: originOrder.assignedMemberId ?? undefined,
+      bookingType: originOrder.bookingType,
+    });
     const order = await this.prisma.$transaction(async (transaction) => {
-      await this.lockProviderForOrder(transaction, id, {
-        providerId: provider.id,
-      });
+      await this.lockProviderForOrder(
+        transaction,
+        id,
+        {
+          providerId: provider.id,
+        },
+        userId,
+      );
       await this.lockOrder(transaction, id);
       const current = await transaction.serviceOrder.findFirst({
         where: { id, providerId: provider.id },
@@ -141,6 +205,7 @@ export class OrdersService {
         current.customerId,
         {
           providerServiceId: current.providerServiceId,
+          memberId: current.assignedMemberId ?? undefined,
           customerAddressId: current.customerAddressId ?? '',
           bookingType: current.bookingType,
           scheduledAt: current.scheduledAt?.toISOString(),
@@ -165,6 +230,8 @@ export class OrdersService {
             note: current.addressNote,
           },
         },
+        undefined,
+        liveOrigin,
       );
       this.eligibility.assertAvailable(prepared);
       await transaction.providerCalendarBlock.update({
@@ -235,6 +302,8 @@ export class OrdersService {
         include: orderInclude,
       });
     });
+    if (order.bookingAttempt > 1)
+      this.metrics?.recordEvent('rematch', 'accepted');
     return {
       success: true,
       message: 'Đã nhận đơn dịch vụ.',
@@ -248,11 +317,16 @@ export class OrdersService {
     reason: string,
     request: RequestMetadata,
   ) {
-    const provider = await this.findProvider(userId);
+    const provider = await this.findProvider(userId, id);
     const order = await this.prisma.$transaction(async (transaction) => {
-      await this.lockProviderForOrder(transaction, id, {
-        providerId: provider.id,
-      });
+      await this.lockProviderForOrder(
+        transaction,
+        id,
+        {
+          providerId: provider.id,
+        },
+        userId,
+      );
       await this.lockOrder(transaction, id);
       const current = await transaction.serviceOrder.findFirst({
         where: { id, providerId: provider.id },
@@ -261,6 +335,10 @@ export class OrdersService {
       if (!current) throw new NotFoundException('Không tìm thấy đơn dịch vụ.');
       this.assertPending(current);
       await this.calendar.release(transaction, id);
+      await transaction.voucherRedemption.updateMany({
+        where: { orderId: id, status: 'RESERVED' },
+        data: { status: 'RELEASED' },
+      });
       await this.changeStatus(
         transaction,
         current,
@@ -306,12 +384,13 @@ export class OrdersService {
     request: RequestMetadata,
     asProvider = false,
   ) {
-    const owner = asProvider ? await this.findProvider(customerId) : null;
+    const owner = asProvider ? await this.findProvider(customerId, id) : null;
     const order = await this.prisma.$transaction(async (transaction) => {
       await this.lockProviderForOrder(
         transaction,
         id,
         owner ? { providerId: owner.id } : { customerId },
+        owner ? customerId : undefined,
       );
       await this.lockOrder(transaction, id);
       const current = await transaction.serviceOrder.findFirst({
@@ -329,6 +408,10 @@ export class OrdersService {
         await this.payments.release(transaction, current, dto.reason);
       }
       await this.calendar.release(transaction, id);
+      await transaction.voucherRedemption.updateMany({
+        where: { orderId: id, status: 'RESERVED' },
+        data: { status: 'RELEASED' },
+      });
       await this.changeStatus(
         transaction,
         current,
@@ -339,7 +422,7 @@ export class OrdersService {
       );
       await transaction.orderNotification.create({
         data: {
-          userId: owner ? current.customerId : current.provider.userId,
+          userId: owner ? current.customerId : orderServingUserId(current),
           orderId: id,
           event: 'ORDER_CANCELLED',
         },
@@ -380,16 +463,37 @@ export class OrdersService {
     );
   }
 
-  async markArrived(userId: string, id: string, request: RequestMetadata) {
+  async markArrived(
+    userId: string,
+    id: string,
+    location: OrderLocationDto,
+    request: RequestMetadata,
+  ) {
+    const capturedAt = Date.parse(location.capturedAt);
+    const now = Date.now();
+    if (
+      !Number.isFinite(capturedAt) ||
+      capturedAt < now - 30_000 ||
+      capturedAt > now + 10_000
+    )
+      throw new ConflictException(
+        'Vị trí GPS đã cũ hoặc thời gian thiết bị không hợp lệ.',
+      );
     return this.advanceProviderOrder(
       userId,
       id,
       ServiceOrderStatus.EN_ROUTE,
       ServiceOrderStatus.ARRIVED,
-      { arrivedAt: new Date() },
+      {
+        arrivedAt: new Date(),
+        arrivalLatitude: location.latitude,
+        arrivalLongitude: location.longitude,
+        arrivalAccuracyMeters: location.accuracyMeters,
+      },
       'SERVICE_ORDER_ARRIVED',
       'Đã cập nhật trạng thái đã đến nơi.',
       request,
+      location,
     );
   }
 
@@ -407,11 +511,16 @@ export class OrdersService {
   }
 
   async complete(userId: string, id: string, request: RequestMetadata) {
-    const provider = await this.findProvider(userId);
+    const provider = await this.findProvider(userId, id);
     const order = await this.prisma.$transaction(async (transaction) => {
-      await this.lockProviderForOrder(transaction, id, {
-        providerId: provider.id,
-      });
+      await this.lockProviderForOrder(
+        transaction,
+        id,
+        {
+          providerId: provider.id,
+        },
+        userId,
+      );
       await this.lockOrder(transaction, id);
       const current = await transaction.serviceOrder.findFirst({
         where: { id, providerId: provider.id },
@@ -424,18 +533,35 @@ export class OrdersService {
         );
       }
       this.assertNoPendingCancellation(current.cancellationRequest);
+      if (
+        current.addOns.some(
+          (item) => item.status === 'PENDING' && item.expiresAt > new Date(),
+        )
+      )
+        throw new ConflictException(
+          'Đơn đang chờ khách phản hồi dịch vụ phát sinh.',
+        );
       if (!current.evidence.some((item) => item.type === 'AFTER_WORK'))
         throw new ConflictException(
           'Cần ảnh kết quả sau khi làm trước khi hoàn thành.',
         );
       await this.payments.capture(transaction, current);
+      await transaction.voucherRedemption.updateMany({
+        where: { orderId: id, status: 'RESERVED' },
+        data: { status: 'REDEEMED' },
+      });
       await this.calendar.release(transaction, id);
       await this.changeStatus(
         transaction,
         current,
         ServiceOrderStatus.COMPLETED,
         userId,
-        { completedAt: new Date() },
+        {
+          completedAt: new Date(),
+          cashCollectedAt: new Date(),
+          cashCollectedByUserId: userId,
+          cashCollectedAmount: current.totalAmount,
+        },
       );
       await transaction.orderNotification.create({
         data: {
@@ -467,16 +593,34 @@ export class OrdersService {
     };
   }
 
-  private async findProvider(userId: string) {
-    const provider = await this.prisma.providerProfile.findUnique({
-      where: { userId },
+  private async resolveCursor(
+    cursorId: string | undefined,
+    scope: Prisma.ServiceOrderWhereInput,
+  ) {
+    if (!cursorId) return null;
+    const cursor = await this.prisma.serviceOrder.findFirst({
+      where: { id: cursorId, AND: [scope] },
+      select: { id: true, createdAt: true },
+    });
+    if (!cursor) throw new BadRequestException('Cursor không hợp lệ.');
+    return cursor;
+  }
+
+  private async findProvider(userId: string, orderId: string) {
+    const owned = await this.prisma.serviceOrder.findFirst({
+      where: { id: orderId, ...servingOrderWhere(userId) },
       select: {
-        id: true,
-        status: true,
-        setupCompletedAt: true,
-        serviceRadiusKm: true,
+        provider: {
+          select: {
+            id: true,
+            status: true,
+            setupCompletedAt: true,
+            serviceRadiusKm: true,
+          },
+        },
       },
     });
+    const provider = owned?.provider;
     if (!provider)
       throw new NotFoundException('Không tìm thấy hồ sơ nhà cung cấp.');
     if (
@@ -499,12 +643,27 @@ export class OrdersService {
     action: string,
     message: string,
     request: RequestMetadata,
+    arrivalLocation?: OrderLocationDto,
   ) {
-    const provider = await this.findProvider(userId);
-    const order = await this.prisma.$transaction(async (transaction) => {
-      await this.lockProviderForOrder(transaction, id, {
-        providerId: provider.id,
+    const provider = await this.findProvider(userId, id);
+    if (toStatus === ServiceOrderStatus.EN_ROUTE) {
+      const owned = await this.prisma.serviceOrder.findUniqueOrThrow({
+        where: { id },
+        select: { assignedMemberId: true },
       });
+      // Receiving online is independent of an already accepted member job. Its GPS goes through order tracking.
+      if (!owned.assignedMemberId)
+        await this.eligibility.assertOnline(provider.id);
+    }
+    const order = await this.prisma.$transaction(async (transaction) => {
+      await this.lockProviderForOrder(
+        transaction,
+        id,
+        {
+          providerId: provider.id,
+        },
+        userId,
+      );
       await this.lockOrder(transaction, id);
       const current = await transaction.serviceOrder.findFirst({
         where: { id, providerId: provider.id },
@@ -517,12 +676,22 @@ export class OrdersService {
         );
       }
       this.assertNoPendingCancellation(current.cancellationRequest);
+      if (arrivalLocation) {
+        const distanceMeters =
+          calculateDistanceKm(arrivalLocation, {
+            latitude: current.addressLatitude,
+            longitude: current.addressLongitude,
+          }) * 1000;
+        if (distanceMeters > 300) {
+          throw new ConflictException({
+            code: 'ARRIVAL_TOO_FAR',
+            message: 'Vị trí thiết bị còn cách địa chỉ khách quá 300 mét.',
+          });
+        }
+        data.arrivalDistanceMeters = Math.round(distanceMeters);
+      }
       const requiredEvidence =
-        toStatus === ServiceOrderStatus.ARRIVED
-          ? 'ARRIVAL'
-          : toStatus === ServiceOrderStatus.IN_PROGRESS
-            ? 'BEFORE_WORK'
-            : null;
+        toStatus === ServiceOrderStatus.IN_PROGRESS ? 'BEFORE_WORK' : null;
       if (
         requiredEvidence &&
         !current.evidence.some((item) => item.type === requiredEvidence)
@@ -531,12 +700,12 @@ export class OrdersService {
           'Cần tải ảnh bằng chứng trước khi chuyển trạng thái.',
         );
       if (toStatus === ServiceOrderStatus.EN_ROUTE) {
-        await this.eligibility.assertOnline(provider.id);
         await this.calendar.assertCanDepart(
           transaction,
           provider.id,
           id,
           current.expectedStartAt,
+          current.assignedMemberId,
         );
       }
       if (
@@ -618,13 +787,25 @@ export class OrdersService {
     transaction: Prisma.TransactionClient,
     id: string,
     owner: { providerId: string } | { customerId: string },
+    actorUserId?: string,
   ) {
     const order = await transaction.serviceOrder.findFirst({
       where: { id, ...owner },
-      select: { providerId: true },
+      select: {
+        providerId: true,
+        assignedMemberId: true,
+        assignedMemberVersion: true,
+        assignedMemberUserId: true,
+      },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn dịch vụ.');
-    await this.calendar.lockProvider(transaction, order.providerId);
+    await this.calendar.lockProvider(
+      transaction,
+      order.providerId,
+      order.assignedMemberId,
+    );
+    if (actorUserId)
+      await assertAssignedMemberActive(transaction, order, actorUserId);
     await this.calendar.releaseExpired(
       transaction,
       order.providerId,

@@ -17,6 +17,7 @@ describe('booking calendar lifecycle checks', () => {
       addressLongitude: 105,
     };
     const prisma = {
+      orderRescheduleRequest: { findMany: jest.fn().mockResolvedValue([]) },
       providerCalendarBlock: {
         findMany: jest.fn().mockResolvedValue([
           {
@@ -59,17 +60,17 @@ describe('booking calendar lifecycle checks', () => {
     });
     expect(result[2].endAt).toEqual(row.endAt);
     const calls = prisma.providerCalendarBlock.findMany.mock.calls as [
-      { where: { OR: unknown[] } },
+      { where: { AND: unknown[] } },
     ][];
     const query = calls[0][0];
-    expect(query.where.OR).toEqual([
-      { orderId: null },
-      { orderId: { not: 'excluded' } },
-    ]);
+    expect(query.where.AND).toContainEqual({
+      OR: [{ orderId: null }, { orderId: { not: 'excluded' } }],
+    });
   });
 
   it('uses actual service start when it ends later than the original estimate', async () => {
     const prisma = {
+      orderRescheduleRequest: { findMany: jest.fn().mockResolvedValue([]) },
       providerCalendarBlock: {
         findMany: jest.fn().mockResolvedValue([
           {
@@ -97,6 +98,85 @@ describe('booking calendar lifecycle checks', () => {
     expect(result.get('provider')![0].endAt).toEqual(
       new Date('2026-10-12T07:20:00Z'),
     );
+  });
+
+  it('blocks another booking while a customer reschedule proposal is pending', async () => {
+    const proposedStartAt = new Date('2026-10-12T08:00:00Z');
+    const prisma = {
+      providerCalendarBlock: { findMany: jest.fn().mockResolvedValue([]) },
+      orderRescheduleRequest: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            proposedStartAt,
+            proposedEndAt: new Date('2026-10-12T09:00:00Z'),
+            order: {
+              providerId: 'provider',
+              addressLatitude: 21,
+              addressLongitude: 105,
+            },
+          },
+        ]),
+      },
+    };
+    const blocks = await new BookingCalendarService(prisma as never).read(
+      ['provider'],
+      now,
+      new Date('2026-10-12T18:00:00Z'),
+      now,
+    );
+    expect(blocks.get('provider')).toEqual([
+      {
+        startAt: proposedStartAt,
+        endAt: new Date('2026-10-12T09:00:00Z'),
+        point: { latitude: 21, longitude: 105 },
+      },
+    ]);
+    const calls = prisma.orderRescheduleRequest.findMany.mock
+      .calls as unknown as [
+      {
+        where: {
+          status: string;
+          expiresAt: { gt: Date };
+          order: { status: string };
+        };
+      },
+    ][];
+    expect(calls[0][0].where.status).toBe('PENDING');
+    expect(calls[0][0].where.expiresAt.gt).toEqual(now);
+    expect(calls[0][0].where.order.status).toBe('ACCEPTED');
+  });
+
+  it('keeps a safety-held order blocking the provider calendar', async () => {
+    const prisma = {
+      orderRescheduleRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      providerCalendarBlock: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            providerId: 'provider',
+            startAt: new Date('2026-10-12T04:00:00Z'),
+            endAt: new Date('2026-10-12T05:00:00Z'),
+            order: {
+              status: 'SAFETY_HOLD',
+              startedAt: null,
+              durationMinutes: 60,
+            },
+            addressLatitude: null,
+            addressLongitude: null,
+          },
+        ]),
+      },
+    };
+    const service = new BookingCalendarService(prisma as never);
+    const blocks = await service.read(
+      ['provider'],
+      now,
+      new Date('2026-10-12T18:00:00Z'),
+      now,
+    );
+    expect(blocks.get('provider')![0]).toMatchObject({
+      executing: true,
+      estimated: true,
+    });
   });
 
   it('rejects early departure and concurrent execution, but permits departure once the previous job finishes', async () => {

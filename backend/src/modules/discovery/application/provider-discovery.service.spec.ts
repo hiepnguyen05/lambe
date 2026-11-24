@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ProviderDiscoveryService } from './provider-discovery.service';
+import * as bookingCalendarPolicy from '../../orders/domain/booking-calendar.policy';
 
 function context() {
   const provider = {
@@ -10,6 +11,7 @@ function context() {
     biography: 'Hair stylist',
     experienceYears: 5,
     serviceAreaName: 'Quận 1',
+    _count: { orders: 0 },
     serviceAreaLatitude: 10.7731,
     serviceAreaLongitude: 106.703,
     serviceRadiusKm: 10,
@@ -36,6 +38,12 @@ function context() {
     ],
   };
   const prisma = {
+    orderReview: {
+      aggregate: jest
+        .fn()
+        .mockResolvedValue({ _count: { id: 0 }, _avg: { rating: null } }),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     customerAddress: {
       findFirst: jest.fn().mockResolvedValue({
         latitude: 10.7731,
@@ -70,6 +78,9 @@ function context() {
               Math.max(50_000, commission),
         ),
       } as never,
+      {
+        search: jest.fn().mockResolvedValue({ data: [], searchLimited: false }),
+      } as never,
     ),
     prisma,
     locations,
@@ -91,9 +102,31 @@ describe('ProviderDiscoveryService', () => {
     expect(response.data[0]).toMatchObject({
       id: 'provider-id',
       distanceKm: 1.3,
+      estimatedTravelDistanceKm: 1.9,
+      estimatedTravelFeeAmount: 0,
     });
     expect(response.data[0]).not.toHaveProperty('serviceAreaLatitude');
     expect(response.data[0]).not.toHaveProperty('serviceAreaLongitude');
+  });
+
+  it('excludes providers whose order is on safety hold', async () => {
+    const { service, prisma } = context();
+    await service.search('user-id', query);
+    const lookup = (
+      prisma.providerProfile.findMany.mock.calls as unknown[][]
+    )[0]?.[0];
+    expect(lookup).toMatchObject({
+      where: { orders: { none: { status: 'SAFETY_HOLD' } } },
+    });
+  });
+
+  it('does not advertise a safety-held provider as online on the public profile', async () => {
+    const { service, provider, locations } = context();
+    provider._count.orders = 1;
+    const response = await service.findPublicProfile(provider.id);
+    expect(response.data.online).toBe(false);
+    expect(response.data).not.toHaveProperty('_count');
+    expect(locations.isOnline).not.toHaveBeenCalled();
   });
 
   it('filters online providers outside their configured receiving radius', async () => {
@@ -127,5 +160,30 @@ describe('ProviderDiscoveryService', () => {
     await expect(
       service.search('user-id', { serviceId: query.serviceId }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('calculates suggested slots only for providers returned in the page', async () => {
+    const { service, prisma, locations, provider } = context();
+    const providers = Array.from({ length: 4 }, (_, index) => ({
+      ...provider,
+      id: `provider-${index}`,
+      workingHours: [],
+    }));
+    prisma.providerProfile.findMany.mockResolvedValue(providers);
+    locations.findNearby.mockResolvedValue(
+      providers.map((item, index) => ({
+        providerId: item.id,
+        distanceKm: index + 1,
+      })),
+    );
+    const suggestions = jest.spyOn(bookingCalendarPolicy, 'suggestSlots');
+    try {
+      const response = await service.search('user-id', { ...query, limit: 1 });
+      expect(response.data).toHaveLength(1);
+      expect(response.data[0].id).toBe('provider-0');
+      expect(suggestions).toHaveBeenCalledTimes(1);
+    } finally {
+      suggestions.mockRestore();
+    }
   });
 });

@@ -1,35 +1,13 @@
-services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: lambe-postgres
-    restart: always
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_password
-      POSTGRES_DB: lambe_db
-    ports:
-      - '5433:5432'
-    volumes:
-      - lambe_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres -d lambe_db']
-      interval: 5s
-      timeout: 3s
-      retries: 10
+name: lambe
 
-  redis:
-    image: redis:7-alpine
-    container_name: lambe-redis
-    restart: always
-    ports:
-      - '6379:6379'
+services:
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:v5.27.1
+    profiles: ['routing']
+    command: ['osrm-routed', '--algorithm', 'mld', '/data/vietnam-latest.osrm']
     volumes:
-      - lambe_redis_data:/data
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      - ./routing-data:/data:ro
+    restart: unless-stopped
 
   migrate:
     build:
@@ -39,9 +17,6 @@ services:
     env_file:
       - .env
     command: ['npx', 'prisma', 'migrate', 'deploy']
-    depends_on:
-      postgres:
-        condition: service_healthy
     restart: 'no'
 
   lambe_server:
@@ -49,11 +24,18 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: lambe_server
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
     restart: always
     env_file:
       - .env
+    environment:
+      OSRM_URL: http://osrm:5000
     ports:
-      - '5000:5000'
+      - '${LAMBE_API_HOST_PORT:-5000}:5000'
     command: ['node', 'dist/src/main']
     volumes:
       - ./secrets/firebase-service-account.json:/run/secrets/firebase-service-account.json:ro
@@ -63,20 +45,28 @@ services:
           'CMD',
           'node',
           '-e',
-          "fetch('http://localhost:5000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          "fetch('http://localhost:5000/api/health').then(async r=>{const b=await r.json();if(!r.ok||b.data?.status!=='ok')process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 10s
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
 
-volumes:
-  lambe_postgres_data:
-  lambe_redis_data:
+  ops_monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+    restart: always
+    env_file:
+      - .env
+    environment:
+      MONITOR_HEALTH_URL: http://lambe_server:5000/api/health
+    command: ['node', 'scripts/monitor-health.mjs']

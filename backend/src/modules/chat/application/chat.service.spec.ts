@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { ChatMessageKind } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/persistence/postgres/prisma.service';
+import { RedisCacheService } from '../../../infrastructure/cache/redis-cache.service';
+import { PushOutboxService } from '../../push/application/push-outbox.service';
 import { ChatService } from './chat.service';
+import { OrderChatService } from './order-chat.service';
 
 describe('ChatService access and idempotency', () => {
   const customerId = 'customer';
@@ -31,7 +34,11 @@ describe('ChatService access and idempotency', () => {
     const tx = {
       chatConversation: {
         findFirst: jest.fn().mockResolvedValue(conversation),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({ lastSequence: 1 }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          lastSequence: 1,
+          customerId,
+          provider: { userId: providerUserId },
+        }),
         update: jest.fn(),
       },
       providerProfile: {
@@ -62,8 +69,17 @@ describe('ChatService access and idempotency', () => {
           (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
         ),
     };
+    const push = { enqueue: jest.fn().mockResolvedValue(undefined) };
     return {
-      service: new ChatService(db as unknown as PrismaService),
+      service: new ChatService(
+        db as unknown as PrismaService,
+        {
+          publishChatUpdate: jest.fn().mockResolvedValue(undefined),
+        } as unknown as RedisCacheService,
+        push as unknown as PushOutboxService,
+        {} as OrderChatService,
+      ),
+      push,
       tx,
       conversation,
     };
@@ -102,8 +118,16 @@ describe('ChatService access and idempotency', () => {
   });
 
   it('returns the same message for an identical retry', async () => {
-    const { service, tx } = setup();
+    const { service, tx, push } = setup();
     const first = await service.send(customerId, conversationId, dto);
+    expect(push.enqueue).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        userId: providerUserId,
+        entityType: 'CHAT',
+        entityId: conversationId,
+      }),
+    );
     const calls = tx.chatMessage.create.mock.calls as unknown as Array<
       [{ data: { requestHash: string } }]
     >;
@@ -123,6 +147,8 @@ describe('ChatService access and idempotency', () => {
     const again = await service.send(customerId, conversationId, dto);
     expect(first.message.id).toBe(again.message.id);
     expect(tx.chatMessage.create).toHaveBeenCalledTimes(1);
+    expect(tx.chatConversation.update).toHaveBeenCalledTimes(1);
+    expect(push.enqueue).toHaveBeenCalledTimes(1);
   });
 
   it('rejects reusing a message ID with different content', async () => {

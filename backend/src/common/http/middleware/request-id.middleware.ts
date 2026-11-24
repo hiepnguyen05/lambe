@@ -1,21 +1,22 @@
-import { randomUUID } from 'crypto';
 import type { NextFunction, Response } from 'express';
+import { boundedRequestId, runWithRequestId } from '../request-context';
 import type { RequestWithId } from '../types/request-with-id.type';
-
-const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 
 export function requestIdMiddleware(
   request: RequestWithId,
   response: Response,
   next: NextFunction,
 ): void {
-  const incomingRequestId = request.get('x-request-id');
-  const requestId =
-    incomingRequestId && REQUEST_ID_PATTERN.test(incomingRequestId)
-      ? incomingRequestId
-      : randomUUID();
+  const requestId = boundedRequestId(request.get('x-request-id'));
 
   request.requestId = requestId;
   response.setHeader('x-request-id', requestId);
-  next();
+  // Only public Feed reads may degrade to a conservative per-replica limiter.
+  // Writes and management/auth/payment endpoints retain shared fail-closed protection.
+  const publicFeedRead =
+    request.method === 'GET' &&
+    /^\/api\/(?:feed\/posts(?:\/[a-f0-9-]{36}(?:\/comments(?:\/[a-f0-9-]{36}\/replies)?)?)?|me\/feed\/posts(?:\/[a-f0-9-]{36})?)\/?$/i.test(
+      request.path,
+    );
+  runWithRequestId(requestId, next, publicFeedRead);
 }

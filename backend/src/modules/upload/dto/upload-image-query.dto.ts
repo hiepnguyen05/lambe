@@ -4,6 +4,8 @@ import { IsEnum, IsOptional } from 'class-validator';
 export enum UploadFolder {
   GENERAL = 'general',
   CATEGORIES = 'categories',
+  SERVICES = 'services',
+  ICONS = 'icons',
   PROFILES = 'profiles',
   PORTFOLIOS = 'portfolios',
 }
