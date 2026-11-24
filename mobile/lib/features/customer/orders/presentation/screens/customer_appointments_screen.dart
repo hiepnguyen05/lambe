@@ -99,7 +99,7 @@ class _CustomerAppointmentsScreenState
           const SizedBox(width: 8),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(114),
+          preferredSize: const Size.fromHeight(108),
           child: Column(
             children: [
               // Thanh tìm kiếm
@@ -178,12 +178,11 @@ class _CustomerAppointmentsScreenState
                 ),
               ),
 
-              // 5 Tabs phân loại Capsule / Pill
+              // 5 Tabs phân loại với gạch chân hiện đại (Underline Indicator)
               ordersAsync.maybeWhen(
                 data: (allOrders) => _buildTabBar(allOrders),
                 orElse: () => _buildTabBar(const []),
               ),
-              const SizedBox(height: 4),
             ],
           ),
         ),
@@ -316,40 +315,40 @@ class _CustomerAppointmentsScreenState
       isScrollable: true,
       tabAlignment: TabAlignment.start,
       controller: _tabController,
-      dividerColor: Colors.transparent,
+      dividerColor: const Color(0xFFE2E8F0),
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      indicator: BoxDecoration(
-        color: const Color(0xFF0F766E),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0F766E).withValues(alpha: 0.25),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+      indicator: const UnderlineTabIndicator(
+        borderSide: BorderSide(
+          color: Color(0xFF0F766E),
+          width: 3.0,
+        ),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(3),
+          topRight: Radius.circular(3),
+        ),
+        insets: EdgeInsets.symmetric(horizontal: 2),
       ),
-      indicatorSize: TabBarIndicatorSize.tab,
-      labelColor: Colors.white,
+      indicatorSize: TabBarIndicatorSize.label,
+      labelColor: const Color(0xFF0F766E),
       unselectedLabelColor: const Color(0xFF64748B),
       labelStyle: const TextStyle(
-        fontSize: 13,
+        fontSize: 13.5,
         fontWeight: FontWeight.bold,
       ),
       unselectedLabelStyle: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
+        fontSize: 13.5,
+        fontWeight: FontWeight.w500,
       ),
       tabs: [
-        _buildPillTab('Tất cả', allOrders.length),
-        _buildPillTab(
+        _buildTab('Tất cả', allOrders.length),
+        _buildTab(
           'Đang diễn ra',
           activeCount,
           isHighlight: activeCount > 0,
         ),
-        _buildPillTab('Hoàn tất', completedCount),
-        _buildPillTab('Đã hủy', cancelledCount),
-        _buildPillTab(
+        _buildTab('Hoàn tất', completedCount),
+        _buildTab('Đã hủy', cancelledCount),
+        _buildTab(
           'Cần hỗ trợ',
           supportCount,
           isAlert: supportCount > 0,
@@ -358,7 +357,7 @@ class _CustomerAppointmentsScreenState
     );
   }
 
-  Widget _buildPillTab(
+  Widget _buildTab(
     String label,
     int count, {
     bool isHighlight = false,
@@ -366,7 +365,7 @@ class _CustomerAppointmentsScreenState
   }) {
     return Tab(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -380,19 +379,19 @@ class _CustomerAppointmentsScreenState
                       ? const Color(0xFFFEE2E2)
                       : (isHighlight
                           ? const Color(0xFFCCFBF1)
-                          : const Color(0xFFE2E8F0)),
+                          : const Color(0xFFF1F5F9)),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   '$count',
                   style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 11,
                     fontWeight: FontWeight.bold,
                     color: isAlert
                         ? const Color(0xFFDC2626)
                         : (isHighlight
                             ? const Color(0xFF0F766E)
-                            : const Color(0xFF475569)),
+                            : const Color(0xFF64748B)),
                   ),
                 ),
               ),
