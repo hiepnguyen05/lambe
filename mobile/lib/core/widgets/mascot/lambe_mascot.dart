@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'controllers/mascot_animation_controller.dart';
-import 'math/mascot_sparkle_particle.dart';
-import 'painters/mascot_3d_painter.dart';
+import 'package:mobile/core/widgets/mascot/controllers/mascot_animation_controller.dart';
+import 'package:mobile/core/widgets/mascot/math/mascot_sparkle_particle.dart';
+import 'package:mobile/core/widgets/mascot/painters/mascot_3d_painter.dart';
 
 /// Widget Linh vật Chatbot AI 3D của Lambe Beauty Assistant
 ///
@@ -81,8 +81,14 @@ class _LambeMascotState extends State<LambeMascot>
   void _handlePointerUpdate(Offset localPosition) {
     if (!widget.enableInteraction) return;
     // Chuẩn hoá toạ độ từ [0, size] sang [-1.0, 1.0]
-    final normX = ((localPosition.dx / widget.size) * 2.0 - 1.0).clamp(-1.0, 1.0);
-    final normY = ((localPosition.dy / widget.size) * 2.0 - 1.0).clamp(-1.0, 1.0);
+    final normX = ((localPosition.dx / widget.size) * 2.0 - 1.0).clamp(
+      -1.0,
+      1.0,
+    );
+    final normY = ((localPosition.dy / widget.size) * 2.0 - 1.0).clamp(
+      -1.0,
+      1.0,
+    );
     _controller.updatePointer(normX, normY);
   }
 
@@ -118,18 +124,27 @@ class _LambeMascotState extends State<LambeMascot>
 
     if (widget.enableInteraction || widget.onTap != null) {
       content = GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () {
           _controller.triggerNextAction();
           widget.onTap?.call();
         },
-        onPanUpdate: (details) => _handlePointerUpdate(details.localPosition),
-        onPanEnd: (_) => _handlePointerReset(),
-        onPanCancel: _handlePointerReset,
-        child: MouseRegion(
-          onHover: (event) => _handlePointerUpdate(event.localPosition),
-          onExit: (_) => _handlePointerReset(),
-          child: content,
-        ),
+        onPanUpdate: widget.enableInteraction
+            ? (details) => _handlePointerUpdate(details.localPosition)
+            : null,
+        onPanEnd: widget.enableInteraction
+            ? (_) => _handlePointerReset()
+            : null,
+        onPanCancel: widget.enableInteraction
+            ? _handlePointerReset
+            : null,
+        child: widget.enableInteraction
+            ? MouseRegion(
+                onHover: (event) => _handlePointerUpdate(event.localPosition),
+                onExit: (_) => _handlePointerReset(),
+                child: content,
+              )
+            : content,
       );
     }
 

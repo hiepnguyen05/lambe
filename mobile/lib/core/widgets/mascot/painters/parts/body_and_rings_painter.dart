@@ -1,6 +1,7 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
-import '../../math/vector3d.dart';
+import 'package:mobile/core/widgets/mascot/math/vector3d.dart';
 
 /// Họa sĩ vẽ thân robot tròn trịa trắng sứ và vòng thắt lưng vàng kim phát sáng
 /// Tuyệt đối chuẩn theo mẫu: KHÔNG có vòng cổ màu xanh, thân nối tự nhiên, vòng eo vàng rực rỡ!
@@ -30,24 +31,27 @@ class BodyAndRingsPainter {
       projected.offset.dy - 0.20 * radiusY,
     );
 
-    _torsoPaint.shader = RadialGradient(
-      center: Alignment(
-        (lightOffset.dx - projected.offset.dx) / radiusX,
-        (lightOffset.dy - projected.offset.dy) / radiusY,
-      ),
-      radius: 1.15,
-      colors: const [
-        Color(0xFFFFFFFF), // Đỉnh sáng trắng tinh
-        Color(0xFFFFFFFF), // Thân trắng sứ
-        Color(0xFFF1F5F9), // Chuyển màu nhẹ
-        Color(0xFFCBD5E1), // Vùng đổ bóng mềm
-      ],
-      stops: const [0.0, 0.45, 0.8, 1.0],
-    ).createShader(Rect.fromCenter(
-      center: projected.offset,
-      width: radiusX * 2,
-      height: radiusY * 2,
-    ));
+    _torsoPaint.shader =
+        RadialGradient(
+          center: Alignment(
+            (lightOffset.dx - projected.offset.dx) / radiusX,
+            (lightOffset.dy - projected.offset.dy) / radiusY,
+          ),
+          radius: 1.15,
+          colors: const [
+            Color(0xFFFFFFFF), // Đỉnh sáng trắng tinh
+            Color(0xFFFFFFFF), // Thân trắng sứ
+            Color(0xFFF1F5F9), // Chuyển màu nhẹ
+            Color(0xFFCBD5E1), // Vùng đổ bóng mềm
+          ],
+          stops: const [0.0, 0.45, 0.8, 1.0],
+        ).createShader(
+          Rect.fromCenter(
+            center: projected.offset,
+            width: radiusX * 2,
+            height: radiusY * 2,
+          ),
+        );
 
     canvas.drawOval(
       Rect.fromCenter(
@@ -92,19 +96,22 @@ class BodyAndRingsPainter {
     final rX = 0.45 * scale * projected.scale;
     final rY = (0.10 + math.sin(rotX).abs() * 0.12) * scale * projected.scale;
 
-    _waistPaint.shader = const LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [
-        Color(0xFFFFF59D), // Vàng kim sáng rực
-        Color(0xFFFFD600), // Vàng neon chính xác
-        Color(0xFFFFAB00), // Vàng cam ấm
-      ],
-    ).createShader(Rect.fromCenter(
-      center: projected.offset,
-      width: rX * 2,
-      height: rY * 2,
-    ));
+    _waistPaint.shader =
+        const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFFFF59D), // Vàng kim sáng rực
+            Color(0xFFFFD600), // Vàng neon chính xác
+            Color(0xFFFFAB00), // Vàng cam ấm
+          ],
+        ).createShader(
+          Rect.fromCenter(
+            center: projected.offset,
+            width: rX * 2,
+            height: rY * 2,
+          ),
+        );
     _waistPaint.style = PaintingStyle.stroke;
     _waistPaint.strokeWidth = 5.0 * (scale / 70.0);
     _waistPaint.strokeCap = StrokeCap.round;
@@ -113,11 +120,7 @@ class BodyAndRingsPainter {
     final startAngle = isFront ? 0.0 : math.pi;
 
     canvas.drawArc(
-      Rect.fromCenter(
-        center: projected.offset,
-        width: rX * 2,
-        height: rY * 2,
-      ),
+      Rect.fromCenter(center: projected.offset, width: rX * 2, height: rY * 2),
       startAngle,
       sweepAngle,
       false,

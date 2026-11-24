@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// Lớp biểu diễn điểm Vector trong không gian 3D và các phép biến đổi hình học
@@ -13,33 +14,21 @@ class Vector3D {
   Vector3D rotateX(double angle) {
     final cosA = math.cos(angle);
     final sinA = math.sin(angle);
-    return Vector3D(
-      x,
-      y * cosA - z * sinA,
-      y * sinA + z * cosA,
-    );
+    return Vector3D(x, y * cosA - z * sinA, y * sinA + z * cosA);
   }
 
   /// Quay quanh trục Y (Yaw)
   Vector3D rotateY(double angle) {
     final cosA = math.cos(angle);
     final sinA = math.sin(angle);
-    return Vector3D(
-      x * cosA + z * sinA,
-      y,
-      -x * sinA + z * cosA,
-    );
+    return Vector3D(x * cosA + z * sinA, y, -x * sinA + z * cosA);
   }
 
   /// Quay quanh trục Z (Roll)
   Vector3D rotateZ(double angle) {
     final cosA = math.cos(angle);
     final sinA = math.sin(angle);
-    return Vector3D(
-      x * cosA - y * sinA,
-      x * sinA + y * cosA,
-      z,
-    );
+    return Vector3D(x * cosA - y * sinA, x * sinA + y * cosA, z);
   }
 
   /// Phép quay phối hợp theo thứ tự X, Y, Z

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../math/vector3d.dart';
+import 'package:mobile/core/widgets/mascot/math/vector3d.dart';
 
 /// Họa sĩ vẽ:
 /// 1. Tai nghe vàng neon hai bên mũ bảo hiểm (dạng capsule/trụ tròn bo góc đúng như hình mẫu)
@@ -17,25 +17,28 @@ class WingsAndEarsPainter {
     required double rotY,
     required double rotZ,
   }) {
-    // Vị trí tai nghe: bám sát rìa mũ bảo hiểm (±0.60, 0.42, 0)
-    final leftEarVec = const Vector3D(-0.60, 0.42, 0).rotate(rotX, rotY, rotZ);
-    final rightEarVec = const Vector3D(0.60, 0.42, 0).rotate(rotX, rotY, rotZ);
+    // Vị trí tai nghe: bám sát rìa mũ bảo hiểm lớn hơn (±0.70, 0.42, 0)
+    final leftEarVec = const Vector3D(-0.70, 0.42, 0).rotate(rotX, rotY, rotZ);
+    final rightEarVec = const Vector3D(0.70, 0.42, 0).rotate(rotX, rotY, rotZ);
 
     final pLeft = leftEarVec.project(center: center, scale: scale);
     final pRight = rightEarVec.project(center: center, scale: scale);
 
-    final earW = 0.09 * scale * pLeft.scale;
-    final earH = 0.20 * scale * pLeft.scale;
+    final earW = 0.10 * scale * pLeft.scale;
+    final earH = 0.22 * scale * pLeft.scale;
 
-    _earPaint.shader = const LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        Color(0xFFFFF59D), // Đỉnh vàng sáng
-        Color(0xFFFFD600), // Vàng neon rực rỡ
-        Color(0xFFFFAB00), // Vùng bóng vàng cam
-      ],
-    ).createShader(Rect.fromCenter(center: pLeft.offset, width: earW, height: earH));
+    _earPaint.shader =
+        const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFFFFF59D), // Đỉnh vàng sáng
+            Color(0xFFFFD600), // Vàng neon rực rỡ
+            Color(0xFFFFAB00), // Vùng bóng vàng cam
+          ],
+        ).createShader(
+          Rect.fromCenter(center: pLeft.offset, width: earW, height: earH),
+        );
 
     // Tai trái: Capsule bo tròn
     canvas.drawRRect(
@@ -47,15 +50,14 @@ class WingsAndEarsPainter {
     );
 
     // Tai phải: Capsule bo tròn
-    _earPaint.shader = const LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        Color(0xFFFFF59D),
-        Color(0xFFFFD600),
-        Color(0xFFFFAB00),
-      ],
-    ).createShader(Rect.fromCenter(center: pRight.offset, width: earW, height: earH));
+    _earPaint.shader =
+        const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFFFF59D), Color(0xFFFFD600), Color(0xFFFFAB00)],
+        ).createShader(
+          Rect.fromCenter(center: pRight.offset, width: earW, height: earH),
+        );
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
@@ -79,27 +81,35 @@ class WingsAndEarsPainter {
     double rightHandRaiseY = 0.0,
     double rightHandWaveAngle = 0.0,
   }) {
-    // Tay trái: (-0.56, -0.28, 0.12)
-    final leftPos = const Vector3D(-0.56, -0.28, 0.12).rotate(rotX, rotY, rotZ);
-    // Tay phải: khi vẫy tay nâng cao lên (0.56, -0.28 + rightHandRaiseY, 0.12)
-    final rightPos = Vector3D(0.56, -0.28 + rightHandRaiseY, 0.12).rotate(rotX, rotY, rotZ);
+    // Tay trái: (-0.59, -0.26, 0.14)
+    final leftPos = const Vector3D(-0.59, -0.26, 0.14).rotate(rotX, rotY, rotZ);
+    // Tay phải: khi vẫy tay nâng cao lên (0.59, -0.26 + rightHandRaiseY, 0.14)
+    final rightPos = Vector3D(
+      0.59,
+      -0.26 + rightHandRaiseY,
+      0.14,
+    ).rotate(rotX, rotY, rotZ);
 
     final pLeft = leftPos.project(center: center, scale: scale);
     final pRight = rightPos.project(center: center, scale: scale);
 
-    final handW = 0.16 * scale * pLeft.scale;
-    final handH = 0.24 * scale * pLeft.scale;
+    // Đôi bàn tay to tròn múp míp hơn
+    final handW = 0.21 * scale * pLeft.scale;
+    final handH = 0.30 * scale * pLeft.scale;
 
-    _handPaint.shader = RadialGradient(
-      center: const Alignment(-0.2, -0.3),
-      colors: const [
-        Color(0xFFFFFFFF),
-        Color(0xFFFFFFFF),
-        Color(0xFFF1F5F9),
-        Color(0xFFCBD5E1),
-      ],
-      stops: const [0.0, 0.5, 0.85, 1.0],
-    ).createShader(Rect.fromCenter(center: pLeft.offset, width: handW, height: handH));
+    _handPaint.shader =
+        RadialGradient(
+          center: const Alignment(-0.2, -0.3),
+          colors: const [
+            Color(0xFFFFFFFF),
+            Color(0xFFFFFFFF),
+            Color(0xFFF1F5F9),
+            Color(0xFFCBD5E1),
+          ],
+          stops: const [0.0, 0.5, 0.85, 1.0],
+        ).createShader(
+          Rect.fromCenter(center: pLeft.offset, width: handW, height: handH),
+        );
 
     // Tay trái (nghiêng chếch ra ngoài và hướng lên một chút)
     canvas.save();
@@ -112,16 +122,19 @@ class WingsAndEarsPainter {
     canvas.restore();
 
     // Tay phải: khi vẫy tay thêm góc lắc rightHandWaveAngle
-    _handPaint.shader = RadialGradient(
-      center: const Alignment(0.2, -0.3),
-      colors: const [
-        Color(0xFFFFFFFF),
-        Color(0xFFFFFFFF),
-        Color(0xFFF1F5F9),
-        Color(0xFFCBD5E1),
-      ],
-      stops: const [0.0, 0.5, 0.85, 1.0],
-    ).createShader(Rect.fromCenter(center: pRight.offset, width: handW, height: handH));
+    _handPaint.shader =
+        RadialGradient(
+          center: const Alignment(0.2, -0.3),
+          colors: const [
+            Color(0xFFFFFFFF),
+            Color(0xFFFFFFFF),
+            Color(0xFFF1F5F9),
+            Color(0xFFCBD5E1),
+          ],
+          stops: const [0.0, 0.5, 0.85, 1.0],
+        ).createShader(
+          Rect.fromCenter(center: pRight.offset, width: handW, height: handH),
+        );
 
     canvas.save();
     canvas.translate(pRight.offset.dx, pRight.offset.dy);

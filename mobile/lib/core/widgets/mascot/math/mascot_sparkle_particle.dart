@@ -1,5 +1,6 @@
 import 'dart:math' as math;
-import 'vector3d.dart';
+
+import 'package:mobile/core/widgets/mascot/math/vector3d.dart';
 
 /// Hạt sao lấp lánh quay theo quỹ đạo 3D xung quanh linh vật
 class MascotSparkleParticle {

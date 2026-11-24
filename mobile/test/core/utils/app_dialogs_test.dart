@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mobile/core/utils/app_dialogs.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 
 void main() {
   testWidgets('confirm dialog returns the selected result', (tester) async {
@@ -11,7 +11,7 @@ void main() {
         home: Builder(
           builder: (context) => TextButton(
             onPressed: () async {
-              result = await AppDialogs.showConfirmDialog(
+              result = await AppDialog.showConfirmDialog(
                 context,
                 title: 'Xác nhận',
                 message: 'Tiếp tục?',
@@ -38,7 +38,7 @@ void main() {
       MaterialApp(
         home: Builder(
           builder: (context) => TextButton(
-            onPressed: () => AppDialogs.showMessageDialog(
+            onPressed: () => AppDialog.showMessageDialog(
               context,
               title: 'Thành công',
               message: 'Đã lưu dữ liệu.',

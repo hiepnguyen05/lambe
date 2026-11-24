@@ -1,12 +1,13 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
-import '../controllers/mascot_animation_controller.dart';
-import '../math/mascot_sparkle_particle.dart';
-import '../math/vector3d.dart';
-import 'parts/antenna_painter.dart';
-import 'parts/body_and_rings_painter.dart';
-import 'parts/head_and_face_painter.dart';
-import 'parts/wings_and_ears_painter.dart';
+import 'package:mobile/core/widgets/mascot/controllers/mascot_animation_controller.dart';
+import 'package:mobile/core/widgets/mascot/math/mascot_sparkle_particle.dart';
+import 'package:mobile/core/widgets/mascot/math/vector3d.dart';
+import 'package:mobile/core/widgets/mascot/painters/parts/antenna_painter.dart';
+import 'package:mobile/core/widgets/mascot/painters/parts/body_and_rings_painter.dart';
+import 'package:mobile/core/widgets/mascot/painters/parts/head_and_face_painter.dart';
+import 'package:mobile/core/widgets/mascot/painters/parts/wings_and_ears_painter.dart';
 
 /// Họa sĩ trưởng điều phối toàn bộ mô hình 3D linh vật và sắp xếp chiều sâu Z-Order
 /// Chuẩn xác 100% theo mẫu thiết kế hình ảnh người dùng cung cấp
@@ -36,9 +37,9 @@ class Mascot3DPainter extends CustomPainter {
     );
     final botCenter = center + flightOffset;
 
-    // Góc xoay tổng hợp: X (Pitch), Y (Yaw + 360° Spin), Z (Roll do bay nghiêng)
+    // Góc xoay tổng hợp: X (Pitch), Y (Yaw), Z (Roll do bay nghiêng)
     final totalRotX = controller.rotX;
-    final totalRotY = controller.rotY + controller.spinRotY;
+    final totalRotY = controller.rotY;
     final totalRotZ = controller.flightBank;
 
     // 1. Vẽ bóng đổ bồng bềnh dưới sàn (nếu bật)
@@ -47,21 +48,21 @@ class Mascot3DPainter extends CustomPainter {
     }
 
     // 2. Phân loại hạt sao vàng lấp lánh (Sparkles)
-    final projectedSparkles = <_SparkleRenderData>[];
+    final backSparkles = <_SparkleRenderData>[];
+    final frontSparkles = <_SparkleRenderData>[];
     if (showSparkles) {
+      final t = controller.elapsedTime;
       for (final s in sparkles) {
-        final pos3d = s.getPosition(controller.elapsedTime);
+        final pos3d = s.getPosition(t);
         final projected = pos3d.project(center: botCenter, scale: baseScale);
-        projectedSparkles.add(_SparkleRenderData(
-          point: projected,
-          particle: s,
-        ));
+        final data = _SparkleRenderData(point: projected, particle: s);
+        if (projected.depth < 0) {
+          backSparkles.add(data);
+        } else {
+          frontSparkles.add(data);
+        }
       }
-    }
-
-    // Vẽ sao ở tầng sâu phía sau (Z < 0)
-    if (showSparkles) {
-      for (final sp in projectedSparkles.where((d) => d.point.depth < 0)) {
+      for (final sp in backSparkles) {
         _drawSingleSparkle(canvas, sp);
       }
     }
@@ -167,7 +168,7 @@ class Mascot3DPainter extends CustomPainter {
 
     // 12. Vẽ các hạt sao vàng ở tầng nổi phía trước (Z >= 0)
     if (showSparkles) {
-      for (final sp in projectedSparkles.where((d) => d.point.depth >= 0)) {
+      for (final sp in frontSparkles) {
         _drawSingleSparkle(canvas, sp);
       }
     }
@@ -194,15 +195,16 @@ class Mascot3DPainter extends CustomPainter {
     );
   }
 
+  static final _sparklePaint = Paint()..style = PaintingStyle.fill;
+  static final _centerCorePaint = Paint()..style = PaintingStyle.fill;
+
   /// Vẽ hạt sao vàng kim lấp lánh như trên nền trời vũ trụ
   void _drawSingleSparkle(Canvas canvas, _SparkleRenderData sp) {
     final offset = sp.point.offset;
     final sz = sp.particle.size * sp.point.scale;
     final opacity = ((sp.point.depth + 1.2) / 2.4).clamp(0.35, 1.0);
 
-    final sparklePaint = Paint()
-      ..color = const Color(0xFFFFE066).withValues(alpha: opacity)
-      ..style = PaintingStyle.fill;
+    _sparklePaint.color = const Color(0xFFFFE066).withValues(alpha: opacity);
 
     // Hạt sao 4 cánh nhọn
     final path = Path()
@@ -212,7 +214,7 @@ class Mascot3DPainter extends CustomPainter {
       ..lineTo(offset.dx - sz * 0.32, offset.dy)
       ..close();
 
-    canvas.drawPath(path, sparklePaint);
+    canvas.drawPath(path, _sparklePaint);
 
     final pathH = Path()
       ..moveTo(offset.dx - sz, offset.dy)
@@ -221,12 +223,11 @@ class Mascot3DPainter extends CustomPainter {
       ..lineTo(offset.dx, offset.dy - sz * 0.32)
       ..close();
 
-    canvas.drawPath(pathH, sparklePaint);
+    canvas.drawPath(pathH, _sparklePaint);
 
     // Lõi sáng trắng ở tâm
-    final centerCore = Paint()
-      ..color = Colors.white.withValues(alpha: opacity);
-    canvas.drawCircle(offset, sz * 0.30, centerCore);
+    _centerCorePaint.color = Colors.white.withValues(alpha: opacity);
+    canvas.drawCircle(offset, sz * 0.30, _centerCorePaint);
   }
 
   @override
@@ -237,8 +238,5 @@ class _SparkleRenderData {
   final ProjectedPoint point;
   final MascotSparkleParticle particle;
 
-  _SparkleRenderData({
-    required this.point,
-    required this.particle,
-  });
+  _SparkleRenderData({required this.point, required this.particle});
 }

@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 
-import '../error/app_failure.dart';
+import 'package:mobile/core/error/app_failure.dart';
 
 class ExceptionHandler {
   static AppFailure handleDioError(DioException error) {

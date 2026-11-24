@@ -52,9 +52,18 @@
 		<key>NSCameraUsageDescription</key>
 		<string>Lambe cần dùng camera để bạn chụp ảnh đại diện.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>Lambe cần truy cập thư viện ảnh để bạn chọn ảnh đại diện.</string>
+		<string>Lambe cần truy cập thư viện để bạn chọn ảnh đại diện, ảnh và video tác phẩm làm đẹp.</string>
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>Lambe cần quyền lưu mã QR thanh toán vào thư viện ảnh.</string>
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>Lambe cần vị trí của bạn để xác định và điền địa chỉ nhận dịch vụ.</string>
+		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+		<string>Lambe cần vị trí liên tục để khách hàng theo dõi hành trình chuyên viên.</string>
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>location</string>
+			<string>remote-notification</string>
+		</array>
 		<key>UILaunchStoryboardName</key>
 		<string>LaunchScreen</string>
 		<key>UIMainStoryboardFile</key>
@@ -92,6 +101,7 @@
 			<dict>
 				<key>CFBundleURLSchemes</key>
 				<array>
+					<string>lambe</string>
 					<string>fb2576686669461082</string>
 					<string>com.googleusercontent.apps.430572073413-3tp1dku6ji1389o8kkmvf03i9ah7r4jl</string>
 				</array>

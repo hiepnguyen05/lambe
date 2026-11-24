@@ -17,15 +17,30 @@ class VietnameseSearchUtils {
     'Y': 'ÝỲỶỸỴ',
   };
 
-  /// Bỏ toàn bộ dấu tiếng Việt
-  static String removeDiacritics(String str) {
-    var result = str;
+  static final Map<int, String> _diacriticLookup = () {
+    final map = <int, String>{};
     _vietnameseChars.forEach((plain, diacritics) {
       for (var i = 0; i < diacritics.length; i++) {
-        result = result.replaceAll(diacritics[i], plain);
+        map[diacritics.codeUnitAt(i)] = plain;
       }
     });
-    return result;
+    return map;
+  }();
+
+  /// Bỏ toàn bộ dấu tiếng Việt bằng một lượt duyệt duy nhất O(N)
+  static String removeDiacritics(String str) {
+    if (str.isEmpty) return str;
+    final buffer = StringBuffer();
+    for (var i = 0; i < str.length; i++) {
+      final code = str.codeUnitAt(i);
+      final replaced = _diacriticLookup[code];
+      if (replaced != null) {
+        buffer.write(replaced);
+      } else {
+        buffer.writeCharCode(code);
+      }
+    }
+    return buffer.toString();
   }
 
   /// Kiểm tra chuỗi [source] có khớp với từ khóa tìm kiếm [query] không
@@ -44,8 +59,9 @@ class VietnameseSearchUtils {
     if (source.toLowerCase().contains(cleanQuery.toLowerCase())) return true;
 
     // 3. Khớp từng từ (ví dụ gõ "cat nam" thì tìm được "Cắt tóc nam cơ bản")
-    final queryWords =
-        normalizedQuery.split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    final queryWords = normalizedQuery
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty);
     if (queryWords.length > 1) {
       return queryWords.every((word) => normalizedSource.contains(word));
     }

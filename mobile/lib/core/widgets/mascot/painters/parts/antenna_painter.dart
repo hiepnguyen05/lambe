@@ -1,6 +1,7 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
-import '../../math/vector3d.dart';
+import 'package:mobile/core/widgets/mascot/math/vector3d.dart';
 
 /// Họa sĩ vẽ ăng-ten đỉnh đầu:
 /// - Chiếc loa/sừng vàng neon (#FFD600) nghiêng nhẹ sang phải
@@ -20,12 +21,12 @@ class AntennaPainter {
     required double leafRotZ,
     required double gemRotY,
   }) {
-    // Điểm gốc trên đỉnh mũ bảo hiểm: (0, 0.94, 0)
-    final rootPos = const Vector3D(0, 0.94, 0).rotate(rotX, rotY, rotZ);
-    // Đỉnh sừng loa vát sang phải: (0.04, 1.18, 0)
-    final hornPos = const Vector3D(0.04, 1.18, 0).rotate(rotX, rotY, rotZ);
-    // Vị trí viên ngọc xanh cạnh trái: (-0.06, 1.12, 0.02)
-    final gemPos = const Vector3D(-0.06, 1.12, 0.02).rotate(rotX, rotY, rotZ);
+    // Điểm gốc trên đỉnh mũ bảo hiểm lớn hơn: (0, 1.04, 0)
+    final rootPos = const Vector3D(0, 1.04, 0).rotate(rotX, rotY, rotZ);
+    // Đỉnh sừng loa vát sang phải: (0.04, 1.28, 0)
+    final hornPos = const Vector3D(0.04, 1.28, 0).rotate(rotX, rotY, rotZ);
+    // Vị trí viên ngọc xanh cạnh trái: (-0.06, 1.22, 0.02)
+    final gemPos = const Vector3D(-0.06, 1.22, 0.02).rotate(rotX, rotY, rotZ);
 
     final pRoot = rootPos.project(center: center, scale: scale);
     final pHorn = hornPos.project(center: center, scale: scale);
@@ -37,11 +38,7 @@ class AntennaPainter {
     _hornPaint.shader = const LinearGradient(
       begin: Alignment.bottomLeft,
       end: Alignment.topRight,
-      colors: [
-        Color(0xFFFFAB00),
-        Color(0xFFFFD600),
-        Color(0xFFFFF59D),
-      ],
+      colors: [Color(0xFFFFAB00), Color(0xFFFFD600), Color(0xFFFFF59D)],
     ).createShader(Rect.fromCircle(center: pHorn.offset, radius: hornSize));
     _hornPaint.style = PaintingStyle.fill;
 
@@ -79,7 +76,10 @@ class AntennaPainter {
     // Điểm bóng sáng trên ngọc
     final shine = Paint()..color = Colors.white.withValues(alpha: 0.9);
     canvas.drawCircle(
-      Offset(pGem.offset.dx - gemRadius * 0.25, pGem.offset.dy - gemRadius * 0.25),
+      Offset(
+        pGem.offset.dx - gemRadius * 0.25,
+        pGem.offset.dy - gemRadius * 0.25,
+      ),
       gemRadius * 0.3,
       shine,
     );

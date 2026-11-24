@@ -1,11 +1,29 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../constants/api_endpoints.dart';
-import '../storage/secure_storage_service.dart';
+import 'package:mobile/core/constants/api_endpoints.dart';
+import 'package:mobile/core/network/network_exceptions.dart';
+import 'package:mobile/core/storage/secure_storage_service.dart';
 
-// Provider cung cấp instance của Dio dùng chung cho toàn bộ ứng dụng
+/// Tín hiệu phát đi khi phiên đăng nhập hết hạn hoàn toàn và cần buộc đăng xuất
+final sessionExpiredSignalProvider = StateProvider<int>((ref) => 0);
+
+/// Provider cung cấp instance riêng của Dio dùng cho việc làm mới token
+final refreshDioProvider = Provider<Dio>((ref) {
+  return Dio(
+    BaseOptions(
+      baseUrl: ApiEndpoints.baseUrl,
+      connectTimeout: ApiEndpoints.connectionTimeout,
+      receiveTimeout: ApiEndpoints.receiveTimeout,
+      contentType: 'application/json',
+    ),
+  );
+});
+
+/// Provider cung cấp instance của Dio dùng chung cho toàn bộ ứng dụng
 final dioProvider = Provider<Dio>((ref) {
   final options = BaseOptions(
     baseUrl: ApiEndpoints.baseUrl,
@@ -15,9 +33,53 @@ final dioProvider = Provider<Dio>((ref) {
   );
 
   final dio = Dio(options);
-
-  // Đọc SecureStorage thông qua provider
   final secureStorage = ref.read(secureStorageProvider);
+  final refreshDio = ref.watch(refreshDioProvider);
+
+  // Biến giữ future làm mới token đang chạy dở để gộp (deduplicate) các 401 đồng thời
+  Future<String?>? activeRefreshFuture;
+
+  Future<void> handleSessionExpired() async {
+    await secureStorage.clearAll();
+    ref.read(sessionExpiredSignalProvider.notifier).state++;
+  }
+
+  Future<String?> performTokenRefresh() async {
+    final refreshToken = await secureStorage.getRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) {
+      await handleSessionExpired();
+      return null;
+    }
+
+    try {
+      final res = await refreshDio.post<Map<String, dynamic>>(
+        ApiEndpoints.refreshToken,
+        data: {'refreshToken': refreshToken},
+      );
+      final payload = res.data?['data'];
+      if (payload is Map<String, dynamic>) {
+        final newAccess = payload['accessToken'] as String?;
+        final newRefresh = payload['refreshToken'] as String?;
+        if (newAccess != null && newAccess.isNotEmpty) {
+          await secureStorage.saveAccessToken(newAccess);
+          if (newRefresh != null && newRefresh.isNotEmpty) {
+            await secureStorage.saveRefreshToken(newRefresh);
+          }
+          return newAccess;
+        }
+      }
+      await handleSessionExpired();
+      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401 || e.response?.statusCode == 403) {
+        await handleSessionExpired();
+      }
+      return null;
+    } catch (_) {
+      // Lỗi mạng/timeout: giữ nguyên token để thử lại khi có kết nối
+      return null;
+    }
+  }
 
   // Auth Interceptor
   dio.interceptors.add(
@@ -29,11 +91,42 @@ final dioProvider = Provider<Dio>((ref) {
         }
         return handler.next(options);
       },
-      onError: (DioException e, handler) {
-        if (e.response?.statusCode == 401) {
-          // Có thể emit event logout ở đây hoặc xử lý refresh token
+      onError: (DioException e, handler) async {
+        final path = e.requestOptions.path;
+        final isAuthRequest =
+            path.contains('/auth/firebase') ||
+            path.contains('/auth/refresh') ||
+            path.contains('/auth/complete-registration');
+
+        if (e.response?.statusCode == 401 &&
+            !isAuthRequest &&
+            e.requestOptions.extra['_isRetry'] != true) {
+          // Gộp tất cả yêu cầu 401 đồng thời vào cùng một tiến trình làm mới token
+          activeRefreshFuture ??= performTokenRefresh().whenComplete(() {
+            activeRefreshFuture = null;
+          });
+
+          final newAccess = await activeRefreshFuture;
+          if (newAccess != null && newAccess.isNotEmpty) {
+            final retryOptions = e.requestOptions;
+            if (retryOptions.data is FormData) {
+              retryOptions.data = (retryOptions.data as FormData).clone();
+            }
+            retryOptions.headers['Authorization'] = 'Bearer $newAccess';
+            retryOptions.extra['_isRetry'] = true;
+            try {
+              final retryResponse = await dio.fetch(retryOptions);
+              return handler.resolve(retryResponse);
+            } on DioException catch (retryErr) {
+              return handler.next(retryErr);
+            }
+          }
         }
-        return handler.next(e);
+
+        final appFailure = ExceptionHandler.handleDioError(e);
+        return handler.next(
+          e.copyWith(error: appFailure, message: appFailure.message),
+        );
       },
     ),
   );

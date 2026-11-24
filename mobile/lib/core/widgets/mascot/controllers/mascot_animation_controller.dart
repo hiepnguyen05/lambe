@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -6,7 +7,6 @@ enum MascotAction {
   idle,
   wave, // Vẫy tay chào người dùng
   jump, // Nhảy lên xuống bồng bềnh vui sướng
-  spin, // Xoay tròn 360 độ trong không gian 3D
 }
 
 /// Controller quản lý hoạt ảnh 3D và các hành động tương tác.
@@ -45,7 +45,6 @@ class MascotAnimationController extends ChangeNotifier {
 
   // Biến điều khiển hành động
   double jumpOffsetY = 0.0;
-  double spinRotY = 0.0;
   double rightHandRaiseY = 0.0;
   double rightHandWaveAngle = 0.0;
   double bodySquashScale = 1.0;
@@ -72,9 +71,7 @@ class MascotAnimationController extends ChangeNotifier {
 
   double get elapsedTime => _elapsedTime;
 
-  MascotAnimationController({
-    required TickerProvider vsync,
-  }) {
+  MascotAnimationController({required TickerProvider vsync}) {
     _ticker = vsync.createTicker(_handleTick);
     _ticker.start();
   }
@@ -146,9 +143,6 @@ class MascotAnimationController extends ChangeNotifier {
       case MascotAction.jump:
         _handleJumpAction(t);
         break;
-      case MascotAction.spin:
-        _handleSpinAction(t);
-        break;
       case MascotAction.idle:
         // Đôi tay đập nhịp nhàng mềm mại khi ở trạng thái nghỉ
         leftHandRotX = math.sin(t * 4.5) * 0.35;
@@ -158,7 +152,6 @@ class MascotAnimationController extends ChangeNotifier {
         rightHandRaiseY = 0.0;
         rightHandWaveAngle = 0.0;
         jumpOffsetY = 0.0;
-        spinRotY = 0.0;
         bodySquashScale = 1.0;
         break;
     }
@@ -179,7 +172,8 @@ class MascotAnimationController extends ChangeNotifier {
     rightHandRaiseY = raiseFactor * 0.45;
 
     // Tay vẫy qua lại nhanh và vui mắt
-    rightHandWaveAngle = math.sin((t - _actionStartTime) * 16.0) * 0.55 * raiseFactor;
+    rightHandWaveAngle =
+        math.sin((t - _actionStartTime) * 16.0) * 0.55 * raiseFactor;
 
     // Tay trái vẫy nhẹ giữ thăng bằng
     leftHandRotZ = 0.45 + math.sin(t * 3.0) * 0.15;
@@ -216,52 +210,25 @@ class MascotAnimationController extends ChangeNotifier {
     rightHandRotZ = -0.55 - flap;
   }
 
-  /// Hành động 3: Xoay vòng 360 độ trong không gian 3D (Pirouette Spin)
-  void _handleSpinAction(double t) {
-    const duration = 1.8;
-    final progress = (t - _actionStartTime) / duration;
-
-    if (progress >= 1.0) {
-      _finishAction();
-      return;
-    }
-
-    // Góc quay mượt mà từ 0 đến 2π (360 độ)
-    // Dùng hàm mượt S-Curve: 3p^2 - 2p^3
-    final smoothP = progress * progress * (3.0 - 2.0 * progress);
-    spinRotY = smoothP * math.pi * 2.0;
-
-    // Khi xoay, hai tay mở rộng ra hai bên giữ thăng bằng
-    leftHandRotZ = 0.65;
-    rightHandRotZ = -0.65;
-    rightHandRaiseY = 0.1;
-
-    // Nhấc bổng nhẹ lên khi xoay
-    jumpOffsetY = math.sin(progress * math.pi) * 0.18;
-  }
 
   void _finishAction() {
     currentAction = MascotAction.idle;
     jumpOffsetY = 0.0;
-    spinRotY = 0.0;
     rightHandRaiseY = 0.0;
     rightHandWaveAngle = 0.0;
     bodySquashScale = 1.0;
     _nextAutoActionTime = _elapsedTime + 4.5 + _random.nextDouble() * 3.0;
   }
 
-  /// Kích hoạt hành động tiếp theo trong chu kỳ
+  /// Kích hoạt hành động tiếp theo trong chu kỳ (chỉ luân phiên Vẫy tay và Nhảy nhún)
   void triggerNextAction() {
-    _actionCycleIndex = (_actionCycleIndex + 1) % 3;
+    _actionCycleIndex = (_actionCycleIndex + 1) % 2;
     switch (_actionCycleIndex) {
       case 0:
         triggerAction(MascotAction.wave);
         break;
       case 1:
         triggerAction(MascotAction.jump);
-        break;
-      case 2:
-        triggerAction(MascotAction.spin);
         break;
     }
   }
@@ -278,9 +245,6 @@ class MascotAnimationController extends ChangeNotifier {
   /// Kích hoạt hành động nhảy
   void triggerJump() => triggerAction(MascotAction.jump);
 
-  /// Kích hoạt hành động xoay vòng 360 độ
-  void triggerSpin() => triggerAction(MascotAction.spin);
-
   /// Cập nhật vị trí con trỏ tương tác trong khoảng [-1, 1]
   void updatePointer(double normalizedX, double normalizedY) {
     targetRotY = normalizedX * 0.5;
@@ -292,6 +256,7 @@ class MascotAnimationController extends ChangeNotifier {
     if (_isActive == play) return;
     _isActive = play;
     _lastElapsed = null;
+    _ticker.muted = !play;
   }
 
   @override

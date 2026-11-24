@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geocoding/geocoding.dart';
@@ -60,9 +61,14 @@ class UserLocationNotifier extends StateNotifier<UserLocationModel> {
   UserLocationNotifier() : super(const UserLocationModel());
 
   StreamSubscription<Position>? _positionStreamSub;
+  Timer? _geocodeDebounceTimer;
+  DateTime? _lastGeocodeTime;
+  double _lastGeocodeLat = 0.0;
+  double _lastGeocodeLng = 0.0;
 
   @override
   void dispose() {
+    _geocodeDebounceTimer?.cancel();
     _positionStreamSub?.cancel();
     super.dispose();
   }
@@ -70,10 +76,12 @@ class UserLocationNotifier extends StateNotifier<UserLocationModel> {
   /// Lấy vị trí GPS hiện tại của người dùng kèm địa chỉ phường/quận/thành phố
   Future<UserLocationModel> fetchLocation({
     Duration timeout = const Duration(seconds: 8),
+    bool enableStream = false,
   }) async {
     try {
       debugPrint('📍 [UserLocation] Kiểm tra dịch vụ định vị GPS...');
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!mounted) return state;
       if (!serviceEnabled) {
         debugPrint('⚠️ [UserLocation] Dịch vụ định vị đang tắt trên thiết bị.');
         state = state.copyWith(
@@ -86,9 +94,11 @@ class UserLocationNotifier extends StateNotifier<UserLocationModel> {
       }
 
       LocationPermission permission = await Geolocator.checkPermission();
+      if (!mounted) return state;
       if (permission == LocationPermission.denied) {
         debugPrint('📍 [UserLocation] Yêu cầu cấp quyền định vị...');
         permission = await Geolocator.requestPermission();
+        if (!mounted) return state;
       }
 
       if (permission == LocationPermission.denied ||
@@ -110,7 +120,7 @@ class UserLocationNotifier extends StateNotifier<UserLocationModel> {
       if (defaultTargetPlatform == TargetPlatform.android) {
         locationSettings = AndroidSettings(
           accuracy: LocationAccuracy.high,
-          forceLocationManager: true, // Ép dùng LocationManager để bắt mock GPS máy ảo
+          forceLocationManager: kDebugMode, // Dùng FusedLocationProvider tiết kiệm pin trên máy thật, LocationManager trên emulator debug
           intervalDuration: const Duration(seconds: 1),
           timeLimit: timeout,
         );
@@ -123,45 +133,76 @@ class UserLocationNotifier extends StateNotifier<UserLocationModel> {
 
       Position? position;
       try {
-        debugPrint('📍 [UserLocation] Đang lấy tọa độ GPS thực tế từ LocationManager...');
+        debugPrint(
+          '📍 [UserLocation] Đang lấy tọa độ GPS thực tế từ LocationManager...',
+        );
         position = await Geolocator.getCurrentPosition(
           locationSettings: locationSettings,
         );
-        debugPrint('📍 [UserLocation] Tọa độ GPS tươi mới: ${position.latitude}, ${position.longitude}');
+        debugPrint(
+          '📍 [UserLocation] Tọa độ GPS tươi mới: ${position.latitude}, ${position.longitude}',
+        );
       } catch (gpsError) {
-        debugPrint('⚠️ [UserLocation] getCurrentPosition lỗi ($gpsError), kiểm tra vị trí gần nhất...');
+        debugPrint(
+          '⚠️ [UserLocation] getCurrentPosition lỗi ($gpsError), kiểm tra vị trí gần nhất...',
+        );
         try {
           position = await Geolocator.getLastKnownPosition();
-        } catch (_) {}
+        } catch (lastKnownError) {
+          debugPrint('⚠️ [UserLocation] getLastKnownPosition lỗi: $lastKnownError');
+        }
       }
 
+      if (!mounted) return state;
       if (position == null) {
         debugPrint('⚠️ [UserLocation] Không thể lấy được tọa độ GPS.');
         state = state.copyWith(
           isLoaded: true,
           hasPermission: true,
           serviceEnabled: true,
-          addressLine: state.addressLine.isNotEmpty ? state.addressLine : 'Không thể lấy tọa độ GPS',
+          addressLine: state.addressLine.isNotEmpty
+              ? state.addressLine
+              : 'Không thể lấy tọa độ GPS',
           error: 'Không thể lấy tọa độ hiện tại',
         );
         return state;
       }
 
       await _applyPosition(position);
+      if (!mounted) return state;
 
-      // Kích hoạt lắng nghe luồng GPS tự động khi đổi vị trí máy ảo
-      _startPositionStream();
+      // Kích hoạt luồng GPS nếu được yêu cầu rõ ràng
+      if (enableStream) {
+        startPositionStream();
+      }
 
       return state;
     } catch (e) {
       debugPrint('❌ [UserLocation] Lỗi khi xử lý vị trí: $e');
+      if (!mounted) return state;
       state = state.copyWith(
         isLoaded: true,
-        addressLine: state.addressLine.isNotEmpty ? state.addressLine : 'Không thể xác định vị trí',
+        addressLine: state.addressLine.isNotEmpty
+            ? state.addressLine
+            : 'Không thể xác định vị trí',
         error: e.toString(),
       );
       return state;
     }
+  }
+
+  void startPositionStream() => _startPositionStream();
+
+  /// Update the address label from the shared provider fix without starting GPS.
+  Future<void> updateAddressForPosition(Position position) =>
+      _applyPosition(position);
+
+  Future<void> stopPositionStream() async {
+    _geocodeDebounceTimer?.cancel();
+    _geocodeDebounceTimer = null;
+    final previous = _positionStreamSub;
+    _positionStreamSub = null;
+    await previous?.cancel();
   }
 
   void _startPositionStream() {
@@ -171,9 +212,11 @@ class UserLocationNotifier extends StateNotifier<UserLocationModel> {
       if (defaultTargetPlatform == TargetPlatform.android) {
         streamSettings = AndroidSettings(
           accuracy: LocationAccuracy.high,
-          forceLocationManager: true,
+          forceLocationManager: kDebugMode,
           distanceFilter: 10,
-          intervalDuration: const Duration(seconds: 2),
+          intervalDuration: const Duration(
+            seconds: 10,
+          ), // Polling 10s kết hợp distanceFilter: 10m tránh cạn pin
         );
       } else {
         streamSettings = AppleSettings(
@@ -182,18 +225,48 @@ class UserLocationNotifier extends StateNotifier<UserLocationModel> {
         );
       }
 
-      _positionStreamSub = Geolocator.getPositionStream(
-        locationSettings: streamSettings,
-      ).listen((Position newPos) {
-        // Chỉ cập nhật nếu tọa độ thực sự thay đổi đáng kể (>0.0001)
-        if ((newPos.latitude - state.latitude).abs() > 0.0001 ||
-            (newPos.longitude - state.longitude).abs() > 0.0001) {
-          debugPrint('📡 [UserLocation] GPS máy ảo/thiết bị thay đổi: ${newPos.latitude}, ${newPos.longitude}');
-          _applyPosition(newPos);
-        }
-      }, onError: (err) {
-        debugPrint('⚠️ [UserLocation] Lỗi stream vị trí: $err');
-      });
+      _positionStreamSub =
+          Geolocator.getPositionStream(locationSettings: streamSettings).listen(
+            (Position newPos) {
+              if (!mounted) return;
+              // Chỉ cập nhật nếu tọa độ thực sự thay đổi đáng kể (>0.0001 ~ 11m)
+              if ((newPos.latitude - state.latitude).abs() > 0.0001 ||
+                  (newPos.longitude - state.longitude).abs() > 0.0001) {
+                debugPrint(
+                  '📡 [UserLocation] GPS máy ảo/thiết bị thay đổi: ${newPos.latitude}, ${newPos.longitude}',
+                );
+                // 1. Cập nhật ngay tọa độ mới vào state mà không cần chờ geocoding
+                state = state.copyWith(
+                  latitude: newPos.latitude,
+                  longitude: newPos.longitude,
+                  isLoaded: true,
+                  hasPermission: true,
+                  serviceEnabled: true,
+                );
+
+                // 2. Debounce và throttle reverse geocoding để tránh cạn pin & spam request
+                _geocodeDebounceTimer?.cancel();
+                _geocodeDebounceTimer = Timer(const Duration(seconds: 3), () {
+                  if (!mounted) return;
+                  final now = DateTime.now();
+                  final hasMovedSignificantly =
+                      (_lastGeocodeLat - newPos.latitude).abs() > 0.001 ||
+                      (_lastGeocodeLng - newPos.longitude).abs() > 0.001;
+                  final isTimeElapsed =
+                      _lastGeocodeTime == null ||
+                      now.difference(_lastGeocodeTime!) >
+                          const Duration(seconds: 45);
+
+                  if (hasMovedSignificantly || isTimeElapsed) {
+                    _applyPosition(newPos);
+                  }
+                });
+              }
+            },
+            onError: (err) {
+              debugPrint('⚠️ [UserLocation] Lỗi stream vị trí: $err');
+            },
+          );
     } catch (e) {
       debugPrint('⚠️ [UserLocation] Không thể khởi chạy stream vị trí: $e');
     }
@@ -247,7 +320,10 @@ class UserLocationNotifier extends StateNotifier<UserLocationModel> {
         for (final part in rawParts) {
           final lower = part.toLowerCase();
           final exists = cleanParts.any(
-            (p) => p.toLowerCase() == lower || p.toLowerCase().contains(lower) || lower.contains(p.toLowerCase()),
+            (p) =>
+                p.toLowerCase() == lower ||
+                p.toLowerCase().contains(lower) ||
+                lower.contains(p.toLowerCase()),
           );
           if (!exists) {
             cleanParts.add(part);
@@ -259,12 +335,17 @@ class UserLocationNotifier extends StateNotifier<UserLocationModel> {
         }
       }
     } catch (geoError) {
-      debugPrint('⚠️ [UserLocation] Không thể reverse geocode tọa độ: $geoError');
+      debugPrint(
+        '⚠️ [UserLocation] Không thể reverse geocode tọa độ: $geoError',
+      );
     }
 
     if (address.isEmpty) {
-      address = '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
+      address =
+          '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
     }
+
+    if (!mounted) return;
 
     state = UserLocationModel(
       latitude: position.latitude,
@@ -277,11 +358,17 @@ class UserLocationNotifier extends StateNotifier<UserLocationModel> {
       serviceEnabled: true,
     );
 
-    debugPrint('✅ [UserLocation] Vị trí mới được áp dụng: $address (${position.latitude}, ${position.longitude})');
+    _lastGeocodeTime = DateTime.now();
+    _lastGeocodeLat = position.latitude;
+    _lastGeocodeLng = position.longitude;
+
+    debugPrint(
+      '✅ [UserLocation] Vị trí mới được áp dụng: $address (${position.latitude}, ${position.longitude})',
+    );
   }
 }
 
 final userLocationProvider =
     StateNotifierProvider<UserLocationNotifier, UserLocationModel>((ref) {
-  return UserLocationNotifier();
-});
+      return UserLocationNotifier();
+    });

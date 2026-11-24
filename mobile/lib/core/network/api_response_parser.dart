@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 
-import '../error/app_failure.dart';
+import 'package:mobile/core/error/app_failure.dart';
 
 class ApiResponseParser {
   const ApiResponseParser._();

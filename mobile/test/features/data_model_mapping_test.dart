@@ -1,11 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mobile/features/address/data/models/address_model.dart';
-import 'package:mobile/features/address/domain/entities/address_entity.dart';
-import 'package:mobile/features/onboarding/data/models/onboarding_model.dart';
-import 'package:mobile/features/onboarding/domain/entities/onboarding_preferences.dart';
-import 'package:mobile/features/partner/data/models/partner_api_model.dart';
-import 'package:mobile/features/partner/domain/entities/service_catalog_entity.dart';
-import 'package:mobile/features/recommendations/data/models/service_recommendations_model.dart';
+import 'package:mobile/features/shared/address/domain/entities/address_entity.dart';
+import 'package:mobile/features/customer/onboarding/domain/entities/onboarding_options_entity.dart';
+import 'package:mobile/features/customer/onboarding/domain/entities/onboarding_preferences.dart';
+import 'package:mobile/features/provider/registration/data/models/partner_api_model.dart';
+import 'package:mobile/features/provider/registration/domain/entities/service_catalog_entity.dart';
+import 'package:mobile/features/customer/recommendations/domain/entities/service_recommendations_entity.dart';
 
 void main() {
   test('address JSON conversion stays in the data layer', () {
@@ -17,8 +16,8 @@ void main() {
       isDefault: true,
     );
 
-    final json = AddressModel.toJson(address);
-    final mapped = AddressModel.fromJson({'id': address.id, ...json});
+    final json = address.toJson();
+    final mapped = AddressEntity.fromJson({'id': address.id, ...json});
 
     expect(mapped.addressLine, address.addressLine);
     expect(mapped.latitude, address.latitude);
@@ -26,7 +25,7 @@ void main() {
   });
 
   test('onboarding options map categories without coupling to services', () {
-    final options = OnboardingModel.optionsFromJson({
+    final options = OnboardingOptionsEntity.fromJson({
       'categories': [
         {
           'id': 'hair',
@@ -46,9 +45,10 @@ void main() {
   });
 
   test('onboarding preferences preserve selection lists in transport JSON', () {
-    final json = OnboardingModel.preferencesToJson(
-      const OnboardingPreferences(gender: 'FEMALE', categoryIds: ['hair']),
-    );
+    final json = const OnboardingPreferences(
+      gender: 'FEMALE',
+      categoryIds: ['hair'],
+    ).toJson();
 
     expect(json, {
       'gender': 'FEMALE',
@@ -58,7 +58,7 @@ void main() {
   });
 
   test('onboarding preferences map saved category objects', () {
-    final preferences = OnboardingModel.preferencesFromJson({
+    final preferences = OnboardingPreferences.fromJson({
       'gender': 'FEMALE',
       'preferredAudience': 'WOMEN',
       'pricePreference': 'BALANCED',
@@ -77,7 +77,7 @@ void main() {
   });
 
   test('recommendations map service pricing and category data', () {
-    final recommendations = ServiceRecommendationsModel.fromJson({
+    final recommendations = ServiceRecommendationsEntity.fromJson({
       'personalized': true,
       'services': [
         {

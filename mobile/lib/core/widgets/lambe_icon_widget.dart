@@ -1,104 +1,145 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../theme/app_colors.dart';
+import 'package:mobile/core/theme/app_colors.dart';
 
-/// Helper ánh xạ tên mã Google Material Symbols / Material Icons được lưu trong DB
-/// sang [IconData] chuẩn của Flutter SDK.
-class MaterialIconMapper {
-  MaterialIconMapper._();
+/// Helper ánh xạ tên mã icon (hỗ trợ cả chuẩn Lucide Icons hiện đại và mã Google cũ)
+/// sang [IconData] vector cao cấp chuẩn hoá của [LucideIcons].
+class LucideIconMapper {
+  LucideIconMapper._();
 
   static const Map<String, IconData> _iconMap = {
-    // Nhóm tóc & cắt tỉa
-    'content_cut': Icons.content_cut_rounded,
-    'cut': Icons.content_cut_rounded,
-    'scissors': Icons.content_cut_rounded,
-    'hair': Icons.content_cut_rounded,
-    'air': Icons.air_rounded,
-    'airwave': Icons.air_rounded,
-    'heat': Icons.whatshot_rounded,
-    'dry_cleaning': Icons.dry_cleaning_rounded,
+    // Nhóm tóc, cắt tỉa & salon
+    'scissors': LucideIcons.scissors,
+    'content_cut': LucideIcons.scissors,
+    'cut': LucideIcons.scissors,
+    'hair': LucideIcons.scissors,
 
-    // Nhóm móng & trang điểm & cọ
-    'brush': Icons.brush_rounded,
-    'nail': Icons.brush_rounded,
-    'draw': Icons.draw_rounded,
-    'palette': Icons.palette_rounded,
-    'color': Icons.palette_rounded,
-    'colorize': Icons.colorize_rounded,
-    'face_retouching_natural': Icons.face_retouching_natural_rounded,
-    'makeup': Icons.face_retouching_natural_rounded,
-    'auto_fix_high': Icons.auto_fix_high_rounded,
-    'lips': Icons.favorite_rounded,
-    'lip': Icons.favorite_rounded,
+    // Nhóm nhiệt, uốn tóc, sấy & tạo kiểu
+    'flame': LucideIcons.flame,
+    'heat': LucideIcons.flame,
+    'fire': LucideIcons.flame,
+    'wind': LucideIcons.wind,
+    'air': LucideIcons.wind,
+    'airwave': LucideIcons.wind,
+
+    // Nhóm nhuộm tóc & bảng màu
+    'palette': LucideIcons.palette,
+    'color': LucideIcons.palette,
+    'colorize': LucideIcons.palette,
+
+    // Nhóm làm móng & cọ vẽ
+    'brush': LucideIcons.brush,
+    'paintbrush': LucideIcons.paintbrush,
+    'nail': LucideIcons.brush,
+    'draw': LucideIcons.penTool,
+
+    // Nhóm spa, hoa & thư giãn
+    'flower_2': LucideIcons.flower2,
+    'flower2': LucideIcons.flower2,
+    'flower': LucideIcons.flower,
+    'spa': LucideIcons.flower2,
+    'self_improvement': LucideIcons.flower2,
+    'local_florist': LucideIcons.flower2,
+    'healing': LucideIcons.heartPulse,
 
     // Nhóm chăm sóc da & khuôn mặt
-    'face': Icons.face_rounded,
-    'face_3': Icons.face_3_rounded,
-    'face_4': Icons.face_4_rounded,
-    'face_6': Icons.face_6_rounded,
-    'clean_hands': Icons.clean_hands_rounded,
-    'visibility': Icons.visibility_rounded,
-    'eye': Icons.visibility_rounded,
+    'smile': LucideIcons.smile,
+    'face': LucideIcons.smile,
+    'face_3': LucideIcons.smile,
+    'face_4': LucideIcons.smile,
+    'face_6': LucideIcons.smile,
 
-    // Nhóm spa, massage & thư giãn
-    'spa': Icons.spa_rounded,
-    'self_improvement': Icons.self_improvement_rounded,
-    'local_florist': Icons.local_florist_rounded,
-    'flower': Icons.local_florist_rounded,
-    'healing': Icons.healing_rounded,
-    'cheer': Icons.celebration_rounded,
+    // Nhóm trang điểm, combo & làm đẹp cao cấp
+    'sparkles': LucideIcons.sparkles,
+    'sparkle': LucideIcons.sparkles,
+    'face_retouching_natural': LucideIcons.sparkles,
+    'auto_awesome': LucideIcons.sparkles,
+    'health_and_beauty': LucideIcons.sparkles,
+    'makeup': LucideIcons.sparkles,
+    'cheer': LucideIcons.sparkles,
+    'menu': LucideIcons.sparkles,
 
-    // Nhóm gội đầu & tắm & vệ sinh
-    'wash': Icons.wash_rounded,
-    'water_drop': Icons.water_drop_rounded,
-    'shower': Icons.shower_rounded,
-    'bathtub': Icons.bathtub_rounded,
-    'soap': Icons.soap_rounded,
-    'cleaning_services': Icons.cleaning_services_rounded,
-    'sanitizer': Icons.sanitizer_rounded,
+    // Nhóm gội đầu, nước & vệ sinh
+    'droplets': LucideIcons.droplets,
+    'droplet': LucideIcons.droplet,
+    'wash': LucideIcons.droplets,
+    'water_drop': LucideIcons.droplets,
+    'shower': LucideIcons.showerHead,
+    'shower_head': LucideIcons.showerHead,
+    'bath': LucideIcons.bath,
+    'bathtub': LucideIcons.bath,
+    'soap': LucideIcons.sparkles,
 
-    // Nhóm chất lượng, y tế & chứng chỉ
-    'health_and_beauty': Icons.health_and_safety_rounded,
-    'health_and_safety': Icons.health_and_safety_rounded,
-    'medical_services': Icons.medical_services_rounded,
-    'medication': Icons.medication_rounded,
-    'shield': Icons.shield_rounded,
-    'security': Icons.security_rounded,
-    'verified': Icons.verified_rounded,
+    // Nhóm tẩy tóc & nâng tone
+    'wand_2': LucideIcons.wand2,
+    'wand2': LucideIcons.wand2,
+    'wand': LucideIcons.wand2,
+    'cleaning_services': LucideIcons.wand2,
 
-    // Nhóm chung & trang trí
-    'favorite': Icons.favorite_rounded,
-    'star': Icons.star_rounded,
-    'diamond': Icons.diamond_rounded,
-    'flare': Icons.flare_rounded,
-    'auto_awesome': Icons.auto_awesome_rounded,
-    'style': Icons.style_rounded,
-    'sentiment_satisfied': Icons.sentiment_satisfied_rounded,
-    'category': Icons.category_rounded,
-    'person': Icons.person_rounded,
-    'menu': Icons.auto_awesome_rounded,
+    // Nhóm mắt, nối mi
+    'eye': LucideIcons.eye,
+    'visibility': LucideIcons.eye,
+
+    // Nhóm môi, tim, phun xăm thẩm mỹ
+    'heart': LucideIcons.heart,
+    'lips': LucideIcons.heart,
+    'lip': LucideIcons.heart,
+
+    // Nhóm y tế, bảo hành, chứng nhận & an toàn
+    'shield_check': LucideIcons.shieldCheck,
+    'shield': LucideIcons.shield,
+    'security': LucideIcons.shield,
+    'health_and_safety': LucideIcons.shieldCheck,
+    'medical_services': LucideIcons.heartPulse,
+    'verified': LucideIcons.checkCircle2,
+    'check_circle': LucideIcons.checkCircle2,
+
+    // Nhóm đồng hồ, lịch & danh mục
+    'clock': LucideIcons.clock,
+    'schedule': LucideIcons.clock,
+    'calendar': LucideIcons.calendar,
+    'star': LucideIcons.star,
+    'layout_grid': LucideIcons.layoutGrid,
+    'category': LucideIcons.layoutGrid,
   };
 
-  /// Ánh xạ chuỗi tên icon (VD: 'content_cut', 'spa', 'brush') sang [IconData].
-  /// Nếu không tìm thấy, trả về [fallback].
-  static IconData fromString(String? iconName, {IconData fallback = Icons.auto_awesome_rounded}) {
+  /// Ánh xạ chuỗi tên icon sang [IconData] chuẩn Lucide.
+  /// Hỗ trợ cả kebab-case, snake_case và camelCase.
+  static IconData fromString(
+    String? iconName, {
+    IconData fallback = LucideIcons.sparkles,
+  }) {
     if (iconName == null || iconName.trim().isEmpty) {
       return fallback;
     }
 
-    final key = iconName.trim().toLowerCase().replaceAll('-', '_');
+    final key = iconName
+        .trim()
+        .toLowerCase()
+        .replaceAll('-', '_')
+        .replaceAll(' ', '_');
+
     return _iconMap[key] ?? fallback;
   }
 }
 
-/// Widget hiển thị icon linh hoạt:
-/// - Nếu là URL (bắt đầu bằng http/https): Hiển thị ảnh mạng qua [CachedNetworkImage].
-/// - Nếu là tên Google Material Symbol/Icon (VD: 'content_cut', 'spa', 'brush'):
-///   Hiển thị icon vector chuẩn của Google Material Icons.
+/// Tương thích ngược với tên gọi cũ
+typedef MaterialIconMapper = LucideIconMapper;
+
+/// Widget hiển thị icon doanh nghiệp chuẩn đa nền tảng (Enterprise Architecture):
+/// 1. Nếu là URL mạng kết thúc bằng `.svg`: Render vector sắc nét qua [SvgPicture.network].
+/// 2. Nếu là URL mạng ảnh thông thường: Render qua [CachedNetworkImage].
+/// 3. Nếu là file Asset nội bộ (`assets/...`): Render qua [SvgPicture.asset] hoặc [Image.asset].
+/// 4. Nếu là mã Icon chuẩn (VD: 'scissors', 'flame', 'flower-2', 'brush'):
+///    Render vector chuẩn hóa bằng bộ [LucideIcons] (giống 100% với Web React `lucide-react`).
 class LambeIconWidget extends StatelessWidget {
   final String? iconStr;
   final double size;
+  final double? imageSize;
+  final BoxFit imageFit;
   final Color? color;
   final IconData? fallbackIcon;
 
@@ -106,6 +147,8 @@ class LambeIconWidget extends StatelessWidget {
     super.key,
     required this.iconStr,
     this.size = 24.0,
+    this.imageSize,
+    this.imageFit = BoxFit.cover,
     this.color,
     this.fallbackIcon,
   });
@@ -113,7 +156,7 @@ class LambeIconWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveColor = color ?? AppColors.primary;
-    final fallback = fallbackIcon ?? Icons.auto_awesome_rounded;
+    final fallback = fallbackIcon ?? LucideIcons.sparkles;
 
     if (iconStr == null || iconStr!.trim().isEmpty) {
       return Icon(fallback, size: size, color: effectiveColor);
@@ -121,24 +164,74 @@ class LambeIconWidget extends StatelessWidget {
 
     final trimmed = iconStr!.trim();
 
-    // 1. Trường hợp là URL ảnh từ Cloudinary/Server
+    // 1. Trường hợp là URL từ CDN / Cloudinary / Server
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      String cleanUrl = trimmed;
+      IconData activeFallback = fallback;
+
+      final hashIndex = trimmed.indexOf('#');
+      if (hashIndex != -1) {
+        cleanUrl = trimmed.substring(0, hashIndex);
+        final fragment = trimmed.substring(hashIndex + 1);
+        final match = RegExp(r'fallback=([a-zA-Z0-9_-]+)').firstMatch(fragment);
+        if (match != null) {
+          activeFallback = LucideIconMapper.fromString(
+            match.group(1),
+            fallback: fallback,
+          );
+        }
+      }
+
+      final effectiveImageSize = imageSize ?? size;
+      final isSvg = cleanUrl.toLowerCase().contains('.svg');
+      if (isSvg) {
+        return SvgPicture.network(
+          cleanUrl,
+          width: effectiveImageSize,
+          height: effectiveImageSize,
+          fit: imageFit,
+          colorFilter: color != null
+              ? ColorFilter.mode(effectiveColor, BlendMode.srcIn)
+              : null,
+          placeholderBuilder: (_) =>
+              Icon(activeFallback, size: size, color: effectiveColor),
+        );
+      }
+
       return CachedNetworkImage(
-        imageUrl: trimmed,
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
-        placeholder: (_, __) => Icon(fallback, size: size, color: effectiveColor),
-        errorWidget: (_, __, ___) => Icon(fallback, size: size, color: effectiveColor),
+        imageUrl: cleanUrl,
+        width: effectiveImageSize,
+        height: effectiveImageSize,
+        fit: imageFit,
+        placeholder: (_, __) =>
+            Icon(activeFallback, size: size, color: effectiveColor),
+        errorWidget: (_, __, ___) =>
+            Icon(activeFallback, size: size, color: effectiveColor),
       );
     }
 
-    // 2. Trường hợp là mã Google Material Symbol lưu trong Database
-    final iconData = MaterialIconMapper.fromString(trimmed, fallback: fallback);
-    return Icon(
-      iconData,
-      size: size,
-      color: effectiveColor,
-    );
+    // 2. Trường hợp là Asset nội bộ
+    if (trimmed.startsWith('assets/')) {
+      if (trimmed.toLowerCase().endsWith('.svg')) {
+        return SvgPicture.asset(
+          trimmed,
+          width: size,
+          height: size,
+          colorFilter: color != null
+              ? ColorFilter.mode(effectiveColor, BlendMode.srcIn)
+              : null,
+        );
+      }
+      return Image.asset(
+        trimmed,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+      );
+    }
+
+    // 3. Trường hợp là mã icon Vector chuẩn (Lucide Icons)
+    final iconData = LucideIconMapper.fromString(trimmed, fallback: fallback);
+    return Icon(iconData, size: size, color: effectiveColor);
   }
 }

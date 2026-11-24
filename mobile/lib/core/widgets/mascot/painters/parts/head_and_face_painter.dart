@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../math/vector3d.dart';
+import 'package:mobile/core/widgets/mascot/math/vector3d.dart';
 
 /// Họa sĩ vẽ đầu phi hành gia chibi:
 /// - Mũ bảo hiểm viền Cyan/Turquoise phát sáng (#38E1E7)
@@ -27,25 +27,28 @@ class HeadAndFacePainter {
     final headPoint = const Vector3D(0, 0.42, 0).rotate(rotX, rotY, rotZ);
     final projected = headPoint.project(center: center, scale: scale);
 
-    final rX = 0.58 * scale * projected.scale;
-    final rY = 0.54 * scale * projected.scale;
+    final rX = 0.68 * scale * projected.scale;
+    final rY = 0.63 * scale * projected.scale;
 
     // 1. Nền vỏ mũ bảo hiểm Cyan sáng rực rỡ
-    _helmetRimPaint.shader = RadialGradient(
-      center: const Alignment(-0.25, -0.35),
-      radius: 1.15,
-      colors: const [
-        Color(0xFFA5F3FC), // Đỉnh sáng trắng ngọc
-        Color(0xFF38E1E7), // Màu Cyan/Turquoise neon chính xác
-        Color(0xFF22D3EE), // Vùng giữa tươi sáng
-        Color(0xFF0891B2), // Đổ bóng viền ngoài
-      ],
-      stops: const [0.0, 0.35, 0.75, 1.0],
-    ).createShader(Rect.fromCenter(
-      center: projected.offset,
-      width: rX * 2,
-      height: rY * 2,
-    ));
+    _helmetRimPaint.shader =
+        RadialGradient(
+          center: const Alignment(-0.25, -0.35),
+          radius: 1.15,
+          colors: const [
+            Color(0xFFA5F3FC), // Đỉnh sáng trắng ngọc
+            Color(0xFF38E1E7), // Màu Cyan/Turquoise neon chính xác
+            Color(0xFF22D3EE), // Vùng giữa tươi sáng
+            Color(0xFF0891B2), // Đổ bóng viền ngoài
+          ],
+          stops: const [0.0, 0.35, 0.75, 1.0],
+        ).createShader(
+          Rect.fromCenter(
+            center: projected.offset,
+            width: rX * 2,
+            height: rY * 2,
+          ),
+        );
 
     canvas.drawOval(
       Rect.fromCenter(center: projected.offset, width: rX * 2, height: rY * 2),
@@ -66,62 +69,104 @@ class HeadAndFacePainter {
     final facePoint = const Vector3D(0, 0.41, 0.16).rotate(rotX, rotY, rotZ);
     final projected = facePoint.project(center: center, scale: scale);
 
-    final rX = 0.47 * scale * projected.scale;
-    final rY = 0.43 * scale * projected.scale;
+    final rX = 0.45 * scale * projected.scale;
+    final rY = 0.41 * scale * projected.scale;
 
     // Khuôn mặt trắng tinh khôi với bóng nhẹ
-    _facePaint.shader = RadialGradient(
-      center: const Alignment(-0.2, -0.3),
-      radius: 1.05,
-      colors: const [
-        Color(0xFFFFFFFF),
-        Color(0xFFFFFFFF),
-        Color(0xFFF8FAFC),
-        Color(0xFFE2E8F0),
-      ],
-      stops: const [0.0, 0.6, 0.88, 1.0],
-    ).createShader(Rect.fromCenter(
-      center: projected.offset,
-      width: rX * 2,
-      height: rY * 2,
-    ));
+    _facePaint.shader =
+        RadialGradient(
+          center: const Alignment(-0.2, -0.3),
+          radius: 1.05,
+          colors: const [
+            Color(0xFFFFFFFF),
+            Color(0xFFFFFFFF),
+            Color(0xFFF8FAFC),
+            Color(0xFFE2E8F0),
+          ],
+          stops: const [0.0, 0.6, 0.88, 1.0],
+        ).createShader(
+          Rect.fromCenter(
+            center: projected.offset,
+            width: rX * 2,
+            height: rY * 2,
+          ),
+        );
 
     canvas.drawOval(
       Rect.fromCenter(center: projected.offset, width: rX * 2, height: rY * 2),
       _facePaint,
     );
 
-    // 2. Vệt bóng kính phản chiếu hình trăng khuyết ở góc trên bên phải (Visor Glass Reflection)
-    // Đúng như trong hình ảnh mẫu!
+    // 2. Vệt bóng kính phản chiếu ánh sáng trên trán bên phải (như ảnh vẽ mẫu)
+    // Tọa độ tính theo bán kính mũ bảo hiểm để nổi bật rõ ràng trên nền Cyan
+    final rHX = 0.68 * scale * projected.scale;
+    final rHY = 0.63 * scale * projected.scale;
+
     final glassShinePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.88)
-      ..style = PaintingStyle.fill;
+      ..color = Colors.white.withValues(alpha: 0.96)
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
 
     canvas.save();
     canvas.translate(projected.offset.dx, projected.offset.dy);
-    // Vệt sáng lóa phía trên bên phải
+
+    // Vệt sáng cong hình trăng khuyết mềm mại trên trán bên phải
     final shinePath = Path();
-    shinePath.moveTo(rX * 0.15, -rY * 0.78);
-    shinePath.quadraticBezierTo(rX * 0.68, -rY * 0.65, rX * 0.78, -rY * 0.10);
-    shinePath.quadraticBezierTo(rX * 0.66, -rY * 0.35, rX * 0.28, -rY * 0.60);
+    shinePath.moveTo(rHX * 0.14, -rHY * 0.84);
+    // Vòng cung ngoài men theo rìa trên bên phải của mũ bảo hiểm
+    shinePath.cubicTo(
+      rHX * 0.50,
+      -rHY * 0.86,
+      rHX * 0.84,
+      -rHY * 0.62,
+      rHX * 0.84,
+      -rHY * 0.22,
+    );
+    // Bo tròn mềm mại ở đầu dưới
+    shinePath.quadraticBezierTo(
+      rHX * 0.82,
+      -rHY * 0.12,
+      rHX * 0.72,
+      -rHY * 0.18,
+    );
+    // Vòng cung trong men theo đường tiếp giáp trán
+    shinePath.cubicTo(
+      rHX * 0.66,
+      -rHY * 0.44,
+      rHX * 0.42,
+      -rHY * 0.66,
+      rHX * 0.15,
+      -rHY * 0.70,
+    );
+    // Bo tròn mềm mại ở đầu trên
+    shinePath.quadraticBezierTo(
+      rHX * 0.08,
+      -rHY * 0.78,
+      rHX * 0.14,
+      -rHY * 0.84,
+    );
     shinePath.close();
 
     canvas.drawPath(shinePath, glassShinePaint);
 
-    // Đốm sáng phụ
-    final smallShine = Paint()..color = Colors.white.withValues(alpha: 0.9);
+    // Đốm sáng phụ nhỏ xinh ở phía dưới vệt sáng chính tạo độ bóng kính 3D
+    final smallShine = Paint()
+      ..color = Colors.white.withValues(alpha: 0.92)
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
     canvas.drawOval(
       Rect.fromCenter(
-        center: Offset(rX * 0.65, -rY * 0.05),
-        width: rX * 0.12,
-        height: rY * 0.18,
+        center: Offset(rHX * 0.78, -rHY * 0.06),
+        width: rHX * 0.09,
+        height: rHY * 0.14,
       ),
       smallShine,
     );
     canvas.restore();
   }
 
-  /// Vẽ mắt oval xanh lam, đốm trán vàng & má hồng đào
+  /// Vẽ mắt oval to tròn xanh lam dễ thương, đốm trán vàng & má hồng đào
   static void drawEyesAndCheeks({
     required Canvas canvas,
     required Offset center,
@@ -131,23 +176,32 @@ class HeadAndFacePainter {
     required double rotZ,
     required double eyeScaleY,
   }) {
-    // 1. Đốm sao vàng nhỏ giữa trán: (0, 0.53, 0.48)
-    final starVec = const Vector3D(0, 0.53, 0.48).rotate(rotX, rotY, rotZ);
+    // 1. Đốm sao vàng nhỏ giữa trán: (0, 0.52, 0.48)
+    final starVec = const Vector3D(0, 0.52, 0.48).rotate(rotX, rotY, rotZ);
     final pStar = starVec.project(center: center, scale: scale);
     final starPaint = Paint()
       ..color = const Color(0xFFFFE066)
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(pStar.offset, 0.024 * scale * pStar.scale, starPaint);
+    canvas.drawCircle(pStar.offset, 0.025 * scale * pStar.scale, starPaint);
 
-    // 2. Mắt trái (-0.19, 0.43, 0.58) & Mắt phải (0.19, 0.43, 0.58)
-    final leftEyeVec = const Vector3D(-0.19, 0.43, 0.58).rotate(rotX, rotY, rotZ);
-    final rightEyeVec = const Vector3D(0.19, 0.43, 0.58).rotate(rotX, rotY, rotZ);
+    // 2. Mắt trái (-0.17, 0.43, 0.58) & Mắt phải (0.17, 0.43, 0.58)
+    final leftEyeVec = const Vector3D(
+      -0.17,
+      0.43,
+      0.58,
+    ).rotate(rotX, rotY, rotZ);
+    final rightEyeVec = const Vector3D(
+      0.17,
+      0.43,
+      0.58,
+    ).rotate(rotX, rotY, rotZ);
 
     final pLeftEye = leftEyeVec.project(center: center, scale: scale);
     final pRightEye = rightEyeVec.project(center: center, scale: scale);
 
-    final eyeW = 0.09 * scale * pLeftEye.scale;
-    final eyeH = (0.14 * eyeScaleY) * scale * pLeftEye.scale;
+    // Mắt to tròn long lanh đáng yêu chuẩn phong cách chibi
+    final eyeW = 0.16 * scale * pLeftEye.scale;
+    final eyeH = (0.22 * eyeScaleY) * scale * pLeftEye.scale;
 
     _eyePaint.color = const Color(0xFF0284C7);
     _eyePaint.style = PaintingStyle.fill;
@@ -160,10 +214,24 @@ class HeadAndFacePainter {
     // Điểm sáng trong mắt trái nếu đang mở
     if (eyeScaleY > 0.3) {
       final glint = Paint()..color = Colors.white.withValues(alpha: 0.95);
+      // Điểm sáng chính to tròn
       canvas.drawCircle(
-        Offset(pLeftEye.offset.dx + eyeW * 0.15, pLeftEye.offset.dy - eyeH * 0.20),
-        eyeW * 0.24,
+        Offset(
+          pLeftEye.offset.dx + eyeW * 0.16,
+          pLeftEye.offset.dy - eyeH * 0.20,
+        ),
+        eyeW * 0.26,
         glint,
+      );
+      // Điểm sáng phụ nhỏ xinh tạo độ long lanh
+      final smallGlint = Paint()..color = Colors.white.withValues(alpha: 0.75);
+      canvas.drawCircle(
+        Offset(
+          pLeftEye.offset.dx - eyeW * 0.14,
+          pLeftEye.offset.dy + eyeH * 0.20,
+        ),
+        eyeW * 0.13,
+        smallGlint,
       );
     }
 
@@ -175,23 +243,44 @@ class HeadAndFacePainter {
     // Điểm sáng trong mắt phải
     if (eyeScaleY > 0.3) {
       final glint = Paint()..color = Colors.white.withValues(alpha: 0.95);
+      // Điểm sáng chính to tròn
       canvas.drawCircle(
-        Offset(pRightEye.offset.dx + eyeW * 0.15, pRightEye.offset.dy - eyeH * 0.20),
-        eyeW * 0.24,
+        Offset(
+          pRightEye.offset.dx + eyeW * 0.16,
+          pRightEye.offset.dy - eyeH * 0.20,
+        ),
+        eyeW * 0.26,
         glint,
+      );
+      // Điểm sáng phụ nhỏ xinh
+      final smallGlint = Paint()..color = Colors.white.withValues(alpha: 0.75);
+      canvas.drawCircle(
+        Offset(
+          pRightEye.offset.dx - eyeW * 0.14,
+          pRightEye.offset.dy + eyeH * 0.20,
+        ),
+        eyeW * 0.13,
+        smallGlint,
       );
     }
 
-    // 3. Má hồng đào rực rỡ: (-0.30, 0.34, 0.56) & (0.30, 0.34, 0.56)
-    // To, tròn, hồng phấn rõ nét như hình mẫu!
-    final leftBlushVec = const Vector3D(-0.30, 0.34, 0.56).rotate(rotX, rotY, rotZ);
-    final rightBlushVec = const Vector3D(0.30, 0.34, 0.56).rotate(rotX, rotY, rotZ);
+    // 3. Má hồng đào rực rỡ dưới hai mắt
+    final leftBlushVec = const Vector3D(
+      -0.25,
+      0.32,
+      0.56,
+    ).rotate(rotX, rotY, rotZ);
+    final rightBlushVec = const Vector3D(
+      0.25,
+      0.32,
+      0.56,
+    ).rotate(rotX, rotY, rotZ);
 
     final pLeftBlush = leftBlushVec.project(center: center, scale: scale);
     final pRightBlush = rightBlushVec.project(center: center, scale: scale);
 
-    final blushW = 0.14 * scale * pLeftBlush.scale;
-    final blushH = 0.09 * scale * pLeftBlush.scale;
+    final blushW = 0.13 * scale * pLeftBlush.scale;
+    final blushH = 0.08 * scale * pLeftBlush.scale;
 
     _blushPaint.color = const Color(0xFFFF7597).withValues(alpha: 0.85);
     _blushPaint.style = PaintingStyle.fill;
@@ -201,7 +290,11 @@ class HeadAndFacePainter {
       _blushPaint,
     );
     canvas.drawOval(
-      Rect.fromCenter(center: pRightBlush.offset, width: blushW, height: blushH),
+      Rect.fromCenter(
+        center: pRightBlush.offset,
+        width: blushW,
+        height: blushH,
+      ),
       _blushPaint,
     );
   }
