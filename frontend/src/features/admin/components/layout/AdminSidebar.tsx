@@ -29,7 +29,7 @@ const navSections = [
       { id: "customers", label: "Quản lý khách hàng", icon: Users, path: ROUTES.ADMIN.CUSTOMERS, feature: 'customers' as AdminFeature },
       { id: "orders", label: "Vận hành đơn hàng", icon: ClipboardList, path: ROUTES.ADMIN.ORDERS, feature: 'orders' as AdminFeature },
       { id: "providers", label: "Chuyên viên & đối tác", icon: Sparkles, path: ROUTES.ADMIN.PROVIDERS, feature: 'providers' as AdminFeature },
-      { id: "provider-members", label: "Thành viên & KYC", icon: Users, path: ROUTES.ADMIN.PROVIDER_MEMBERS, feature: 'memberOperations' as AdminFeature },
+      // { id: "provider-members", label: "Thành viên & KYC", icon: Users, path: ROUTES.ADMIN.PROVIDER_MEMBERS, feature: 'memberOperations' as AdminFeature },
       { id: "provider-applications", label: "Duyệt hồ sơ đối tác", icon: FileCheck, path: ROUTES.ADMIN.PROVIDER_APPLICATIONS, feature: 'providerApplications' as AdminFeature },
       { id: "service-changes", label: "Duyệt thay đổi dịch vụ", icon: ListChecks, path: ROUTES.ADMIN.SERVICE_CHANGES, feature: 'serviceChanges' as AdminFeature },
       { id: "feed-moderation", label: "Kiểm duyệt Beauty Feed", icon: ShieldCheck, path: ROUTES.ADMIN.FEED_MODERATION, feature: 'feedModeration' as AdminFeature },

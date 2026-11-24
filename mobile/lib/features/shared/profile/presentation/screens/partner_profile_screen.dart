@@ -151,8 +151,9 @@ class PartnerProfileScreen extends ConsumerWidget {
     final workerWorkspace = isProvider && isProviderMode
         ? ref.watch(workerWorkspaceProvider)
         : null;
-    final isWorker = workerWorkspace?.isWorkerInOrganization ?? false;
-    final isOrgOwner = workerWorkspace?.activeMembership?.isOwner ?? false;
+    final isOrgEnabled = ref.watch(isOrganizationFeatureEnabledProvider);
+    final isWorker = isOrgEnabled && (workerWorkspace?.isWorkerInOrganization ?? false);
+    final isOrgOwner = isOrgEnabled && (workerWorkspace?.activeMembership?.isOwner ?? false);
 
     final baseProfile = profileAsync?.valueOrNull;
     final defaultDisplayName = isProvider
@@ -179,7 +180,7 @@ class PartnerProfileScreen extends ConsumerWidget {
                   baseProfile?.isDispatchEnabled,
             );
 
-    final isOrganization = effectiveProfile.isOrganization || isOrgOwner;
+    final isOrganization = isOrgEnabled && (effectiveProfile.isOrganization || isOrgOwner);
 
     final walletBalance = walletState?.wallet?.availableAmount ?? 0;
 
@@ -422,33 +423,35 @@ class PartnerProfileScreen extends ConsumerWidget {
                       ],
 
                       // Provider: Team Management (for salons / facilities)
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceContainerLowest,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.03),
-                              blurRadius: 10,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                      if (isOrganization) ...[
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceContainerLowest,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.03),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: PartnerAccountTile(
+                            icon: Icons.groups_rounded,
+                            iconBackgroundColor: AppColors.primaryContainer
+                                .withValues(alpha: 0.15),
+                            iconColor: AppColors.primary,
+                            title: 'Đội ngũ nhân sự & Thợ',
+                            subtitle:
+                                'Quản lý thành viên, gửi lời mời và phân công',
+                            onTap: () {
+                              context.push('/provider/members');
+                            },
+                          ),
                         ),
-                        child: PartnerAccountTile(
-                          icon: Icons.groups_rounded,
-                          iconBackgroundColor: AppColors.primaryContainer
-                              .withValues(alpha: 0.15),
-                          iconColor: AppColors.primary,
-                          title: 'Đội ngũ nhân sự & Thợ',
-                          subtitle:
-                              'Quản lý thành viên, gửi lời mời và phân công',
-                          onTap: () {
-                            context.push('/provider/members');
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 16),
+                      ],
 
                       // Provider: Account & Security
                       PartnerAccountSecuritySection(

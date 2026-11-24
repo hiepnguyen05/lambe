@@ -79,8 +79,9 @@ class _ProviderHomeScreenState extends ConsumerState<ProviderHomeScreen> {
     // Lắng nghe đơn hàng thật từ Backend
     _listenForIncomingOrders();
 
+    final isOrgEnabled = ref.watch(isOrganizationFeatureEnabledProvider);
     final workerWorkspace = ref.watch(workerWorkspaceProvider);
-    final isWorker = workerWorkspace.isWorkerInOrganization;
+    final isWorker = isOrgEnabled && workerWorkspace.isWorkerInOrganization;
     final isOrganization = ref.watch(isOrganizationProvider);
 
     if (isWorker) {

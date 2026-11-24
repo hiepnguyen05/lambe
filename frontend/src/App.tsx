@@ -62,11 +62,11 @@ const AdminChangePasswordScreen = lazy(() =>
 const AdminActivateScreen = lazy(() =>
   import('./features/admin/components/auth/AdminActivateScreen').then((m) => ({ default: m.AdminActivateScreen }))
 );
-const ProviderRegisterScreen = lazy(() =>
-  import('./features/provider/components/ProviderRegisterScreen').then((m) => ({
-    default: m.ProviderRegisterScreen,
-  }))
-);
+// const ProviderRegisterScreen = lazy(() =>
+//   import('./features/provider/components/ProviderRegisterScreen').then((m) => ({
+//     default: m.ProviderRegisterScreen,
+//   }))
+// );
 
 function PageLoading() {
   return (
@@ -105,16 +105,7 @@ function AppContent() {
   }
 
   if (location.pathname === ROUTES.PROVIDER.REGISTER) {
-    return (
-      <Suspense fallback={<PageLoading />}>
-        <Routes>
-          <Route
-            path={ROUTES.PROVIDER.REGISTER}
-            element={<ProviderRegisterScreen />}
-          />
-        </Routes>
-      </Suspense>
-    );
+    return <Navigate to={ROUTES.ADMIN.LOGIN} replace />;
   }
 
   if (isActivationPage) {

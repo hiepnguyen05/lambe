@@ -8,6 +8,7 @@ import {
   Prisma,
   ProviderApplicationSection,
   ProviderApplicationStatus,
+  ProviderType,
   ReviewStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../../../infrastructure/persistence/postgres/prisma.service';
@@ -41,6 +42,11 @@ export class ProviderApplicationsService {
   ) {}
 
   async create(userId: string, dto: CreateProviderApplicationDto) {
+    if (dto.providerType === ProviderType.ORGANIZATION) {
+      throw new BadRequestException(
+        'Hệ thống hiện tại chỉ tiếp nhận đăng ký đối tác cá nhân.',
+      );
+    }
     try {
       const application = await this.prisma.$transaction(
         async (transaction) => {

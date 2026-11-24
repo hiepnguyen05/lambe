@@ -36,7 +36,13 @@ final publicPartnerProfileProvider =
       return repository.getPublicProfile(providerId);
     });
 
+/// Feature flag to toggle organization partner features (Soft-disable mode).
+/// Set to true to re-enable organization workspace, team management, and member dispatching.
+final isOrganizationFeatureEnabledProvider = Provider<bool>((ref) => false);
+
 final isOrganizationProvider = Provider<bool>((ref) {
+  final isOrgEnabled = ref.watch(isOrganizationFeatureEnabledProvider);
+  if (!isOrgEnabled) return false;
   final profile = ref.watch(partnerProfileNotifierProvider).valueOrNull;
   return profile?.isOrganization ?? false;
 });

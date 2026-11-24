@@ -17,7 +17,7 @@ class PartnerTypeScreen extends ConsumerStatefulWidget {
 }
 
 class _PartnerTypeScreenState extends ConsumerState<PartnerTypeScreen> {
-  String? _selectedType; // 'INDIVIDUAL' or 'ORGANIZATION'
+  String? _selectedType = 'INDIVIDUAL'; // Soft-disable ORGANIZATION, default to INDIVIDUAL
 
   Future<void> _submit() async {
     if (_selectedType == null) {
@@ -120,13 +120,6 @@ class _PartnerTypeScreenState extends ConsumerState<PartnerTypeScreen> {
                       title: 'Cá nhân tự do',
                       description: 'Dành cho chuyên viên trang điểm, chuyên viên làm tóc cá nhân cung cấp dịch vụ độc lập.',
                       icon: Icons.person_outline,
-                    ),
-                    const SizedBox(height: 20),
-                    _buildTypeCard(
-                      type: 'ORGANIZATION',
-                      title: 'Tổ chức / Salon / Studio',
-                      description: 'Dành cho tiệm làm đẹp, salon có giấy phép đăng ký kinh doanh và có đội ngũ chuyên viên.',
-                      icon: Icons.storefront_outlined,
                     ),
 
                     const SizedBox(height: 32),
