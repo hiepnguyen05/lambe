@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 
 import '../../di/provider_members_providers.dart';
 import '../../domain/entities/provider_member_invitation_entity.dart';
@@ -42,15 +43,6 @@ class _ProviderInvitationsScreenState
           icon: const Icon(Icons.arrow_back, color: Color(0xFF0B1C30)),
           onPressed: () => context.pop(),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Làm mới',
-            icon: const Icon(Icons.refresh, color: Color(0xFF0B1C30)),
-            onPressed: () => ref
-                .read(providerInvitationsNotifierProvider.notifier)
-                .loadInvitations(),
-          ),
-        ],
       ),
       body: state.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -256,9 +248,7 @@ class _ProviderInvitationsScreenState
                   InkWell(
                     onTap: () {
                       Clipboard.setData(ClipboardData(text: item.token!));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đã sao chép mã!')),
-                      );
+                      AppDialog.success(context, message: 'Đã sao chép mã!');
                     },
                     child: const Padding(
                       padding: EdgeInsets.all(4),
@@ -356,9 +346,7 @@ class _ProviderInvitationsScreenState
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: updated.token!));
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Đã sao chép mã mới!')),
-                );
+                AppDialog.success(context, message: 'Đã sao chép mã mới!');
               },
               child: const Text('Sao chép mã'),
             ),

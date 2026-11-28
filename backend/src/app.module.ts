@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { GuidanceModule } from './modules/guidance/guidance.module';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -49,6 +50,7 @@ import { ObservabilityModule } from './infrastructure/observability/observabilit
 
 @Module({
   imports: [
+    GuidanceModule,
     ConfigModule.forRoot({
       isGlobal: true,
       load: [

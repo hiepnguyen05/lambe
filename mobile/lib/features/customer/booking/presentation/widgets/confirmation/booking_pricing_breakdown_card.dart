@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 
-import 'package:mobile/core/theme/app_colors.dart';
 import '../../../domain/entities/order_quote_entity.dart';
 
 class BookingPricingBreakdownCard extends StatelessWidget {
@@ -18,11 +17,7 @@ class BookingPricingBreakdownCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormatter = NumberFormat.currency(
-      locale: 'vi_VN',
-      symbol: 'đ',
-      decimalDigits: 0,
-    );
+    final currencyFormatter = CurrencyUtils.vndCurrency;
 
     final servicePrice = quote?.servicePriceAmount ?? fallbackServicePrice;
     final travelFee = quote?.travelFeeAmount ?? 0;
@@ -35,19 +30,16 @@ class BookingPricingBreakdownCard extends StatelessWidget {
     final isPlatform = voucherIssuer == 'PLATFORM';
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppColors.surfaceContainerHighest.withValues(alpha: 0.35),
-          width: 1,
-        ),
-        boxShadow: const [
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x0A0F766E),
-            blurRadius: 10,
-            offset: Offset(0, 2),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -57,33 +49,33 @@ class BookingPricingBreakdownCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 28,
-                height: 28,
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryFixed.withValues(alpha: 0.3),
+                  color: const Color(0xFFEFF6F5),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
                   Icons.receipt_long_rounded,
                   size: 16,
-                  color: AppColors.primary,
+                  color: Color(0xFF0F766E),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               const Expanded(
                 child: Text(
                   'Chi tiết thanh toán chính thức',
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.onSurface,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0B1C30),
                     letterSpacing: -0.2,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           _buildPriceRow('Giá dịch vụ', currencyFormatter.format(servicePrice)),
           const SizedBox(height: 8),
           _buildPriceRow(
@@ -94,15 +86,15 @@ class BookingPricingBreakdownCard extends StatelessWidget {
                 ? 'Miễn phí (≤ 2 km)'
                 : currencyFormatter.format(travelFee),
             valueColor: travelFee == 0
-                ? AppColors.activeEmerald
-                : AppColors.onSurface,
+                ? const Color(0xFF059669)
+                : const Color(0xFF0B1C30),
           ),
           if (discount > 0) ...[
             const SizedBox(height: 8),
             _buildPriceRow(
               'Tạm tính',
               currencyFormatter.format(subtotal),
-              valueColor: AppColors.textMuted,
+              valueColor: const Color(0xFF64748B),
             ),
             const SizedBox(height: 8),
             Row(
@@ -116,7 +108,7 @@ class BookingPricingBreakdownCard extends StatelessWidget {
                           : 'Ưu đãi giảm giá',
                       style: const TextStyle(
                         fontSize: 12.5,
-                        color: AppColors.primary,
+                        color: Color(0xFF0F766E),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -128,9 +120,7 @@ class BookingPricingBreakdownCard extends StatelessWidget {
                           vertical: 1.5,
                         ),
                         decoration: BoxDecoration(
-                          color: isPlatform
-                              ? AppColors.primaryFixed.withValues(alpha: 0.35)
-                              : AppColors.surfaceContainerHigh,
+                          color: const Color(0xFFEFF6F5),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -139,8 +129,8 @@ class BookingPricingBreakdownCard extends StatelessWidget {
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                             color: isPlatform
-                                ? AppColors.primary
-                                : AppColors.onSurfaceVariant,
+                                ? const Color(0xFF0F766E)
+                                : const Color(0xFF475569),
                           ),
                         ),
                       ),
@@ -152,7 +142,7 @@ class BookingPricingBreakdownCard extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
+                    color: Color(0xFF0F766E),
                   ),
                 ),
               ],
@@ -163,87 +153,74 @@ class BookingPricingBreakdownCard extends StatelessWidget {
             _buildPriceRow(
               'Thời lượng dự kiến',
               '${quote!.durationMinutes} phút',
-              valueColor: AppColors.textMuted,
+              valueColor: const Color(0xFF64748B),
             ),
           ],
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
             child: Divider(
               height: 1,
-              color: AppColors.surfaceContainerHighest.withValues(alpha: 0.5),
+              color: Color(0xFFE2E8F0),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.primaryFixed.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.25),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Tổng tiền mặt (COD)',
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.onSurface,
-                        letterSpacing: -0.1,
-                      ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tổng tiền mặt (COD)',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0B1C30),
                     ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Thanh toán sau khi hoàn tất',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-                Text(
-                  currencyFormatter.format(totalAmount),
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primary,
-                    letterSpacing: -0.3,
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: AppColors.surfaceContainerHighest.withValues(alpha: 0.35),
+                  SizedBox(height: 2),
+                  Text(
+                    'Thanh toán sau khi hoàn tất',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ],
               ),
+              Text(
+                currencyFormatter.format(totalAmount),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0F766E),
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: const Row(
               children: [
                 Icon(
-                  Icons.payments_outlined,
-                  size: 16,
-                  color: AppColors.primary,
+                  Icons.shield_outlined,
+                  size: 15,
+                  color: Color(0xFF0F766E),
                 ),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Khách hàng chỉ thanh toán tiền mặt khi đã hoàn thành dịch vụ. Chuyên viên cần xác nhận yêu cầu trước khi đến.',
+                    'Cam kết minh bạch giá: Không phát sinh phụ phí ngoài thỏa thuận.',
                     style: TextStyle(
                       fontSize: 11,
-                      color: AppColors.textMuted,
-                      height: 1.35,
+                      color: Color(0xFF64748B),
+                      height: 1.3,
                     ),
                   ),
                 ),
@@ -261,14 +238,14 @@ class BookingPricingBreakdownCard extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+          style: const TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
         ),
         Text(
           value,
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: valueColor ?? AppColors.onSurface,
+            color: valueColor ?? const Color(0xFF0B1C30),
           ),
         ),
       ],

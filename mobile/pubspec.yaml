@@ -42,7 +42,6 @@ dependencies:
   flutter_secure_storage: ^9.2.2
 
   # UI & Utilities
-  google_fonts: ^6.2.1
   intl: ^0.19.0
   image_picker: ^1.1.2
   equatable: ^2.0.7
@@ -60,7 +59,6 @@ dependencies:
   gal: ^2.3.3
   cached_network_image: ^3.4.1
   path_provider: ^2.1.6
-  lucide_icons_flutter: ^4.0.1
   firebase_messaging: ^16.7.1
   video_player: ^2.14.1
   share_plus: ^12.0.2
@@ -80,13 +78,20 @@ flutter_launcher_icons:
   min_sdk_android: 21
 
 flutter_native_splash:
-  color: "#F7F9FB"
-  image: "assets/images/app_icon.png"
+  # Keep the native launch window visually neutral; Flutter owns the LamBe splash.
+  color: "#FFFFFF"
+  color_dark: "#FFFFFF"
+  image_ios: "assets/images/launch_transparent.png"
+  image_dark_ios: "assets/images/launch_transparent.png"
 
   android_12:
-    color: "#F7F9FB"
-    image: "assets/images/app_icon.png"
-    icon_background_color: "#F7F9FB"
+    color: "#FFFFFF"
+    color_dark: "#FFFFFF"
+    # An explicit transparent icon prevents Android falling back to the launcher icon.
+    image: "assets/images/launch_transparent.png"
+    image_dark: "assets/images/launch_transparent.png"
+    icon_background_color: "#FFFFFF"
+    icon_background_color_dark: "#FFFFFF"
 
 
 

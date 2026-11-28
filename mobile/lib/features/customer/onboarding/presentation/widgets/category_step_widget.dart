@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mobile/core/widgets/app_dialog.dart';
+import 'package:mobile/core/widgets/lambe_icon_widget.dart';
 
 import '../../di/onboarding_providers.dart';
-import './onboarding_icon_widget.dart';
 import './onboarding_page_wrapper.dart';
 
 class CategoryStepWidget extends ConsumerWidget {
@@ -63,12 +63,13 @@ class CategoryStepWidget extends ConsumerWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      OnboardingIconWidget(
+                      LambeIconWidget(
                         iconStr: cat.iconUrl,
                         size: 20,
                         color: isSelected
                             ? Colors.white
                             : const Color(0xFF0F766E),
+                        fallbackIcon: Icons.category,
                       ),
                       const SizedBox(width: 8),
                       Text(

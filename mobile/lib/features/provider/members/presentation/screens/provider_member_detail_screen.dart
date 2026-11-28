@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 
 import '../../di/provider_members_providers.dart';
 import '../../domain/entities/provider_member_entity.dart';
@@ -220,8 +221,9 @@ class _ProviderMemberDetailScreenState
                           leading: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: AppColors.primaryContainer
-                                  .withValues(alpha: 0.2),
+                              color: AppColors.primaryContainer.withValues(
+                                alpha: 0.2,
+                              ),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: const Icon(
@@ -375,15 +377,17 @@ class _ProviderMemberDetailScreenState
           .read(providerMembersNotifierProvider.notifier)
           .suspendMember(member.id, reason);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              success
-                  ? 'Đã tạm đình chỉ nhân viên ${member.displayName}.'
-                  : 'Không thể đình chỉ nhân viên.',
-            ),
-          ),
-        );
+        if (success) {
+          await AppDialog.success(
+            context,
+            message: 'Đã tạm đình chỉ nhân viên ${member.displayName}.',
+          );
+        } else {
+          await AppDialog.error(
+            context,
+            message: 'Không thể đình chỉ nhân viên.',
+          );
+        }
       }
     }
   }
@@ -400,15 +404,17 @@ class _ProviderMemberDetailScreenState
           .read(providerMembersNotifierProvider.notifier)
           .reactivateMember(member.id, reason);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              success
-                  ? 'Đã khôi phục quyền làm việc cho ${member.displayName}.'
-                  : 'Không thể khôi phục nhân viên (hãy kiểm tra điều kiện KYC/hồ sơ).',
-            ),
-          ),
-        );
+        if (success) {
+          await AppDialog.success(
+            context,
+            message: 'Đã khôi phục quyền làm việc cho ${member.displayName}.',
+          );
+        } else {
+          await AppDialog.error(
+            context,
+            message: 'Không thể khôi phục nhân viên (hãy kiểm tra điều kiện KYC/hồ sơ).',
+          );
+        }
       }
     }
   }

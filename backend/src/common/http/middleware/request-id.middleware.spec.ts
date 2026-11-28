@@ -2,7 +2,7 @@ import type { NextFunction, Response } from 'express';
 import type { RequestWithId } from '../types/request-with-id.type';
 import { requestIdMiddleware } from './request-id.middleware';
 import {
-  allowsFeedReadFallback,
+  allowsPublicReadFallback,
   currentRequestId,
   runWithRequestId,
 } from '../request-context';
@@ -77,6 +77,14 @@ describe('requestIdMiddleware', () => {
   it.each([
     ['GET', '/api/feed/posts', true],
     ['GET', '/api/me/feed/posts', true],
+    ['GET', '/api/categories', true],
+    ['GET', '/api/categories/hair-care', true],
+    ['GET', '/api/services', true],
+    ['GET', '/api/services/hair-care', true],
+    ['POST', '/api/categories', false],
+    ['POST', '/api/services', false],
+    ['GET', '/api/services/hair-care/booking', false],
+    ['GET', '/api/admin/services', false],
     ['GET', '/api/me/feed/mine', false],
     ['GET', '/api/internal/feed/cache/status', false],
     ['POST', '/api/me/feed/posts', false],
@@ -92,9 +100,9 @@ describe('requestIdMiddleware', () => {
       request,
       { setHeader: jest.fn() } as unknown as Response,
       () => {
-        expect(allowsFeedReadFallback()).toBe(allowed);
+        expect(allowsPublicReadFallback()).toBe(allowed);
       },
     );
-    expect(allowsFeedReadFallback()).toBe(false);
+    expect(allowsPublicReadFallback()).toBe(false);
   });
 });

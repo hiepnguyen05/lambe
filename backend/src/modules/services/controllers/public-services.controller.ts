@@ -8,6 +8,7 @@ import {
 } from '../../../common/openapi/api-response.decorators';
 import { ServicesQueryService } from '../application/services-query.service';
 import { PublicServiceQueryDto } from '../dto/public-service-query.dto';
+import { ServiceReviewsQueryDto } from '../dto/service-reviews-query.dto';
 import { ServiceSlugParamDto } from '../dto/service-slug-param.dto';
 
 @ApiTags('Services')
@@ -25,6 +26,20 @@ export class PublicServicesController {
   @ApiValidationError()
   findActive(@Query() query: PublicServiceQueryDto) {
     return this.servicesQuery.findActive(query);
+  }
+
+  @Get(':slug/reviews')
+  @ApiOperation({ summary: 'Lấy danh sách đánh giá phân trang của một dịch vụ' })
+  @ApiNotFoundError('Dịch vụ')
+  findReviewsBySlug(
+    @Param() params: ServiceSlugParamDto,
+    @Query() query: ServiceReviewsQueryDto,
+  ) {
+    return this.servicesQuery.findReviewsBySlug(
+      params.slug,
+      query.cursor,
+      query.limit,
+    );
   }
 
   @Get(':slug')

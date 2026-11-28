@@ -1,60 +1,29 @@
 // Rehearse additive membership, verification and capabilities migrations on legacy rows.
 // All fixtures live in a temporary schema inside an explicitly isolated test DB.
-const { spawnSync } = require('node:child_process');
-const { readFileSync } = require('node:fs');
-const { join } = require('node:path');
-const { randomUUID } = require('node:crypto');
+const {
+  readMigration,
+  runRehearsal,
+  temporarySchema,
+} = require('./migration-rehearsal.cjs');
 
-const database = new URL(
-  process.env.TEST_DATABASE_URL || 'postgresql://localhost/',
-).pathname.slice(1);
-if (!/^lambe_booking_test_[a-z0-9_]+$/.test(database)) {
-  throw new Error(
-    'TEST_DATABASE_URL must identify an isolated lambe_booking_test_* database.',
-  );
-}
-const schema = `member_rehearsal_${randomUUID().replaceAll('-', '')}`;
-const migration = readFileSync(
-  join(
-    __dirname,
-    '../prisma/migrations/20261027130000_provider_members/migration.sql',
-  ),
-  'utf8',
+const schema = temporarySchema('member_rehearsal');
+const migration = readMigration(
+  '../prisma/migrations/20261027130000_provider_members/migration.sql',
 );
-const verificationMigration = readFileSync(
-  join(
-    __dirname,
-    '../prisma/migrations/20261027150000_provider_member_verification/migration.sql',
-  ),
-  'utf8',
+const verificationMigration = readMigration(
+  '../prisma/migrations/20261027150000_provider_member_verification/migration.sql',
 );
-const capabilitiesMigration = readFileSync(
-  join(
-    __dirname,
-    '../prisma/migrations/20261028100000_provider_member_capabilities/migration.sql',
-  ),
-  'utf8',
+const capabilitiesMigration = readMigration(
+  '../prisma/migrations/20261028100000_provider_member_capabilities/migration.sql',
 );
-const receivingMigration = readFileSync(
-  join(
-    __dirname,
-    '../prisma/migrations/20261028103000_provider_member_receiving_control/migration.sql',
-  ),
-  'utf8',
+const receivingMigration = readMigration(
+  '../prisma/migrations/20261028103000_provider_member_receiving_control/migration.sql',
 );
-const bookingMigration = readFileSync(
-  join(
-    __dirname,
-    '../prisma/migrations/20261028120000_member_booking/migration.sql',
-  ),
-  'utf8',
+const bookingMigration = readMigration(
+  '../prisma/migrations/20261028120000_member_booking/migration.sql',
 );
-const financeMigration = readFileSync(
-  join(
-    __dirname,
-    '../prisma/migrations/20261029090000_member_finance/migration.sql',
-  ),
-  'utf8',
+const financeMigration = readMigration(
+  '../prisma/migrations/20261029090000_member_finance/migration.sql',
 );
 const sql = `
 CREATE SCHEMA "${schema}";
@@ -196,27 +165,7 @@ END $finance_rehearsal$;
 -- This deletion only removes the temporary fixture schema in the isolated DB.
 DROP SCHEMA "${schema}" CASCADE;
 `;
-const result = spawnSync(
-  'docker',
-  [
-    'exec',
-    '-i',
-    'lambe-postgres',
-    'psql',
-    '-U',
-    'postgres',
-    '-d',
-    database,
-    '-v',
-    'ON_ERROR_STOP=1',
-  ],
-  { input: sql, encoding: 'utf8' },
-);
-if (result.error) throw result.error;
-if (result.status !== 0) {
-  process.stderr.write(result.stderr || result.stdout);
-  process.exit(result.status || 1);
-}
-console.log(
+runRehearsal(
+  sql,
   'PASS: membership/KYC/capabilities/booking plus explicit cash backfill, unknown-payment preservation, immutable cash snapshots and correct collector validation.',
 );

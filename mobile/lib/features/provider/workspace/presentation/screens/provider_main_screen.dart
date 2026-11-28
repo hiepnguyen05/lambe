@@ -96,13 +96,6 @@ class _ProviderMainScreenState extends ConsumerState<ProviderMainScreen> {
                 _buildNavItem(
                   context: context,
                   index: 4,
-                  icon: Icons.star_outline_rounded,
-                  activeIcon: Icons.star_rounded,
-                  label: 'Đánh giá',
-                ),
-                _buildNavItem(
-                  context: context,
-                  index: 5,
                   icon: Icons.person_outline,
                   activeIcon: Icons.person,
                   label: 'Tài khoản',

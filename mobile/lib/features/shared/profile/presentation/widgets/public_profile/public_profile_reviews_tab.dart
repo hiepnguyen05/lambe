@@ -1,15 +1,115 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:mobile/core/error/app_failure.dart';
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/features/provider/reviews/data/provider_reviews_repository.dart';
 import 'package:mobile/features/shared/profile/domain/entities/partner_public_profile_entity.dart';
 
-class PublicProfileReviewsTab extends StatelessWidget {
+class PublicProfileReviewsTab extends ConsumerStatefulWidget {
   final PartnerPublicProfileEntity profile;
 
   const PublicProfileReviewsTab({
     super.key,
     required this.profile,
   });
+
+  @override
+  ConsumerState<PublicProfileReviewsTab> createState() =>
+      _PublicProfileReviewsTabState();
+}
+
+class _PublicProfileReviewsTabState
+    extends ConsumerState<PublicProfileReviewsTab> {
+  late List<PublicReviewItemEntity> _reviews;
+  String? _nextCursor;
+  bool _hasRequestedMore = false;
+  bool _loadingMore = false;
+  String? _loadError;
+  final CancelToken _cancelToken = CancelToken();
+
+  @override
+  void initState() {
+    super.initState();
+    _reviews = List<PublicReviewItemEntity>.from(widget.profile.reviews);
+  }
+
+  @override
+  void didUpdateWidget(covariant PublicProfileReviewsTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.profile != widget.profile) {
+      _reviews = List<PublicReviewItemEntity>.from(widget.profile.reviews);
+      _nextCursor = null;
+      _hasRequestedMore = false;
+      _loadError = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _cancelToken.cancel();
+    super.dispose();
+  }
+
+  bool get _canLoadMore =>
+      (_hasRequestedMore && _nextCursor != null) ||
+      (!_hasRequestedMore &&
+          widget.profile.reviewCount > _reviews.length &&
+          widget.profile.id.isNotEmpty);
+
+  Future<void> _loadMore() async {
+    if (_loadingMore) return;
+    setState(() {
+      _loadingMore = true;
+      _loadError = null;
+    });
+    try {
+      final cursor =
+          _nextCursor ?? (_reviews.isNotEmpty ? _reviews.last.id : null);
+      final page = await ref
+          .read(providerReviewsRepositoryProvider)
+          .list(
+            widget.profile.id,
+            cursor: cursor,
+            cancelToken: _cancelToken,
+          );
+      if (!mounted) return;
+      final existingIds = _reviews.map((e) => e.id).toSet();
+      final appended = page.reviews
+          .where((r) => !existingIds.contains(r.id))
+          .map(
+            (r) => PublicReviewItemEntity(
+              id: r.id,
+              rating: r.rating,
+              comment: r.comment ?? '',
+              createdAt: r.createdAt,
+              customerName: 'Khách hàng Lambe',
+              assignedMemberName: r.assignedMemberName,
+            ),
+          )
+          .toList();
+      setState(() {
+        _reviews = [..._reviews, ...appended];
+        _nextCursor = page.nextCursor;
+        _hasRequestedMore = true;
+      });
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel || !mounted) return;
+      setState(() => _loadError = 'Không thể tải thêm đánh giá.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = e is AppFailure
+            ? e.message
+            : 'Không thể tải thêm đánh giá.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _loadingMore = false);
+      }
+    }
+  }
 
   String _formatDate(DateTime date) {
     final day = date.day.toString().padLeft(2, '0');
@@ -20,7 +120,8 @@ class PublicProfileReviewsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reviews = profile.reviews;
+    final profile = widget.profile;
+    final reviews = _reviews;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -49,22 +150,24 @@ class PublicProfileReviewsTab extends StatelessWidget {
                     textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text(
-                        profile.rating.toStringAsFixed(1),
+                        profile.rating?.toStringAsFixed(1) ?? '--',
                         style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w800,
                           color: AppColors.onSurface,
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      const Text(
-                        '/ 5.0',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.outline,
+                      if (profile.rating != null) ...[
+                        const SizedBox(width: 4),
+                        const Text(
+                          '/ 5.0',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.outline,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -72,7 +175,7 @@ class PublicProfileReviewsTab extends StatelessWidget {
                     children: List.generate(
                       5,
                       (index) => Icon(
-                        index < profile.rating.round()
+                        index < (profile.rating ?? 0).round()
                             ? Icons.star_rounded
                             : Icons.star_outline_rounded,
                         size: 18,
@@ -144,7 +247,7 @@ class PublicProfileReviewsTab extends StatelessWidget {
               ],
             ),
           )
-        else
+        else ...[
           ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -155,6 +258,30 @@ class PublicProfileReviewsTab extends StatelessWidget {
               return _buildReviewCard(review);
             },
           ),
+          if (_loadError != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _loadError!,
+              style: const TextStyle(fontSize: 12, color: AppColors.error),
+            ),
+          ],
+          if (_canLoadMore) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: _loadingMore ? null : _loadMore,
+                child: _loadingMore
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(_loadError != null ? 'Thử lại' : 'Xem thêm đánh giá'),
+              ),
+            ),
+          ],
+        ],
       ],
     );
   }
@@ -243,6 +370,18 @@ class PublicProfileReviewsTab extends StatelessWidget {
               ),
             ],
           ),
+          if (review.assignedMemberName != null &&
+              review.assignedMemberName!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Chuyên viên thực hiện: ${review.assignedMemberName}',
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ],
           if (review.comment.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(

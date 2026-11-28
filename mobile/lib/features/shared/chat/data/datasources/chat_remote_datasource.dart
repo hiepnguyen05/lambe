@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import 'package:mobile/core/constants/api_endpoints.dart';
 import 'package:mobile/core/network/api_response_parser.dart';
+import 'package:mobile/core/network/network_exceptions.dart';
 import 'package:mobile/core/network/upload_payload.dart';
 
 import '../../domain/entities/chat_conversation_entity.dart';
@@ -65,19 +66,6 @@ class DioChatRemoteDataSource implements ChatRemoteDataSource {
 
   DioChatRemoteDataSource(this._dio);
 
-  String _extractError(DioException e, {required String fallback}) {
-    final resData = e.response?.data;
-    if (resData is Map<String, dynamic>) {
-      final msg = resData['message'];
-      if (msg is String && msg.isNotEmpty) {
-        return msg;
-      } else if (msg is List && msg.isNotEmpty) {
-        return msg.first.toString();
-      }
-    }
-    return e.message ?? fallback;
-  }
-
   @override
   Future<({String conversationId, bool created, ChatMessageEntity message})>
   startConversation({
@@ -108,7 +96,7 @@ class DioChatRemoteDataSource implements ChatRemoteDataSource {
       );
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể mở cuộc trò chuyện.'),
+        ExceptionHandler.extractMessage(e, fallback: 'Không thể mở cuộc trò chuyện.'),
       );
     }
   }
@@ -160,7 +148,7 @@ class DioChatRemoteDataSource implements ChatRemoteDataSource {
       return (conversations: conversations, nextCursor: nextCursor);
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể tải danh sách tin nhắn.'),
+        ExceptionHandler.extractMessage(e, fallback: 'Không thể tải danh sách tin nhắn.'),
       );
     }
   }
@@ -211,7 +199,7 @@ class DioChatRemoteDataSource implements ChatRemoteDataSource {
 
       return (messages: messages, nextCursor: nextCursor);
     } on DioException catch (e) {
-      throw Exception(_extractError(e, fallback: 'Không thể tải tin nhắn.'));
+      throw Exception(ExceptionHandler.extractMessage(e, fallback: 'Không thể tải tin nhắn.'));
     }
   }
 
@@ -239,7 +227,7 @@ class DioChatRemoteDataSource implements ChatRemoteDataSource {
           : data;
       return ChatMessageEntity.fromJson(messageJson);
     } on DioException catch (e) {
-      throw Exception(_extractError(e, fallback: 'Không thể gửi tin nhắn.'));
+      throw Exception(ExceptionHandler.extractMessage(e, fallback: 'Không thể gửi tin nhắn.'));
     }
   }
 
@@ -270,7 +258,7 @@ class DioChatRemoteDataSource implements ChatRemoteDataSource {
           : data;
       return ChatMessageEntity.fromJson(messageJson);
     } on DioException catch (e) {
-      throw Exception(_extractError(e, fallback: 'Không thể gửi ảnh.'));
+      throw Exception(ExceptionHandler.extractMessage(e, fallback: 'Không thể gửi ảnh.'));
     }
   }
 
@@ -287,7 +275,7 @@ class DioChatRemoteDataSource implements ChatRemoteDataSource {
       final data = ApiResponseParser.dataMap(response);
       return (data['lastReadSequence'] as num?)?.toInt() ?? lastReadSequence;
     } on DioException catch (e) {
-      throw Exception(_extractError(e, fallback: 'Không thể cập nhật đã đọc.'));
+      throw Exception(ExceptionHandler.extractMessage(e, fallback: 'Không thể cập nhật đã đọc.'));
     }
   }
 
@@ -301,7 +289,7 @@ class DioChatRemoteDataSource implements ChatRemoteDataSource {
       return data['blockedByMe'] == true;
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể chặn cuộc trò chuyện.'),
+        ExceptionHandler.extractMessage(e, fallback: 'Không thể chặn cuộc trò chuyện.'),
       );
     }
   }
@@ -315,7 +303,7 @@ class DioChatRemoteDataSource implements ChatRemoteDataSource {
       final data = ApiResponseParser.dataMap(response);
       return data['blockedByMe'] != true;
     } on DioException catch (e) {
-      throw Exception(_extractError(e, fallback: 'Không thể bỏ chặn.'));
+      throw Exception(ExceptionHandler.extractMessage(e, fallback: 'Không thể bỏ chặn.'));
     }
   }
 
@@ -339,7 +327,7 @@ class DioChatRemoteDataSource implements ChatRemoteDataSource {
       return data['id']?.toString() ?? '';
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể gửi báo cáo vi phạm.'),
+        ExceptionHandler.extractMessage(e, fallback: 'Không thể gửi báo cáo vi phạm.'),
       );
     }
   }

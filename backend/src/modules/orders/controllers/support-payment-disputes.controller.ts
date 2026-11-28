@@ -26,7 +26,11 @@ import { InternalRolesGuard } from '../../internal-auth/guards/internal-roles.gu
 import type { AuthenticatedInternalAccount } from '../../internal-auth/types/authenticated-internal-account.type';
 import { AdminOrderQueryService } from '../application/operations/admin-order-query.service';
 import { OrderPaymentDisputeService } from '../application/payments/order-payment-dispute.service';
-import { DecidePaymentDisputeDto, OrderParamDto } from '../dto/order.dto';
+import {
+  CloseUnpaidPaymentDisputeDto,
+  DecidePaymentDisputeDto,
+  OrderParamDto,
+} from '../dto/order.dto';
 import { AdminOrderQueryDto } from '../dto/admin-order-query.dto';
 
 @ApiTags('Support Payment Disputes')
@@ -83,5 +87,31 @@ export class SupportPaymentDisputesController {
     @CurrentRequestMetadata() request: RequestMetadata,
   ) {
     return this.disputes.decide(account.accountId, params.id, dto, request);
+  }
+
+  @Post(':id/close-unpaid')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Đóng tranh chấp không thu được tiền, hủy đơn và hoàn lại khoản hoa hồng đang tạm giữ',
+  })
+  @ApiStandardOk({
+    description: 'Đã đóng tranh chấp và hoàn lại khoản tạm giữ trong ví.',
+    data: { id: 'order-uuid', status: 'CANCELLED' },
+  })
+  @ApiValidationError()
+  @ApiConflictError('Đơn không còn tranh chấp hoặc khoản tạm giữ không hợp lệ.')
+  closeUnpaid(
+    @CurrentInternalAccount() account: AuthenticatedInternalAccount,
+    @Param() params: OrderParamDto,
+    @Body() dto: CloseUnpaidPaymentDisputeDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.disputes.closeUnpaid(
+      account.accountId,
+      params.id,
+      dto,
+      request,
+    );
   }
 }

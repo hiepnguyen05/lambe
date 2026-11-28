@@ -7,9 +7,9 @@ và không tự tạo lịch đặt. Quyền tổ chức hiện có xem thêm
 
 ## Đọc dữ liệu
 
-Backend hỗ trợ object cache Redis tùy chọn cho list công khai và chi tiết (`FEED_CACHE_ENABLED`, mặc định false). Snapshot caption/media được tách khỏi provider, dịch vụ, counts và viewer flags đọc mới từ DB. Cổng hiển thị công khai vẫn được kiểm tra trong PostgreSQL trước mỗi lần đọc cache. Request cache quá `FEED_CACHE_TIMEOUT_MS` (mặc định 100 ms) được coi là cache miss. `FEED_CACHE_INDEX_ENABLED` bật timeline page index theo generation DB, bộ lọc, cursor và limit. Following/saved/mine và quản lý chưa sử dụng cache. GET Feed công khai có limiter cục bộ giới hạn chặt hơn khi Redis không sẵn sàng. Xem [kế hoạch](feed-cache-upgrade-plan.md) và [runbook](feed-cache-runbook.md).
+Backend hỗ trợ object cache Redis tùy chọn cho list công khai và chi tiết (`FEED_CACHE_ENABLED`, mặc định false). Snapshot caption/media được tách khỏi provider, dịch vụ, counts và viewer flags đọc mới từ DB. Cổng hiển thị công khai vẫn được kiểm tra trong PostgreSQL trước mỗi lần đọc cache. Request cache quá `FEED_CACHE_TIMEOUT_MS` (mặc định 100 ms) được coi là cache miss. Following/saved/mine và quản lý chưa sử dụng cache. GET Feed công khai có limiter cục bộ giới hạn chặt hơn khi Redis không sẵn sàng. Xem [runbook](feed-cache-runbook.md).
 
-Admin có `GET /internal/feed/cache/status` và `POST /internal/feed/cache/rebuild`. Gợi ý thử nghiệm nằm ở `GET /me/feed/recommended`, event ở `POST /me/feed/posts/:id/engagements`; cả hai phụ thuộc `FEED_RECOMMENDATIONS_ENABLED`, mặc định false. API gợi ý trả một danh sách tối đa 20 bài cùng `nextCursor=null`, không dùng cursor của Feed theo thời gian.
+Admin có `GET /internal/feed/cache/status` để theo dõi cache và backlog worker. Gợi ý thử nghiệm nằm ở `GET /me/feed/recommended`, event ở `POST /me/feed/posts/:id/engagements`; cả hai phụ thuộc `FEED_RECOMMENDATIONS_ENABLED`, mặc định false. API gợi ý trả một danh sách tối đa 20 bài cùng `nextCursor=null`, không dùng cursor của Feed theo thời gian.
 
 | Method/path sau `/api` | Xác thực | Dữ liệu |
 | --- | --- | --- |

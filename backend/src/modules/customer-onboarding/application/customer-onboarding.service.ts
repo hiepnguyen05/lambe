@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Optional,
+} from '@nestjs/common';
 import {
   CustomerOnboardingStatus,
   Prisma,
@@ -6,6 +11,11 @@ import {
   ServiceStatus,
 } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { discoveryOnboardingCacheKey } from '../../../common/cache/discovery-cache.keys';
+import {
+  CACHE_STORE,
+  type CacheStore,
+} from '../../../infrastructure/cache/cache-store';
 import { PrismaService } from '../../../infrastructure/persistence/postgres/prisma.service';
 import type { UpdateCustomerOnboardingDto } from '../dto/update-customer-onboarding.dto';
 
@@ -62,7 +72,10 @@ type ProfileWithPreferences = Prisma.CustomerProfileGetPayload<{
 
 @Injectable()
 export class CustomerOnboardingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() @Inject(CACHE_STORE) private readonly cache?: CacheStore,
+  ) {}
 
   async getOptions() {
     const categories = await this.prisma.serviceCategory.findMany({
@@ -163,6 +176,7 @@ export class CustomerOnboardingService {
       },
     );
 
+    await this.invalidateCache(userId);
     const profile = await this.loadProfile(userId);
     return {
       success: true,
@@ -200,6 +214,7 @@ export class CustomerOnboardingService {
       },
     });
 
+    await this.invalidateCache(userId);
     return {
       success: true,
       message: 'Hoàn tất cá nhân hóa tài khoản.',
@@ -222,11 +237,21 @@ export class CustomerOnboardingService {
       },
     });
 
+    await this.invalidateCache(userId);
     return {
       success: true,
       message: 'Đã bỏ qua onboarding. Bạn có thể hoàn thiện sau.',
       data: this.toResponse(await this.loadProfile(userId)),
     };
+  }
+
+  private async invalidateCache(userId: string): Promise<void> {
+    if (!this.cache) return;
+    try {
+      await this.cache.delete(discoveryOnboardingCacheKey(userId));
+    } catch {
+      // Fail-open.
+    }
   }
 
   private loadProfile(userId: string): Promise<ProfileWithPreferences> {

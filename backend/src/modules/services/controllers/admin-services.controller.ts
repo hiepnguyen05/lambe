@@ -45,8 +45,10 @@ import { InternalJwtAuthGuard } from '../../internal-auth/guards/internal-jwt-au
 import { InternalRolesGuard } from '../../internal-auth/guards/internal-roles.guard';
 import type { AuthenticatedInternalAccount } from '../../internal-auth/types/authenticated-internal-account.type';
 import { ServiceImageService } from '../application/service-image.service';
-import { ServicesCommandService } from '../application/services-command.service';
 import { ServicesQueryService } from '../application/services-query.service';
+import { ChangeServiceStatusService } from '../application/change-service-status.service';
+import { CreateServiceService } from '../application/create-service.service';
+import { UpdateServiceService } from '../application/update-service.service';
 import { CreateServiceDto } from '../dto/create-service.dto';
 import { ServiceQueryDto } from '../dto/service-query.dto';
 import { UpdateServiceStatusDto } from '../dto/update-service-status.dto';
@@ -60,7 +62,9 @@ import { UpdateServiceDto } from '../dto/update-service.dto';
 export class AdminServicesController {
   constructor(
     private readonly servicesQuery: ServicesQueryService,
-    private readonly servicesCommand: ServicesCommandService,
+    private readonly createService: CreateServiceService,
+    private readonly updateService: UpdateServiceService,
+    private readonly changeServiceStatus: ChangeServiceStatusService,
     private readonly serviceImage: ServiceImageService,
   ) {}
 
@@ -102,7 +106,7 @@ export class AdminServicesController {
     @CurrentInternalAccount() account: AuthenticatedInternalAccount,
     @CurrentRequestMetadata() request: RequestMetadata,
   ) {
-    return this.servicesCommand.create(dto, account.accountId, request);
+    return this.createService.execute(dto, account.accountId, request);
   }
 
   @Patch(':id/status')
@@ -120,7 +124,7 @@ export class AdminServicesController {
     @CurrentInternalAccount() account: AuthenticatedInternalAccount,
     @CurrentRequestMetadata() request: RequestMetadata,
   ) {
-    return this.servicesCommand.updateStatus(
+    return this.changeServiceStatus.execute(
       id,
       dto,
       account.accountId,
@@ -146,7 +150,7 @@ export class AdminServicesController {
     @CurrentInternalAccount() account: AuthenticatedInternalAccount,
     @CurrentRequestMetadata() request: RequestMetadata,
   ) {
-    return this.servicesCommand.update(id, dto, account.accountId, request);
+    return this.updateService.execute(id, dto, account.accountId, request);
   }
 
   @Post(':id/cover-image')

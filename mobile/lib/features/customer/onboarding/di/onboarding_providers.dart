@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mobile/core/network/dio_client.dart';
+import 'package:mobile/features/customer/discovery/data/provider_discovery_repository.dart';
 import 'package:mobile/features/shared/auth/di/auth_providers.dart';
 
 import '../application/onboarding_notifier.dart';
@@ -17,8 +18,13 @@ final onboardingRepositoryProvider = Provider<OnboardingRepository>((ref) {
 
 final onboardingNotifierProvider =
     StateNotifierProvider<OnboardingNotifier, OnboardingState>((ref) {
+      final userId = ref.watch(
+        authNotifierProvider.select((s) => s.valueOrNull?.id),
+      );
       return OnboardingNotifier(
         ref.watch(onboardingRepositoryProvider),
         ref.read(authNotifierProvider.notifier).updateOnboardingStatus,
+        autoLoad: userId != null,
+        onPreferencesChanged: () => ref.invalidate(nearbyHomeProvidersProvider),
       );
     });

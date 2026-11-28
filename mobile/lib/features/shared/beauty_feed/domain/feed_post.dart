@@ -29,6 +29,7 @@ class FeedMedia extends Equatable {
 
 class FeedService extends Equatable {
   final String id, serviceId, name, status;
+  final String? categoryId, categorySlug;
   final int price;
   final int? duration;
   const FeedService({
@@ -36,11 +37,22 @@ class FeedService extends Equatable {
     required this.serviceId,
     required this.name,
     required this.status,
+    this.categoryId,
+    this.categorySlug,
     required this.price,
     this.duration,
   });
   @override
-  List<Object?> get props => [id, serviceId, name, status, price, duration];
+  List<Object?> get props => [
+    id,
+    serviceId,
+    name,
+    status,
+    categoryId,
+    categorySlug,
+    price,
+    duration,
+  ];
 }
 
 class FeedPost extends Equatable {

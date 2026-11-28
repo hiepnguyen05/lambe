@@ -81,9 +81,6 @@ class OrderRescheduleController extends StateNotifier<RescheduleState> {
         );
       }
       if (time != null) {
-        if (scope.role != RescheduleRole.customer) {
-          throw const ValidationFailure('Chỉ khách hàng được đề xuất giờ mới.');
-        }
         final error = validateRescheduleTime(time, clock(), current.startAt);
         if (error != null) {
           throw ValidationFailure(error);
@@ -94,7 +91,7 @@ class OrderRescheduleController extends StateNotifier<RescheduleState> {
           );
         }
       } else {
-        if (scope.role != RescheduleRole.provider ||
+        if (current.proposal?.requestedBy == scope.role ||
             current.proposal?.id != proposal!.id ||
             current.proposal?.isPending(clock()) != true) {
           throw const ValidationFailure(
@@ -114,6 +111,7 @@ class OrderRescheduleController extends StateNotifier<RescheduleState> {
         bookingType: current.bookingType,
         startAt: current.startAt,
         updatedAt: current.updatedAt,
+        overdueAt: current.overdueAt,
         proposal: receipt,
       );
       // Acknowledgement is authoritative, but dates still come from a fresh order read.
@@ -147,7 +145,8 @@ class OrderRescheduleController extends StateNotifier<RescheduleState> {
               ambiguous &&
               latest != null &&
               (time != null
-                  ? latest.startAt.isAtSameMomentAs(time) &&
+                  ? latest.requestedBy == scope.role &&
+                        latest.startAt.isAtSameMomentAs(time) &&
                         latest.id != previousProposalId
                   : latest.id == proposal!.id &&
                         latest.status == (approve! ? 'ACCEPTED' : 'REJECTED'));

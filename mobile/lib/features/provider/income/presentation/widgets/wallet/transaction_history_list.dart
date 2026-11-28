@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 
 import '../../../domain/entities/wallet_transaction_entity.dart';
 
 class TransactionHistoryList extends StatelessWidget {
   final List<WalletTransactionEntity> transactions;
   final bool isLoading;
+  final String? errorMessage;
+  final VoidCallback? onRetry;
 
   const TransactionHistoryList({
     super.key,
     required this.transactions,
     this.isLoading = false,
+    this.errorMessage,
+    this.onRetry,
   });
 
   @override
@@ -31,7 +36,7 @@ class TransactionHistoryList extends StatelessWidget {
               ),
             ),
             Text(
-              'Gần đây',
+              '${transactions.length} giao dịch',
               style: theme.textTheme.labelSmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -39,10 +44,33 @@ class TransactionHistoryList extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        if (isLoading)
+        if (isLoading && transactions.isEmpty)
           const Padding(
             padding: EdgeInsets.all(24.0),
             child: Center(child: CircularProgressIndicator()),
+          )
+        else if (errorMessage != null && transactions.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: colorScheme.errorContainer.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onErrorContainer,
+                  ),
+                ),
+                if (onRetry != null) ...[
+                  const SizedBox(height: 8),
+                  TextButton(onPressed: onRetry, child: const Text('Thử lại')),
+                ],
+              ],
+            ),
           )
         else if (transactions.isEmpty)
           const Padding(
@@ -51,56 +79,26 @@ class TransactionHistoryList extends StatelessWidget {
           )
         else
           ...transactions.map((tx) {
-            IconData icon;
-            String amountLabel;
-            bool isPositive;
-            String prefix = '';
-
-            switch (tx.type) {
-              case TransactionType.topUp:
-                icon = Icons.add_card;
-                amountLabel = 'Nạp tiền';
-                isPositive = true;
-                prefix = '+';
-                break;
-              case TransactionType.commissionDeduction:
-                icon = Icons.receipt_long;
-                amountLabel = 'Hoa hồng 15%';
-                isPositive = false;
-                prefix = '-';
-                break;
-              case TransactionType.refund:
-                icon = Icons.assignment_return;
-                amountLabel = 'Hoàn tiền';
-                isPositive = true;
-                prefix = '+';
-                break;
-              case TransactionType.withdrawal:
-                icon = Icons.money_off;
-                amountLabel = 'Rút tiền';
-                isPositive = false;
-                prefix = '-';
-                break;
-              case TransactionType.manualAdjustment:
-                icon = Icons.tune;
-                amountLabel = 'Điều chỉnh';
-                isPositive = tx.amount > 0;
-                prefix = tx.amount > 0 ? '+' : '';
-                break;
-            }
-
-            final dateStr =
-                '${tx.createdAt.day}/${tx.createdAt.month}/${tx.createdAt.year} ${tx.createdAt.hour}:${tx.createdAt.minute.toString().padLeft(2, '0')}';
+            final isPositive = tx.isCredit;
+            final prefix = isPositive ? '+' : '-';
+            final d = tx.createdAt.day.toString().padLeft(2, '0');
+            final m = tx.createdAt.month.toString().padLeft(2, '0');
+            final h = tx.createdAt.hour.toString().padLeft(2, '0');
+            final min = tx.createdAt.minute.toString().padLeft(2, '0');
+            final dateStr = '$d/$m/${tx.createdAt.year} $h:$min';
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
               child: _buildTransactionItem(
-                icon: icon,
-                title: tx.description.isNotEmpty ? tx.description : 'Giao dịch',
-                orderId: tx.referenceId ?? '',
+                icon: _iconForType(tx.type),
+                title: tx.displayTitle,
+                orderCode: tx.shortOrderCode ?? '',
                 subtitle: dateStr,
-                amount: '$prefix${_formatCurrency(tx.amount.abs())} đ',
-                amountLabel: amountLabel,
+                availableAfterText:
+                    'Khả dụng: ${CurrencyUtils.vndDecimal.format(tx.availableAfter.round())} đ',
+                amount:
+                    '$prefix${CurrencyUtils.vndDecimal.format(tx.amount.abs().round())} đ',
+                amountLabel: tx.badgeLabel,
                 isPositive: isPositive,
                 context: context,
               ),
@@ -110,18 +108,33 @@ class TransactionHistoryList extends StatelessWidget {
     );
   }
 
-  String _formatCurrency(double amount) {
-    return amount.toInt().toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]}.',
-    );
+  IconData _iconForType(TransactionType type) {
+    switch (type) {
+      case TransactionType.topUp:
+        return Icons.add_card_rounded;
+      case TransactionType.commissionDeduction:
+        return Icons.receipt_long_rounded;
+      case TransactionType.hold:
+        return Icons.lock_clock_outlined;
+      case TransactionType.release:
+        return Icons.lock_open_rounded;
+      case TransactionType.voucherReimbursement:
+        return Icons.confirmation_num_outlined;
+      case TransactionType.refund:
+        return Icons.assignment_return_rounded;
+      case TransactionType.withdrawal:
+        return Icons.money_off_rounded;
+      case TransactionType.manualAdjustment:
+        return Icons.tune_rounded;
+    }
   }
 
   Widget _buildTransactionItem({
     required IconData icon,
     required String title,
-    required String orderId,
+    required String orderCode,
     required String subtitle,
+    required String availableAfterText,
     required String amount,
     required String amountLabel,
     required bool isPositive,
@@ -131,17 +144,13 @@ class TransactionHistoryList extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withAlpha(5),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.35),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -180,20 +189,33 @@ class TransactionHistoryList extends StatelessWidget {
                         color: colorScheme.onSurface,
                       ),
                     ),
-                    if (orderId.isNotEmpty)
-                      Text(
-                        orderId,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.primary,
+                    if (orderCode.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          orderCode,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 10.5,
+                          ),
                         ),
                       ),
                   ],
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 3),
                 Text(
-                  subtitle,
+                  '$subtitle · $availableAfterText',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
+                    fontSize: 11.5,
                   ),
                 ),
               ],

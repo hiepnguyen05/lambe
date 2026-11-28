@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import 'package:mobile/core/constants/api_endpoints.dart';
 import 'package:mobile/core/network/api_response_parser.dart';
+import 'package:mobile/core/network/network_exceptions.dart';
 
 import '../../domain/entities/customer_order_entity.dart';
 
@@ -31,19 +32,6 @@ class DioCustomerOrdersRemoteDataSource
 
   DioCustomerOrdersRemoteDataSource(this._dio);
 
-  String _extractErrorMessage(DioException e, {required String fallback}) {
-    final resData = e.response?.data;
-    if (resData is Map<String, dynamic>) {
-      final msg = resData['message'];
-      if (msg is String && msg.isNotEmpty) {
-        return msg;
-      } else if (msg is List && msg.isNotEmpty) {
-        return msg.first.toString();
-      }
-    }
-    return e.message ?? fallback;
-  }
-
   @override
   Future<List<CustomerOrderEntity>> getMyOrders({String? status}) async {
     try {
@@ -59,7 +47,10 @@ class DioCustomerOrdersRemoteDataSource
           .toList();
     } on DioException catch (e) {
       throw Exception(
-        _extractErrorMessage(e, fallback: 'Không thể tải danh sách đơn hàng.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể tải danh sách đơn hàng.',
+        ),
       );
     }
   }
@@ -72,7 +63,10 @@ class DioCustomerOrdersRemoteDataSource
       return CustomerOrderEntity.fromJson(data);
     } on DioException catch (e) {
       throw Exception(
-        _extractErrorMessage(e, fallback: 'Không thể xem thông tin đơn hàng.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể xem thông tin đơn hàng.',
+        ),
       );
     }
   }
@@ -91,7 +85,7 @@ class DioCustomerOrdersRemoteDataSource
       return CustomerOrderEntity.fromJson(data);
     } on DioException catch (e) {
       throw Exception(
-        _extractErrorMessage(
+        ExceptionHandler.extractMessage(
           e,
           fallback: 'Không thể hủy đơn hàng, vui lòng thử lại.',
         ),
@@ -117,7 +111,7 @@ class DioCustomerOrdersRemoteDataSource
       return CustomerOrderEntity.fromJson(ApiResponseParser.dataMap(response));
     } on DioException catch (e) {
       throw Exception(
-        _extractErrorMessage(
+        ExceptionHandler.extractMessage(
           e,
           fallback: 'Không thể xử lý quyết định hủy đơn.',
         ),
@@ -139,7 +133,10 @@ class DioCustomerOrdersRemoteDataSource
       await _dio.post(ApiEndpoints.orderReview(orderId), data: body);
     } on DioException catch (e) {
       throw Exception(
-        _extractErrorMessage(e, fallback: 'Không thể gửi đánh giá dịch vụ.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể gửi đánh giá dịch vụ.',
+        ),
       );
     }
   }

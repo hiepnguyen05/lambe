@@ -376,20 +376,11 @@ describe('Redis command deadlines and two-client recovery', () => {
     }
   });
 
-  it('bounds cache index and lock operations with their safe fallbacks', async () => {
+  it('bounds cache operations with their safe fallbacks', async () => {
     const client = await cache();
     const key = `lambe:test:cache-ops:${randomUUID()}`;
     const operations: Array<() => Promise<unknown>> = [
-      async () => expect(await client.setIfAbsent(key, 'token', 30)).toBeNull(),
-      async () =>
-        expect(await client.setMany([{ key, value: 1 }], 30)).toBe(false),
       async () => expect(await client.deleteMany([key])).toBe(false),
-      async () =>
-        expect(await client.replaceSortedPage(key, ['a'], 30)).toBe(false),
-      async () => expect(await client.readSortedPage(key, 10)).toBeNull(),
-      async () =>
-        expect(await client.advanceGeneration(key, '1', 30)).toBe(false),
-      async () => client.releaseLock(key, 'token'),
       async () => client.delete(key),
     ];
     for (const operation of operations) {

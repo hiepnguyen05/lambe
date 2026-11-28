@@ -37,7 +37,8 @@ class PublicServiceItemEntity extends Equatable {
       name: service['name']?.toString() ?? 'Dịch vụ làm đẹp',
       slug: service['slug']?.toString() ?? '',
       coverImageUrl: service['coverImageUrl']?.toString(),
-      iconUrl: service['iconUrl']?.toString() ?? category['iconUrl']?.toString(),
+      iconUrl:
+          service['iconUrl']?.toString() ?? category['iconUrl']?.toString(),
       categoryName: category['name']?.toString() ?? 'Dịch vụ',
       categorySlug: category['slug']?.toString() ?? '',
       priceAmount: (json['priceAmount'] as num?)?.toInt() ?? 0,
@@ -69,6 +70,7 @@ class PublicReviewItemEntity extends Equatable {
   final DateTime createdAt;
   final String customerName;
   final String? customerAvatar;
+  final String? assignedMemberName;
 
   const PublicReviewItemEntity({
     required this.id,
@@ -77,18 +79,24 @@ class PublicReviewItemEntity extends Equatable {
     required this.createdAt,
     required this.customerName,
     this.customerAvatar,
+    this.assignedMemberName,
   });
 
   factory PublicReviewItemEntity.fromJson(Map<String, dynamic> json) {
+    final assigned = json['assignedMember'];
+    final assignedName = assigned is Map
+        ? assigned['displayName']?.toString()
+        : null;
     return PublicReviewItemEntity(
       id: json['id']?.toString() ?? '',
-      rating: (json['rating'] as num?)?.toInt() ?? 5,
+      rating: ((json['rating'] as num?)?.toInt() ?? 0).clamp(0, 5),
       comment: json['comment']?.toString() ?? '',
       createdAt:
           DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
           DateTime.now(),
       customerName: json['customerName']?.toString() ?? 'Khách hàng',
       customerAvatar: json['customerAvatar']?.toString(),
+      assignedMemberName: assignedName,
     );
   }
 
@@ -100,6 +108,7 @@ class PublicReviewItemEntity extends Equatable {
     createdAt,
     customerName,
     customerAvatar,
+    assignedMemberName,
   ];
 }
 
@@ -140,10 +149,10 @@ class PartnerPublicProfileEntity extends Equatable {
   final bool isOnline;
   final bool isVerified;
   final int completedOrdersCount;
-  final double rating;
+  final double? rating;
   final int reviewCount;
-  final double acceptanceRate;
-  final double onTimeRate;
+  final double? acceptanceRate;
+  final double? onTimeRate;
   final List<PublicServiceItemEntity> services;
   final List<PublicReviewItemEntity> reviews;
   final List<PublicPortfolioItemEntity> portfolio;
@@ -159,10 +168,10 @@ class PartnerPublicProfileEntity extends Equatable {
     this.isOnline = false,
     this.isVerified = true,
     this.completedOrdersCount = 0,
-    this.rating = 5.0,
+    this.rating,
     this.reviewCount = 0,
-    this.acceptanceRate = 98.5,
-    this.onTimeRate = 99.0,
+    this.acceptanceRate,
+    this.onTimeRate,
     this.services = const [],
     this.reviews = const [],
     this.portfolio = const [],
@@ -209,14 +218,13 @@ class PartnerPublicProfileEntity extends Equatable {
       isVerified: true,
       completedOrdersCount:
           (stats['completedOrdersCount'] as num?)?.toInt() ?? 0,
-      rating: (stats['rating'] as num?)?.toDouble() ?? 5.0,
+      rating: (stats['rating'] as num?)?.toDouble(),
       reviewCount: (stats['reviewCount'] as num?)?.toInt() ?? 0,
-      acceptanceRate: (stats['acceptanceRate'] as num?)?.toDouble() ?? 98.5,
-      onTimeRate: (stats['onTimeRate'] as num?)?.toDouble() ?? 99.0,
+      acceptanceRate: (stats['acceptanceRate'] as num?)?.toDouble(),
+      onTimeRate: (stats['onTimeRate'] as num?)?.toDouble(),
       services: rawServices
           .map(
-            (e) =>
-                PublicServiceItemEntity.fromJson(e as Map<String, dynamic>),
+            (e) => PublicServiceItemEntity.fromJson(e as Map<String, dynamic>),
           )
           .toList(),
       reviews: rawReviews

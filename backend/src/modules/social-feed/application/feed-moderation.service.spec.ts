@@ -37,7 +37,10 @@ describe('FeedModerationService', () => {
     },
   };
   const db = {
-    feedReport: { findMany: jest.fn() },
+    feedReport: { findMany: jest.fn(), count: jest.fn() },
+    feedPost: { findMany: jest.fn(), count: jest.fn() },
+    feedLike: { count: jest.fn() },
+    feedComment: { count: jest.fn() },
     $transaction: jest.fn(
       async (callback: (transaction: typeof tx) => Promise<unknown>) =>
         callback(tx),
@@ -60,6 +63,44 @@ describe('FeedModerationService', () => {
     tx.feedPost.updateMany.mockResolvedValue({ count: 1 });
     audit.record.mockResolvedValue(undefined);
     db.feedReport.findMany.mockResolvedValue([]);
+    db.feedReport.count.mockResolvedValue(0);
+    db.feedPost.findMany.mockResolvedValue([]);
+    db.feedPost.count.mockResolvedValue(0);
+    db.feedLike.count.mockResolvedValue(0);
+    db.feedComment.count.mockResolvedValue(0);
+  });
+
+  it('includes pendingModeration count in admin stats', async () => {
+    db.feedPost.count
+      .mockResolvedValueOnce(12)
+      .mockResolvedValueOnce(8)
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(3);
+    db.feedReport.count.mockResolvedValueOnce(2);
+    db.feedLike.count.mockResolvedValueOnce(40);
+    db.feedComment.count.mockResolvedValueOnce(15);
+
+    const result = await service.stats();
+    expect(result).toEqual({
+      totalPosts: 12,
+      publishedPosts: 8,
+      hiddenPosts: 1,
+      pendingModeration: 3,
+      pendingReports: 2,
+      totalLikes: 40,
+      totalComments: 15,
+    });
+  });
+
+  it('filters posts by moderationStatus when specified', async () => {
+    await service.posts({ moderationStatus: 'PENDING', page: 1, limit: 20 });
+    expect(db.feedPost.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          moderationStatus: 'PENDING',
+        }),
+      }),
+    );
   });
 
   it('lists reviewed reports with reviewer audit fields', async () => {
@@ -119,9 +160,25 @@ describe('FeedModerationService', () => {
 
   it('never reopens a deleted post', async () => {
     tx.feedPost.updateMany.mockResolvedValue({ count: 0 });
+    tx.feedPost.findUnique.mockResolvedValueOnce({
+      status: FeedPostStatus.DELETED,
+      moderationStatus: 'APPROVED',
+    });
     await expect(
       service.setStatus('post-1', FeedPostStatus.PUBLISHED, 'moderator-1'),
-    ).rejects.toThrow();
+    ).rejects.toThrow('Không tìm thấy bài đăng.');
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('rejects publishing a post awaiting or failing moderation with ConflictException', async () => {
+    tx.feedPost.updateMany.mockResolvedValue({ count: 0 });
+    tx.feedPost.findUnique.mockResolvedValueOnce({
+      status: FeedPostStatus.HIDDEN,
+      moderationStatus: 'REJECTED',
+    });
+    await expect(
+      service.setStatus('post-1', FeedPostStatus.PUBLISHED, 'moderator-1'),
+    ).rejects.toThrow(ConflictException);
     expect(audit.record).not.toHaveBeenCalled();
   });
 });

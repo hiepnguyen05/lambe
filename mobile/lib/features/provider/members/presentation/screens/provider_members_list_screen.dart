@@ -62,13 +62,6 @@ class _ProviderMembersListScreenState
             icon: const Icon(Icons.outgoing_mail, color: AppColors.primary),
             onPressed: () => context.push('/provider/invitations'),
           ),
-          IconButton(
-            tooltip: 'Làm mới',
-            icon: const Icon(Icons.refresh, color: Color(0xFF0B1C30)),
-            onPressed: () => ref
-                .read(providerMembersNotifierProvider.notifier)
-                .loadMembers(),
-          ),
         ],
         bottom: TabBar(
           controller: _tabController,

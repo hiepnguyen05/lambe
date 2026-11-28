@@ -109,57 +109,9 @@ class DioProviderDashboardRemoteDataSource
     int radiusKm, {
     CancelToken? cancelToken,
   }) async {
-    final getRes = await _dio.get(
-      '/me/provider/setup',
-      cancelToken: cancelToken,
-    );
-    final currentData = ApiResponseParser.dataMap(getRes);
-
-    final servicesList = (currentData['services'] as List<dynamic>?) ?? [];
-    final activeServiceIds = servicesList
-        .where((s) => s['status'] == 'ACTIVE' || s['status'] == 'APPROVED')
-        .map((s) => s['id'] as String)
-        .toList();
-    final allServiceIds = servicesList.map((s) => s['id'] as String).toList();
-    final enabledServiceIds = activeServiceIds.isNotEmpty
-        ? activeServiceIds
-        : allServiceIds;
-
-    final rawWorkingHours =
-        (currentData['workingHours'] as List<dynamic>?) ?? [];
-    final workingHours = rawWorkingHours
-        .map(
-          (w) => {
-            'dayOfWeek': (w['dayOfWeek'] as num).toInt(),
-            'startMinute': (w['startMinute'] as num).toInt(),
-            'endMinute': (w['endMinute'] as num).toInt(),
-          },
-        )
-        .toList();
-
-    final payload = {
-      'serviceAreaName':
-          currentData['serviceAreaName']?.toString() ?? 'Khu vực hoạt động',
-      'serviceAreaLatitude':
-          (currentData['serviceAreaLatitude'] as num?)?.toDouble() ?? 21.0285,
-      'serviceAreaLongitude':
-          (currentData['serviceAreaLongitude'] as num?)?.toDouble() ?? 105.8542,
-      'serviceRadiusKm': radiusKm,
-      'workingHours': workingHours.isNotEmpty
-          ? workingHours
-          : [
-              {'dayOfWeek': 1, 'startMinute': 480, 'endMinute': 1020},
-              {'dayOfWeek': 2, 'startMinute': 480, 'endMinute': 1020},
-              {'dayOfWeek': 3, 'startMinute': 480, 'endMinute': 1020},
-              {'dayOfWeek': 4, 'startMinute': 480, 'endMinute': 1020},
-              {'dayOfWeek': 5, 'startMinute': 480, 'endMinute': 1020},
-            ],
-      'enabledServiceIds': enabledServiceIds,
-    };
-
-    final response = await _dio.put(
-      '/me/provider/setup',
-      data: payload,
+    final response = await _dio.patch(
+      '/me/provider/setup/radius',
+      data: {'serviceRadiusKm': radiusKm},
       cancelToken: cancelToken,
     );
     ApiResponseParser.dataMap(response);

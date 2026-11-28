@@ -81,8 +81,8 @@ class ProviderVouchersNotifier extends StateNotifier<ProviderVouchersState> {
         if (maxDiscountAmount != null && maxDiscountAmount > 0)
           'maxDiscountAmount': maxDiscountAmount,
         'minOrderAmount': minOrderAmount,
-        'startsAt': startsAt.toIso8601String(),
-        'endsAt': endsAt.toIso8601String(),
+        'startsAt': startsAt.toUtc().toIso8601String(),
+        'endsAt': endsAt.toUtc().toIso8601String(),
         'usageLimit': usageLimit,
         'perCustomerLimit': perCustomerLimit,
         if (serviceId != null && serviceId.isNotEmpty) 'serviceId': serviceId,

@@ -37,16 +37,21 @@ describe('Services controllers', () => {
       uploadCover: jest.fn().mockResolvedValue({ success: true }),
       removeCover: jest.fn().mockResolvedValue({ success: true }),
     };
+    const useCase = (execute: jest.Mock) => ({ execute });
     return {
       query,
       command,
       image,
       admin: new AdminServicesController(
         query as never,
-        command as never,
+        useCase(command.create) as never,
+        useCase(command.update) as never,
+        useCase(command.updateStatus) as never,
         image as never,
       ),
-      ordering: new AdminServiceOrderingController(command as never),
+      ordering: new AdminServiceOrderingController(
+        useCase(command.reorder) as never,
+      ),
       publicController: new PublicServicesController(query as never),
     };
   }

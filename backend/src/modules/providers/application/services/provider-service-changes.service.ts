@@ -113,7 +113,7 @@ export class ProviderServiceChangesService {
     where: Prisma.ProviderServiceChangeRequestWhereInput,
     query: ProviderServiceChangeQueryDto,
   ) {
-    const [total, rows] = await this.prisma.$transaction([
+    const [total, rows] = await Promise.all([
       this.prisma.providerServiceChangeRequest.count({ where }),
       this.prisma.providerServiceChangeRequest.findMany({
         where,

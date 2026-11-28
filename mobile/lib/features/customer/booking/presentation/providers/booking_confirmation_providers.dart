@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/booking_order_submission_service.dart';
@@ -57,9 +58,17 @@ class BookingConfirmationState {
 class BookingConfirmationNotifier
     extends StateNotifier<BookingConfirmationState> {
   final BookingOrderRepository _repository;
+  int _quoteRequestSeq = 0;
+  CancelToken? _quoteCancelToken;
 
   BookingConfirmationNotifier(this._repository)
     : super(const BookingConfirmationState());
+
+  @override
+  void dispose() {
+    _quoteCancelToken?.cancel('Disposed');
+    super.dispose();
+  }
 
   void selectVoucher(String? voucherCode, BookingDraftEntity? draft) {
     state = state.copyWith(selectedVoucherCode: () => voucherCode);
@@ -72,20 +81,29 @@ class BookingConfirmationNotifier
     BookingDraftEntity draft, {
     String? voucherCode,
   }) async {
+    final requestSeq = ++_quoteRequestSeq;
+    _quoteCancelToken?.cancel('Superseded by newer quote request');
+    final cancelToken = CancelToken();
+    _quoteCancelToken = cancelToken;
+
+    final effectiveVoucher = voucherCode ?? state.selectedVoucherCode;
     state = state.copyWith(
       quote: () => null,
       isLoadingQuote: true,
       quoteError: () => null,
-      selectedVoucherCode: () => voucherCode ?? state.selectedVoucherCode,
+      selectedVoucherCode: () => effectiveVoucher,
     );
 
     try {
       final quote = await _repository.getQuote(
         draft: draft,
-        voucherCode: voucherCode ?? state.selectedVoucherCode,
+        voucherCode: effectiveVoucher,
+        cancelToken: cancelToken,
       );
+      if (!mounted || requestSeq != _quoteRequestSeq) return;
       state = state.copyWith(quote: () => quote, isLoadingQuote: false);
     } catch (e) {
+      if (!mounted || requestSeq != _quoteRequestSeq) return;
       state = state.copyWith(
         quoteError: () => e.toString().replaceFirst('Exception: ', ''),
         isLoadingQuote: false,
@@ -116,9 +134,11 @@ class BookingConfirmationNotifier
         quoteToken: quoteToken,
         voucherCode: state.selectedVoucherCode,
       );
+      if (!mounted) return result;
       state = state.copyWith(isSubmitting: false);
       return result;
     } catch (e) {
+      if (!mounted) return null;
       state = state.copyWith(
         isSubmitting: false,
         submitError: () => e.toString().replaceFirst('Exception: ', ''),

@@ -17,4 +17,17 @@ class CatalogRepositoryImpl implements CatalogRepository {
   Future<ServiceItemEntity> getServiceBySlug(String slug) {
     return _remoteDataSource.getServiceBySlug(slug);
   }
+
+  @override
+  Future<ServiceReviewsPage> getServiceReviews(
+    String slug, {
+    String? cursor,
+    int limit = 20,
+  }) {
+    return _remoteDataSource.getServiceReviews(
+      slug,
+      cursor: cursor,
+      limit: limit,
+    );
+  }
 }

@@ -9,6 +9,7 @@ import '../../domain/entities/provider_working_hour_entity.dart';
 
 abstract class ProviderScheduleRemoteDataSource {
   Future<ProviderSetupEntity> getSetup();
+  Future<void> updateServiceArea(ProviderSetupEntity setup);
   Future<void> updateWorkingHours(List<ProviderWorkingHourEntity> workingHours);
   Future<List<ProviderCalendarBlockEntity>> getCalendar({
     required DateTime from,
@@ -36,18 +37,27 @@ class DioProviderScheduleRemoteDataSource
   }
 
   @override
+  Future<void> updateServiceArea(ProviderSetupEntity setup) async {
+    final response = await _dio.patch(
+      '${ApiEndpoints.providerSetup}/service-area',
+      data: {
+        'serviceAreaName': setup.serviceAreaName.trim(),
+        'serviceAreaLatitude': setup.serviceAreaLatitude,
+        'serviceAreaLongitude': setup.serviceAreaLongitude,
+        'serviceRadiusKm': setup.serviceRadiusKm,
+      },
+    );
+    ApiResponseParser.ensureSuccess(response);
+  }
+
+  @override
   Future<void> updateWorkingHours(
     List<ProviderWorkingHourEntity> workingHours,
   ) async {
-    // 1. Fetch existing setup to retain area, coordinates, radius, and services
-    final currentSetup = await getSetup();
-
-    // 2. Build updated payload
-    final updatedSetup = currentSetup.copyWith(workingHours: workingHours);
-    final payload = updatedSetup.toSaveDtoJson();
-
-    // 3. Put to backend
-    await _dio.put(ApiEndpoints.providerSetup, data: payload);
+    await _dio.patch(
+      '${ApiEndpoints.providerSetup}/working-hours',
+      data: {'workingHours': workingHours.map((h) => h.toJson()).toList()},
+    );
   }
 
   @override

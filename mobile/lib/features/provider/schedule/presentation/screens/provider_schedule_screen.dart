@@ -47,33 +47,20 @@ class _ProviderScheduleScreenState extends ConsumerState<ProviderScheduleScreen>
       }
     });
 
-    final theme = Theme.of(context);
-
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
         backgroundColor: AppColors.surfaceContainerLowest,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
-        centerTitle: false,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Lịch làm & Giờ rảnh',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: AppColors.onSurface,
-              ),
-            ),
-            const Text(
-              'Thiết lập khung giờ nhận việc và lịch nghỉ cá nhân',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.outline,
-                fontWeight: FontWeight.normal,
-              ),
-            ),
-          ],
+        centerTitle: true,
+        title: const Text(
+          'Lịch làm & Giờ rảnh',
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurface,
+          ),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),

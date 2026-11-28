@@ -11,47 +11,59 @@ import {
 export class OrderPushRelayService {
   private readonly logger = new Logger(OrderPushRelayService.name);
   private processing = false;
+  private rerunRequested = false;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly outbox: PushOutboxService,
   ) {}
 
+  async enqueueAndDeliverNow(): Promise<void> {
+    await this.enqueuePending();
+    await this.outbox.deliverPending();
+  }
+
   @Interval(2_000)
   async enqueuePending(): Promise<void> {
-    if (this.processing) return;
+    if (this.processing) {
+      this.rerunRequested = true;
+      return;
+    }
     this.processing = true;
     try {
-      const rows = await this.prisma.orderNotification.findMany({
-        where: { pushQueuedAt: null },
-        select: {
-          id: true,
-          userId: true,
-          orderId: true,
-          event: true,
-          order: { select: orderPushAudienceSelect },
-        },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        take: 100,
-      });
-      for (const row of rows) {
-        await this.prisma.$transaction(async (tx) => {
-          if (canReceiveOrderPush(row.order, row.userId, row.event))
-            await this.outbox.enqueue(tx, {
-              userId: row.userId,
-              sourceId: row.id,
-              event: row.event,
-              entityType: 'ORDER',
-              entityId: row.orderId,
-              recipientRole:
-                row.order.customerId === row.userId ? 'CUSTOMER' : 'PROVIDER',
-            });
-          await tx.orderNotification.updateMany({
-            where: { id: row.id, pushQueuedAt: null },
-            data: { pushQueuedAt: new Date() },
-          });
+      do {
+        this.rerunRequested = false;
+        const rows = await this.prisma.orderNotification.findMany({
+          where: { pushQueuedAt: null },
+          select: {
+            id: true,
+            userId: true,
+            orderId: true,
+            event: true,
+            order: { select: orderPushAudienceSelect },
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: 100,
         });
-      }
+        for (const row of rows) {
+          await this.prisma.$transaction(async (tx) => {
+            if (canReceiveOrderPush(row.order, row.userId, row.event))
+              await this.outbox.enqueue(tx, {
+                userId: row.userId,
+                sourceId: row.id,
+                event: row.event,
+                entityType: 'ORDER',
+                entityId: row.orderId,
+                recipientRole:
+                  row.order.customerId === row.userId ? 'CUSTOMER' : 'PROVIDER',
+              });
+            await tx.orderNotification.updateMany({
+              where: { id: row.id, pushQueuedAt: null },
+              data: { pushQueuedAt: new Date() },
+            });
+          });
+        }
+      } while (this.rerunRequested);
     } catch (error: unknown) {
       this.logger.warn(
         `Order push relay paused: ${error instanceof Error ? error.message : 'unknown'}`,

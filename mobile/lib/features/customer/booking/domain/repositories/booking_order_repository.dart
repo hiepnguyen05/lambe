@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../entities/booking_draft_entity.dart';
 import '../entities/booking_submission_entity.dart';
 import '../entities/order_quote_entity.dart';
@@ -9,6 +11,7 @@ abstract class BookingOrderRepository {
   Future<OrderQuoteEntity> getQuote({
     required BookingDraftEntity draft,
     String? voucherCode,
+    CancelToken? cancelToken,
   });
 
   Future<BookingSubmissionEntity> submitOrder({

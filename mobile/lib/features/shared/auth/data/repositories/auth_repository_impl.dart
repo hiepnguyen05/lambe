@@ -163,7 +163,13 @@ class AuthRepositoryImpl implements AuthRepository {
           debugPrint('⚠️ [AuthRepository] Remote logout failed: $logoutError');
         }
       }
-      await identityDataSource.signOut();
+      try {
+        await identityDataSource.signOut();
+      } catch (identityError) {
+        debugPrint(
+          '⚠️ [AuthRepository] Identity signOut failed: $identityError',
+        );
+      }
     } finally {
       await secureStorage.clearAll();
     }

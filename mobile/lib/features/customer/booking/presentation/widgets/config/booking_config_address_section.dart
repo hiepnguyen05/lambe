@@ -17,33 +17,14 @@ class BookingConfigAddressSection extends ConsumerStatefulWidget {
 
 class _BookingConfigAddressSectionState
     extends ConsumerState<BookingConfigAddressSection> {
-  late final TextEditingController _nameController;
-  late final TextEditingController _phoneController;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: widget.draft.contactName);
-    _phoneController = TextEditingController(text: widget.draft.contactPhone);
-  }
-
-  @override
-  void didUpdateWidget(covariant BookingConfigAddressSection oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.draft.contactName != widget.draft.contactName &&
-        _nameController.text != widget.draft.contactName) {
-      _nameController.text = widget.draft.contactName;
-    }
-    if (oldWidget.draft.contactPhone != widget.draft.contactPhone &&
-        _phoneController.text != widget.draft.contactPhone) {
-      _phoneController.text = widget.draft.contactPhone;
-    }
-  }
+  // Retained for Flutter Hot Reload compatibility
+  TextEditingController? _nameController;
+  TextEditingController? _phoneController;
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _phoneController.dispose();
+    _nameController?.dispose();
+    _phoneController?.dispose();
     super.dispose();
   }
 
@@ -65,16 +46,16 @@ class _BookingConfigAddressSectionState
     final hasAddress = widget.draft.hasValidAddress;
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF0F172A).withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -85,8 +66,8 @@ class _BookingConfigAddressSectionState
           Row(
             children: [
               Container(
-                width: 32,
-                height: 32,
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
                   color: const Color(0xFFEFF6F5),
                   borderRadius: BorderRadius.circular(8),
@@ -94,114 +75,142 @@ class _BookingConfigAddressSectionState
                 child: const Icon(
                   Icons.location_on_rounded,
                   color: Color(0xFF0F766E),
-                  size: 18,
+                  size: 16,
                 ),
               ),
-              const SizedBox(width: 10),
-              const Text(
-                'Địa chỉ & Người nhận',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF0B1C30),
-                  letterSpacing: -0.2,
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Địa chỉ đón chuyên viên',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0B1C30),
+                    letterSpacing: -0.2,
+                  ),
                 ),
               ),
-              const Spacer(),
+              if (hasAddress)
+                const SizedBox(width: 8),
               if (hasAddress)
                 TextButton(
                   onPressed: () => _showAddressSelectionModal(context),
                   style: TextButton.styleFrom(
                     foregroundColor: const Color(0xFF0F766E),
-                    padding: EdgeInsets.zero,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text(
-                    'Đổi địa chỉ',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Đổi địa chỉ',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      SizedBox(width: 2),
+                      Icon(Icons.chevron_right_rounded, size: 16),
+                    ],
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
 
           // Khối hiển thị địa chỉ đã chọn
           if (hasAddress)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8F9FF),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.home_work_outlined,
-                    color: Color(0xFF0F766E),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (selectedAddress?.label?.isNotEmpty ?? false)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            margin: const EdgeInsets.only(bottom: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEFF6F5),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              selectedAddress!.label!,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF0F766E),
+            InkWell(
+              onTap: () => _showAddressSelectionModal(context),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Icon(
+                        Icons.home_outlined,
+                        color: Color(0xFF0F766E),
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (selectedAddress?.label?.isNotEmpty ?? false)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 2),
+                              child: Text(
+                                selectedAddress!.label!,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF0F766E),
+                                ),
                               ),
                             ),
+                          Text(
+                            selectedAddress?.addressLine ??
+                                inlineAddress?.addressLine ??
+                                '',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0B1C30),
+                              height: 1.35,
+                            ),
                           ),
-                        Text(
-                          selectedAddress?.addressLine ??
-                              inlineAddress?.addressLine ??
-                              '',
-                          style: const TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF0B1C30),
-                            height: 1.35,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 4),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Icon(
+                        Icons.chevron_right_rounded,
+                        color: Color(0xFF94A3B8),
+                        size: 18,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             )
           else
             // Chưa chọn địa chỉ -> Bấm để chọn
             InkWell(
               onTap: () => _showAddressSelectionModal(context),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
-                  vertical: 16,
+                  vertical: 14,
                 ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: const Color(0xFFCBD5E1),
-                    style: BorderStyle.solid,
                   ),
                 ),
                 child: const Row(
@@ -210,130 +219,24 @@ class _BookingConfigAddressSectionState
                     Icon(
                       Icons.add_location_alt_outlined,
                       color: Color(0xFF0F766E),
-                      size: 20,
+                      size: 18,
                     ),
                     SizedBox(width: 8),
-                    Text(
-                      'Chọn hoặc thêm địa chỉ đón chuyên viên',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF0F766E),
+                    Flexible(
+                      child: Text(
+                        'Chọn hoặc thêm địa chỉ đón chuyên viên',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0F766E),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-          const SizedBox(height: 16),
-
-          const Divider(height: 1, color: Color(0xFFF1F5F9)),
-          const SizedBox(height: 14),
-
-          // Thông tin người nhận
-          const Text(
-            'Thông tin người đón chuyên viên',
-            style: TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF334155),
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          // Họ tên người nhận
-          TextField(
-            controller: _nameController,
-            onChanged: (val) {
-              ref.read(bookingDraftProvider.notifier).setContactName(val);
-            },
-            decoration: InputDecoration(
-              labelText: 'Họ và tên người nhận',
-              labelStyle: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFF64748B),
-              ),
-              hintText: 'Nhập họ tên',
-              hintStyle: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFF94A3B8),
-              ),
-              prefixIcon: const Icon(
-                Icons.person_outline,
-                size: 20,
-                color: Color(0xFF64748B),
-              ),
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 12,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                  color: Color(0xFF0F766E),
-                  width: 1.5,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Số điện thoại người nhận
-          TextField(
-            controller: _phoneController,
-            keyboardType: TextInputType.phone,
-            onChanged: (val) {
-              ref.read(bookingDraftProvider.notifier).setContactPhone(val);
-            },
-            decoration: InputDecoration(
-              labelText: 'Số điện thoại',
-              labelStyle: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFF64748B),
-              ),
-              hintText: 'Ví dụ: 0912345678',
-              hintStyle: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFF94A3B8),
-              ),
-              prefixIcon: const Icon(
-                Icons.phone_outlined,
-                size: 20,
-                color: Color(0xFF64748B),
-              ),
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 12,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                  color: Color(0xFF0F766E),
-                  width: 1.5,
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );

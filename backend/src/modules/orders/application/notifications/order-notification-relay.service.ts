@@ -1,10 +1,5 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-  Optional,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import {
   currentRequestId,
   runWithRequestId,
@@ -12,28 +7,44 @@ import {
 import { ObservabilityMetrics } from '../../../../infrastructure/observability/observability-metrics.service';
 import { PrismaService } from '../../../../infrastructure/persistence/postgres/prisma.service';
 import { RedisCacheService } from '../../../../infrastructure/cache/redis-cache.service';
+import { OrderPushRelayService } from '../../../push/application/order-push-relay.service';
 
 @Injectable()
-export class OrderNotificationRelayService
-  implements OnModuleInit, OnModuleDestroy
-{
+export class OrderNotificationRelayService implements OnModuleInit {
   private readonly logger = new Logger(OrderNotificationRelayService.name);
-  private timer?: NodeJS.Timeout;
   private running = false;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: RedisCacheService,
     @Optional() private readonly metrics?: ObservabilityMetrics,
+    @Optional() private readonly pushRelay?: OrderPushRelayService,
   ) {}
 
   onModuleInit() {
-    this.timer = setInterval(() => void this.publishNew(), 1000);
-    void this.publishNew();
+    void this.tick();
   }
 
-  onModuleDestroy() {
-    if (this.timer) clearInterval(this.timer);
+  @Interval(1_000)
+  tick() {
+    return this.publishNew();
+  }
+
+  async publishNow(userId: string, notificationId?: string): Promise<void> {
+    if (this.cache.getStatus() === 'up') {
+      try {
+        await this.cache.publishOrderNotification(userId);
+        if (notificationId) {
+          await this.prisma.orderNotification.updateMany({
+            where: { id: notificationId, publishedAt: null },
+            data: { publishedAt: new Date() },
+          });
+        }
+      } catch {
+        // Fall back to the 1s interval relay if immediate publish fails.
+      }
+    }
+    void this.pushRelay?.enqueueAndDeliverNow();
   }
 
   private async publishNew() {

@@ -14,15 +14,15 @@ import { PrismaService } from '../../../../infrastructure/persistence/postgres/p
 import { ChatService } from '../../../chat/application/chat.service';
 import type { CreateOrderDto, OrderQuoteDto } from '../../dto/order.dto';
 import {
-  ASAP_RESPONSE_MINUTES,
-  SCHEDULE_RESPONSE_MINUTES,
+  PROVIDER_RESPONSE_TIMEOUT_MS,
   MINUTE,
 } from '../../domain/booking-calendar.policy';
 import { OrderEligibilityService } from '../order-eligibility.service';
 import {
-  orderInclude,
+  createdOrderInclude,
   presentForCustomer,
 } from '../persistence/order.presenter';
+import { OrderNotificationRelayService } from '../notifications/order-notification-relay.service';
 import { BookingCalendarService } from '../scheduling/booking-calendar.service';
 import { VoucherService } from '../pricing/voucher.service';
 import { OsrmRoutingService } from '../tracking/osrm-routing.service';
@@ -137,14 +137,20 @@ export class OrderBookingService {
     private readonly routing: OsrmRoutingService,
     private readonly jwt: JwtService,
     @Optional() private readonly metrics?: ObservabilityMetrics,
+    @Optional()
+    private readonly notificationRelay?: OrderNotificationRelayService,
   ) {}
 
   async quote(customerId: string, dto: OrderQuoteDto) {
     let p = await this.eligibility.prepare(customerId, dto);
-    const route = await this.routing.getRoute(p.travelOrigin, p.address);
-    const travelDistanceKm = route
-      ? Math.ceil(route.distanceMeters / 100) / 10
-      : p.travelDistanceKm;
+    const distanceMeters = await this.routing.getDistanceMeters(
+      p.travelOrigin,
+      p.address,
+    );
+    const travelDistanceKm =
+      distanceMeters !== null
+        ? Math.ceil(distanceMeters / 100) / 10
+        : p.travelDistanceKm;
     const travelFeeAmount = calculateTravelFee(travelDistanceKm);
     const price = await this.vouchers.price(customerId, dto.voucherCode, {
       providerId: p.providerService.providerId,
@@ -177,7 +183,8 @@ export class OrderBookingService {
             requestHash: quoteRequestHash(dto),
             providerPriceAmount: p.servicePriceAmount,
             travelDistanceKm,
-            distanceSource: route ? 'OSRM' : 'CONSERVATIVE_DISTANCE',
+            distanceSource:
+              distanceMeters !== null ? 'OSRM' : 'CONSERVATIVE_DISTANCE',
             travelFeeAmount,
             totalAmount: price.totalAmount,
             origin: p.travelOrigin,
@@ -215,7 +222,8 @@ export class OrderBookingService {
         servicePriceAmount: p.servicePriceAmount,
         travelFeeAmount,
         travelDistanceKm,
-        distanceSource: route ? 'OSRM' : 'CONSERVATIVE_DISTANCE',
+        distanceSource:
+          distanceMeters !== null ? 'OSRM' : 'CONSERVATIVE_DISTANCE',
         quoteToken,
         subtotalAmount: price.subtotalAmount,
         discountAmount: price.discountAmount,
@@ -246,29 +254,40 @@ export class OrderBookingService {
         'Cần Idempotency-Key từ 8 đến 128 ký tự chữ, số, _ hoặc -.',
       );
     const hash = bookingRequestHash(dto, retryOfOrderId);
-    const previousRequest = await this.prisma.serviceOrder.findUnique({
-      where: {
-        customerId_clientRequestId: {
-          customerId,
-          clientRequestId: idempotencyKey,
-        },
-      },
-      include: orderInclude,
-    });
-    if (previousRequest) {
-      if (previousRequest.requestHash !== hash)
-        throw new ConflictException({
-          code: 'IDEMPOTENCY_KEY_REUSED',
-          message: 'Idempotency-Key đã dùng cho nội dung đặt lịch khác.',
-        });
-      return {
-        success: true,
-        message: 'Đã gửi yêu cầu đặt dịch vụ tới nhà cung cấp.',
-        data: presentForCustomer(previousRequest),
-      };
-    }
-    const liveOrigin = await this.eligibility.captureOrigin(dto);
+
+    // Parallel pre-tx checks: verify quoteToken, resolve target offering & capture ASAP live origin
+    // before acquiring database advisory locks.
+    const expectedQuoteHash = quoteRequestHash(dto);
+    const [preloaded, verifiedQuote] = await Promise.all([
+      this.prisma.providerService
+        .findUnique({
+          where: { id: dto.providerServiceId },
+          select: { providerId: true, serviceId: true },
+        })
+        .then(async (row) => {
+          if (!row) return { target: null, liveOrigin: undefined };
+          try {
+            const liveOrigin = await this.eligibility.captureOrigin(
+              dto,
+              row.providerId,
+            );
+            return { target: row, liveOrigin };
+          } catch (err: unknown) {
+            return { target: row, liveOrigin: { error: err } as const };
+          }
+        }),
+      this.jwt
+        .verifyAsync<BookingQuoteToken>(dto.quoteToken, {
+          audience: 'booking-quote',
+        })
+        .catch(() => null),
+    ]);
+    const target = preloaded.target;
+    const liveOrigin = preloaded.liveOrigin;
+
     let createdNew = false;
+    let notifyRecipientId: string | null = null;
+    let notifyRecordId: string | null = null;
     const order = await this.prisma.$transaction(
       async (tx) => {
         // Serialize retries for this customer, then provider, then order/wallet throughout the module.
@@ -282,7 +301,7 @@ export class OrderBookingService {
               clientRequestId: idempotencyKey,
             },
           },
-          include: orderInclude,
+          include: createdOrderInclude,
         });
         if (previous) {
           if (previous.requestHash !== hash)
@@ -292,49 +311,20 @@ export class OrderBookingService {
             });
           return previous;
         }
-        const retrySource = retryOfOrderId
-          ? await tx.serviceOrder.findFirst({
-              where: { id: retryOfOrderId, customerId },
-              select: {
-                id: true,
-                status: true,
-                bookingGroupId: true,
-                bookingAttempt: true,
-                providerService: { select: { serviceId: true } },
-              },
-            })
-          : null;
-        if (retryOfOrderId && !retrySource)
-          throw new NotFoundException('Không tìm thấy đơn cần đặt lại.');
-        if (retrySource) {
-          if (!['REJECTED', 'EXPIRED'].includes(retrySource.status))
-            throw new ConflictException('Đơn chưa đủ điều kiện tìm thợ khác.');
-          const latest = await tx.serviceOrder.findFirst({
-            where: { bookingGroupId: retrySource.bookingGroupId },
-            orderBy: { bookingAttempt: 'desc' },
-            select: { id: true },
-          });
-          if (latest?.id !== retrySource.id)
-            throw new ConflictException('Đã có lần đặt mới cho nhu cầu này.');
+        if (liveOrigin && 'error' in liveOrigin) {
+          throw liveOrigin.error;
         }
-        let quoted: BookingQuoteToken;
-        try {
-          quoted = await this.jwt.verifyAsync<BookingQuoteToken>(
-            dto.quoteToken,
-            {
-              audience: 'booking-quote',
-            },
-          );
-        } catch {
+        if (!verifiedQuote) {
           throw new ConflictException({
             code: 'QUOTE_EXPIRED',
             message: 'Báo giá đã hết hạn. Vui lòng lấy báo giá mới.',
           });
         }
+        const quoted = verifiedQuote;
         if (
           quoted.purpose !== 'booking-quote' ||
           quoted.customerId !== customerId ||
-          quoted.requestHash !== quoteRequestHash(dto) ||
+          quoted.requestHash !== expectedQuoteHash ||
           !Number.isFinite(quoted.travelDistanceKm) ||
           quoted.travelDistanceKm < 0 ||
           !quoted.origin ||
@@ -344,52 +334,83 @@ export class OrderBookingService {
             code: 'QUOTE_MISMATCH',
             message: 'Nội dung đơn khác báo giá đã xác nhận.',
           });
-        const target = await tx.providerService.findUnique({
-          where: { id: dto.providerServiceId },
-          select: { providerId: true, serviceId: true },
-        });
         if (!target)
           throw new NotFoundException('Không tìm thấy dịch vụ của thợ.');
-        if (retrySource) {
-          if (target.serviceId !== retrySource.providerService.serviceId)
-            throw new ConflictException('Dịch vụ mới không khớp đơn trước.');
-          const tried = await tx.serviceOrder.count({
-            where: {
-              bookingGroupId: retrySource.bookingGroupId,
-              providerId: target.providerId,
-              assignedMemberId: dto.memberId ?? null,
+        let matchedRetrySource: {
+          bookingGroupId: string;
+          bookingAttempt: number;
+        } | null = null;
+        if (retryOfOrderId) {
+          const retrySource = await tx.serviceOrder.findFirst({
+            where: { id: retryOfOrderId, customerId },
+            select: {
+              id: true,
+              status: true,
+              bookingGroupId: true,
+              bookingAttempt: true,
+              providerService: { select: { serviceId: true } },
             },
           });
+          if (!retrySource)
+            throw new NotFoundException('Không tìm thấy đơn cần đặt lại.');
+          if (!['REJECTED', 'EXPIRED'].includes(retrySource.status))
+            throw new ConflictException('Đơn chưa đủ điều kiện tìm thợ khác.');
+          const [latest, tried] = await Promise.all([
+            tx.serviceOrder.findFirst({
+              where: { bookingGroupId: retrySource.bookingGroupId },
+              orderBy: { bookingAttempt: 'desc' },
+              select: { id: true },
+            }),
+            tx.serviceOrder.count({
+              where: {
+                bookingGroupId: retrySource.bookingGroupId,
+                providerId: target.providerId,
+                assignedMemberId: dto.memberId ?? null,
+              },
+            }),
+          ]);
+          if (latest?.id !== retrySource.id)
+            throw new ConflictException('Đã có lần đặt mới cho nhu cầu này.');
+          if (target.serviceId !== retrySource.providerService.serviceId)
+            throw new ConflictException('Dịch vụ mới không khớp đơn trước.');
           if (tried)
             throw new ConflictException(
               'Chuyên viên này đã được thử trước đó.',
             );
+          matchedRetrySource = retrySource;
         }
         await this.calendar.lockProvider(tx, target.providerId, dto.memberId);
         const now = new Date();
         await this.calendar.releaseExpired(tx, target.providerId, now);
-        const pendingCount = await tx.serviceOrder.count({
-          where: {
+        const [pendingCount, customer, initialPrepared] = await Promise.all([
+          tx.serviceOrder.count({
+            where: {
+              customerId,
+              status: 'PENDING_PROVIDER',
+              providerResponseDeadlineAt: { gt: now },
+            },
+          }),
+          tx.user.findUniqueOrThrow({
+            where: { id: customerId },
+            select: { fullName: true, phone: true },
+          }),
+          this.eligibility.prepare(
             customerId,
-            status: 'PENDING_PROVIDER',
-            providerResponseDeadlineAt: { gt: now },
-          },
-        });
+            dto,
+            tx,
+            undefined,
+            undefined,
+            undefined,
+            liveOrigin,
+          ),
+        ]);
         if (pendingCount >= 3)
           throw new ConflictException({
             code: 'TOO_MANY_PENDING_ORDERS',
             message:
               'Bạn đang có 3 yêu cầu chờ phản hồi. Hãy xử lý trước khi đặt tiếp.',
           });
-        let p = await this.eligibility.prepare(
-          customerId,
-          dto,
-          tx,
-          undefined,
-          undefined,
-          undefined,
-          liveOrigin,
-        );
+        let p = initialPrepared;
         if (
           (quoted.memberId ?? null) !== (p.memberContext?.member.id ?? null) ||
           (quoted.membershipVersion ?? null) !==
@@ -463,28 +484,24 @@ export class OrderBookingService {
           throw new ConflictException(
             'Ví thợ không đủ điều kiện nhận đơn với giá đã chốt.',
           );
-        const customer = await tx.user.findUniqueOrThrow({
-          where: { id: customerId },
-          select: { fullName: true, phone: true },
-        });
         const contactName =
           dto.contactName ?? p.address.contactName ?? customer.fullName;
         if (!contactName)
           throw new BadRequestException('Cần họ tên người nhận dịch vụ.');
         const deadline = new Date(
           dto.bookingType === 'ASAP'
-            ? now.getTime() + ASAP_RESPONSE_MINUTES * MINUTE
+            ? now.getTime() + PROVIDER_RESPONSE_TIMEOUT_MS
             : Math.min(
-                now.getTime() + SCHEDULE_RESPONSE_MINUTES * MINUTE,
+                now.getTime() + PROVIDER_RESPONSE_TIMEOUT_MS,
                 p.serviceTime.getTime() - 15 * MINUTE,
               ),
         );
-        const created = await tx.serviceOrder.create({
+        const createdRecord = await tx.serviceOrder.create({
           data: {
-            ...(retrySource
+            ...(matchedRetrySource
               ? {
-                  bookingGroupId: retrySource.bookingGroupId,
-                  bookingAttempt: retrySource.bookingAttempt + 1,
+                  bookingGroupId: matchedRetrySource.bookingGroupId,
+                  bookingAttempt: matchedRetrySource.bookingAttempt + 1,
                 }
               : {}),
             customerId,
@@ -557,8 +574,30 @@ export class OrderBookingService {
               create: { toStatus: 'PENDING_PROVIDER', actorUserId: customerId },
             },
           },
-          include: orderInclude,
+          include: { statusHistory: createdOrderInclude.statusHistory },
         });
+        // These snapshots were already validated/read under the booking lock.
+        const created = {
+          ...createdRecord,
+          provider: {
+            id: p.providerService.provider.id,
+            userId: p.providerService.provider.userId,
+            displayName: p.providerService.provider.displayName,
+            avatarUrl: p.providerService.provider.avatarUrl,
+            serviceRadiusKm: p.providerService.provider.serviceRadiusKm,
+          },
+          customer: { id: customerId, ...customer },
+          providerService: {
+            id: p.providerService.id,
+            serviceId: p.providerService.serviceId,
+            service: {
+              id: p.providerService.serviceId,
+              iconUrl: p.providerService.service.iconUrl,
+              coverImageUrl: p.providerService.service.coverImageUrl,
+              category: p.providerService.service.category,
+            },
+          },
+        };
         if (price.voucherId) {
           await tx.voucherRedemption.create({
             data: {
@@ -569,27 +608,38 @@ export class OrderBookingService {
             },
           });
         }
-        created.conversationId = await this.chat.attachOrder(tx, created);
-        await this.audit.record(
-          {
-            actorUserId: customerId,
-            action: 'SERVICE_ORDER_CREATED',
-            resourceType: 'ServiceOrder',
-            resourceId: created.id,
-            result: 'SUCCESS',
-            metadata: { bookingType: dto.bookingType },
-          },
-          request,
-          tx,
-        );
-        await tx.orderNotification.create({
-          data: {
-            userId:
-              created.assignedMemberUserId ?? p.providerService.provider.userId,
-            orderId: created.id,
-            event: 'ORDER_REQUESTED',
-          },
+        created.conversationId = await this.chat.attachOrder(tx, created, {
+          providerUserId: p.providerService.provider.userId,
+          assignedMemberId: created.assignedMemberId,
+          assignedMemberUserId: created.assignedMemberUserId,
+          assignedMemberVersion: created.assignedMemberVersion,
+          isNewOrder: true,
         });
+        notifyRecipientId =
+          created.assignedMemberUserId ?? p.providerService.provider.userId;
+        const [, notice] = await Promise.all([
+          this.audit.record(
+            {
+              actorUserId: customerId,
+              action: 'SERVICE_ORDER_CREATED',
+              resourceType: 'ServiceOrder',
+              resourceId: created.id,
+              result: 'SUCCESS',
+              metadata: { bookingType: dto.bookingType },
+            },
+            request,
+            tx,
+          ),
+          tx.orderNotification.create({
+            data: {
+              userId: notifyRecipientId,
+              orderId: created.id,
+              event: 'ORDER_REQUESTED',
+            },
+            select: { id: true },
+          }),
+        ]);
+        notifyRecordId = notice.id;
         createdNew = true;
         return created;
       },
@@ -597,6 +647,12 @@ export class OrderBookingService {
     );
     if (order.conversationId) {
       this.chat.notifyOrderAttached(order.conversationId);
+    }
+    if (notifyRecipientId) {
+      void this.notificationRelay?.publishNow(
+        notifyRecipientId,
+        notifyRecordId ?? undefined,
+      );
     }
     if (createdNew && retryOfOrderId)
       this.metrics?.recordEvent('rematch', 'selected');

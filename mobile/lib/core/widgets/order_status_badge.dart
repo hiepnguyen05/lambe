@@ -62,7 +62,9 @@ class OrderStatusBadge extends StatelessWidget {
       );
     }
 
-    if (cancellationStatus == 'PENDING') {
+    if (cancellationStatus == 'PENDING' ||
+        cancellationStatus == 'PENDING_CUSTOMER' ||
+        cancellationStatus == 'SUPPORT_REVIEW') {
       return const _StatusBadgeConfig(
         label: 'Chờ xử lý hủy',
         textColor: Color(0xFFC2410C),
@@ -74,6 +76,7 @@ class OrderStatusBadge extends StatelessWidget {
 
     switch (status) {
       case 'PENDING':
+      case 'PENDING_PROVIDER':
         return const _StatusBadgeConfig(
           label: 'Chờ xác nhận',
           textColor: Color(0xFFD97706),
@@ -82,6 +85,7 @@ class OrderStatusBadge extends StatelessWidget {
           icon: Icons.schedule_rounded,
         );
       case 'CONFIRMED':
+      case 'ACCEPTED':
         return const _StatusBadgeConfig(
           label: 'Đã xác nhận',
           textColor: Color(0xFF0F766E),
@@ -136,6 +140,31 @@ class OrderStatusBadge extends StatelessWidget {
           backgroundColor: Color(0xFFFEF2F2),
           borderColor: Color(0xFFFEE2E2),
           icon: Icons.cancel_outlined,
+        );
+      case 'REJECTED':
+        return const _StatusBadgeConfig(
+          label: 'Đã từ chối',
+          textColor: Color(0xFFDC2626),
+          backgroundColor: Color(0xFFFEF2F2),
+          borderColor: Color(0xFFFEE2E2),
+          icon: Icons.cancel_outlined,
+        );
+      case 'EXPIRED':
+        return const _StatusBadgeConfig(
+          label: 'Đã hết hạn',
+          textColor: Color(0xFF64748B),
+          backgroundColor: Color(0xFFF8FAFC),
+          borderColor: Color(0xFFE2E8F0),
+          icon: Icons.timer_off_outlined,
+        );
+      case 'PAYMENT_DISPUTE':
+      case 'DISPUTED':
+        return const _StatusBadgeConfig(
+          label: 'Chờ đối soát',
+          textColor: Color(0xFFB45309),
+          backgroundColor: Color(0xFFFFFBEB),
+          borderColor: Color(0xFFFDE68A),
+          icon: Icons.receipt_long_outlined,
         );
       default:
         return _StatusBadgeConfig(

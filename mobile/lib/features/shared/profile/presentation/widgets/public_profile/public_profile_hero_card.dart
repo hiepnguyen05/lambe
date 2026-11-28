@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/utils/share_utils.dart';
 import 'package:mobile/core/widgets/app_dialog.dart';
 import 'package:mobile/features/shared/profile/domain/entities/partner_public_profile_entity.dart';
 
@@ -39,32 +40,23 @@ class _PublicProfileHeroCardState extends State<PublicProfileHeroCard> {
     }
   }
 
-  void _handleShare(BuildContext context) {
-    AppDialog.info(
+  Future<void> _handleShare(BuildContext context) async {
+    await shareAppLink(
       context,
-      title: 'Chia sẻ hồ sơ',
-      message:
-          'Đã sao chép liên kết hồ sơ của chuyên viên ${widget.profile.displayName}. Bạn có thể gửi cho bạn bè!',
-      buttonText: 'Đã hiểu',
+      title: 'Hồ sơ chuyên viên ${widget.profile.displayName} trên Lambe',
+      link: 'lambe://app/providers/${widget.profile.id}/public',
+      copiedMessage: 'Đã sao chép liên kết hồ sơ!',
     );
   }
 
   void _handleToggleFollow() {
+    if (widget.onFollowTap != null) {
+      widget.onFollowTap!();
+      return;
+    }
     setState(() {
       _isFollowing = !_isFollowing;
     });
-    if (widget.onFollowTap != null) {
-      widget.onFollowTap!();
-    } else {
-      AppDialog.info(
-        context,
-        title: _isFollowing ? 'Đang theo dõi' : 'Đã bỏ theo dõi',
-        message: _isFollowing
-            ? 'Bạn sẽ nhận được thông báo về ưu đãi và nhật ký mới từ chuyên viên ${widget.profile.displayName}.'
-            : 'Bạn đã hủy theo dõi chuyên viên ${widget.profile.displayName}.',
-        buttonText: 'Đồng ý',
-      );
-    }
   }
 
   @override
@@ -240,7 +232,9 @@ class _PublicProfileHeroCardState extends State<PublicProfileHeroCard> {
                     children: [
                       _buildTrustChip(
                         icon: Icons.hotel_class_rounded,
-                        label: 'Đối tác Vàng ${profile.rating.toStringAsFixed(1)}',
+                        label: (profile.rating != null && profile.reviewCount > 0)
+                            ? 'Đối tác Vàng ${profile.rating!.toStringAsFixed(1)}'
+                            : 'Đối tác mới',
                         backgroundColor:
                             AppColors.secondaryContainer.withValues(alpha: 0.5),
                         textColor: AppColors.onSecondaryContainer,
@@ -281,8 +275,10 @@ class _PublicProfileHeroCardState extends State<PublicProfileHeroCard> {
                       Expanded(
                         child: _buildStatItem(
                           label: 'Đánh giá',
-                          value: profile.rating.toStringAsFixed(1),
-                          unit: '★',
+                          value: profile.rating != null
+                              ? profile.rating!.toStringAsFixed(1)
+                              : '--',
+                          unit: profile.rating != null ? '★' : null,
                           subText: '(${profile.reviewCount})',
                           valueColor: const Color(0xFFD97706),
                         ),
@@ -298,14 +294,18 @@ class _PublicProfileHeroCardState extends State<PublicProfileHeroCard> {
                       Expanded(
                         child: _buildStatItem(
                           label: 'Nhận đơn',
-                          value: '${profile.acceptanceRate.toStringAsFixed(0)}%',
+                          value: profile.acceptanceRate != null
+                              ? '${profile.acceptanceRate!.toStringAsFixed(0)}%'
+                              : '--',
                         ),
                       ),
                       _buildStatDivider(),
                       Expanded(
                         child: _buildStatItem(
                           label: 'Đúng giờ',
-                          value: '${profile.onTimeRate.toStringAsFixed(0)}%',
+                          value: profile.onTimeRate != null
+                              ? '${profile.onTimeRate!.toStringAsFixed(0)}%'
+                              : '--',
                         ),
                       ),
                     ],

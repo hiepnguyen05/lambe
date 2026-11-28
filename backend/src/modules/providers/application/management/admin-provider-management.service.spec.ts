@@ -83,9 +83,6 @@ describe('AdminProviderManagementService', () => {
         findMany: jest.fn().mockResolvedValue([]),
         groupBy: jest.fn().mockResolvedValue([]),
       },
-      $transaction: jest.fn((operations: Array<Promise<unknown>>) =>
-        Promise.all(operations),
-      ),
     };
     const service = new AdminProviderManagementService(
       prisma as never,
@@ -97,7 +94,8 @@ describe('AdminProviderManagementService', () => {
     const result = await service.findAll({ page: 1, limit: 20 });
 
     expect(result.data).toEqual([]);
-    expect(prisma.$transaction.mock.calls[0][0]).toHaveLength(2);
+    expect(prisma.providerProfile.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.providerProfile.groupBy).toHaveBeenCalledTimes(1);
     expect(result).not.toHaveProperty('summary');
     expect(result.meta).toMatchObject({
       page: 1,

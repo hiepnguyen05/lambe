@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../domain/entities/customer_order_entity.dart';
-import './order_status_badge.dart';
+import 'package:mobile/core/widgets/order_status_badge.dart';
 
 class OrderStatusTimeline extends StatelessWidget {
   final List<OrderStatusHistoryEntity> history;
@@ -52,12 +52,16 @@ class OrderStatusTimeline extends StatelessWidget {
             children: [
               Icon(Icons.timeline_rounded, size: 17, color: Color(0xFF0F766E)),
               SizedBox(width: 8),
-              Text(
-                'Lịch sử tiến trình đơn',
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+              Expanded(
+                child: Text(
+                  'Lịch sử tiến trình đơn',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
                 ),
               ),
             ],
@@ -112,22 +116,28 @@ class OrderStatusTimeline extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                OrderStatusBadge(
-                                  status: item.toStatus,
-                                  isCompact: true,
-                                ),
-                                if (timeStr.isNotEmpty)
-                                  Text(
-                                    timeStr,
-                                    style: const TextStyle(
-                                      fontSize: 10.5,
-                                      color: Color(0xFF94A3B8),
-                                    ),
+                            SizedBox(
+                              width: double.infinity,
+                              child: Wrap(
+                                alignment: WrapAlignment.spaceBetween,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  OrderStatusBadge(
+                                    status: item.toStatus,
+                                    isCompact: true,
                                   ),
-                              ],
+                                  if (timeStr.isNotEmpty)
+                                    Text(
+                                      timeStr,
+                                      style: const TextStyle(
+                                        fontSize: 10.5,
+                                        color: Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                             if (item.reason != null &&
                                 item.reason!.trim().isNotEmpty) ...[

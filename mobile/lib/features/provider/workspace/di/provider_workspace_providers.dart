@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/network/dio_client.dart';
 
 import '../application/provider_dashboard_notifier.dart';
+import '../application/provider_earnings_summary.dart';
 import '../application/provider_incoming_orders_notifier.dart';
 import '../data/datasources/provider_dashboard_remote_datasource.dart';
 import '../data/datasources/provider_orders_remote_datasource.dart';
@@ -64,6 +65,32 @@ final providerOrdersListProvider =
       return ref
           .watch(providerOrdersRemoteDataSourceProvider)
           .getAllProviderOrders();
+    });
+
+final providerCompletedOrdersProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+      final userId = ref.watch(
+        authNotifierProvider.select((auth) => auth.valueOrNull?.id),
+      );
+      if (userId == null) return [];
+      final cache = ref.keepAlive();
+      Timer? eviction;
+      ref.onCancel(() {
+        eviction = Timer(const Duration(seconds: 30), cache.close);
+      });
+      ref.onResume(() => eviction?.cancel());
+      ref.onDispose(() => eviction?.cancel());
+      return ref
+          .watch(providerOrdersRemoteDataSourceProvider)
+          .getAllProviderOrders(status: 'COMPLETED');
+    });
+
+final providerEarningsProvider = Provider.autoDispose
+    .family<AsyncValue<ProviderPeriodEarnings>, IncomePeriod>((ref, period) {
+      final completedAsync = ref.watch(providerCompletedOrdersProvider);
+      return completedAsync.whenData(
+        (orders) => summarizeProviderEarnings(orders, period: period),
+      );
     });
 
 final providerOrderRefreshSignalProvider = StateProvider.autoDispose

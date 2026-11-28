@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'package:mobile/core/theme/app_colors.dart';
 
 class AppTheme {
   AppTheme._();
 
+  static const String fontFamilyName = 'PlusJakartaSans';
+
   static ThemeData get lightTheme {
-    final fontName = GoogleFonts.plusJakartaSans().fontFamily;
     final baseTextTheme = ThemeData.light().textTheme;
-    final plusJakartaTextTheme =
-        GoogleFonts.plusJakartaSansTextTheme(baseTextTheme);
+    final plusJakartaTextTheme = baseTextTheme.apply(
+      fontFamily: fontFamilyName,
+    );
 
     return ThemeData(
       useMaterial3: true,
-      fontFamily: fontName,
+      fontFamily: fontFamilyName,
       colorScheme: const ColorScheme(
         brightness: Brightness.light,
         primary: AppColors.primary,
@@ -158,7 +159,8 @@ class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: GoogleFonts.plusJakartaSans(
+        titleTextStyle: const TextStyle(
+          fontFamily: fontFamilyName,
           fontSize: 18,
           fontWeight: FontWeight.bold,
           color: AppColors.onSurface,
@@ -172,7 +174,8 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(100),
           ),
-          textStyle: GoogleFonts.plusJakartaSans(
+          textStyle: const TextStyle(
+            fontFamily: fontFamilyName,
             fontSize: 15,
             fontWeight: FontWeight.w700,
           ),
@@ -188,7 +191,8 @@ class AppTheme {
             borderRadius: BorderRadius.circular(100),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          textStyle: GoogleFonts.plusJakartaSans(
+          textStyle: const TextStyle(
+            fontFamily: fontFamilyName,
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
@@ -197,7 +201,8 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.primaryContainer,
-          textStyle: GoogleFonts.plusJakartaSans(
+          textStyle: const TextStyle(
+            fontFamily: fontFamilyName,
             fontSize: 13.5,
             fontWeight: FontWeight.w600,
           ),
@@ -215,12 +220,14 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
-        titleTextStyle: GoogleFonts.plusJakartaSans(
+        titleTextStyle: const TextStyle(
+          fontFamily: fontFamilyName,
           fontSize: 18,
           fontWeight: FontWeight.bold,
           color: AppColors.onSurface,
         ),
-        contentTextStyle: GoogleFonts.plusJakartaSans(
+        contentTextStyle: const TextStyle(
+          fontFamily: fontFamilyName,
           fontSize: 13.5,
           color: AppColors.textMuted,
         ),
@@ -230,12 +237,14 @@ class AppTheme {
         selectedColor: AppColors.primaryContainer,
         secondarySelectedColor: AppColors.primaryContainer,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        labelStyle: GoogleFonts.plusJakartaSans(
+        labelStyle: const TextStyle(
+          fontFamily: fontFamilyName,
           fontSize: 12.5,
           fontWeight: FontWeight.w500,
           color: AppColors.onSurfaceVariant,
         ),
-        secondaryLabelStyle: GoogleFonts.plusJakartaSans(
+        secondaryLabelStyle: const TextStyle(
+          fontFamily: fontFamilyName,
           fontSize: 12.5,
           fontWeight: FontWeight.w600,
           color: Colors.white,
@@ -250,7 +259,8 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surfaceContainerLowest,
-        hintStyle: GoogleFonts.plusJakartaSans(
+        hintStyle: const TextStyle(
+          fontFamily: fontFamilyName,
           fontSize: 13.5,
           fontWeight: FontWeight.w400,
           color: AppColors.textMuted,

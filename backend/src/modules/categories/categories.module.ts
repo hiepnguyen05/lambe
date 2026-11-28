@@ -4,7 +4,6 @@ import { CacheModule } from '../../infrastructure/cache/cache.module';
 import { PostgresModule } from '../../infrastructure/persistence/postgres/postgres.module';
 import { InternalAuthModule } from '../internal-auth/internal-auth.module';
 import { UploadModule } from '../upload/upload.module';
-import { CategoriesCommandService } from './application/categories-command.service';
 import { CategoriesQueryService } from './application/categories-query.service';
 import { CategoryCacheService } from './application/category-cache.service';
 import { CategoryImageService } from './application/category-image.service';
@@ -27,7 +26,6 @@ import { PublicCategoriesController } from './controllers/public-categories.cont
   controllers: [AdminCategoriesController, PublicCategoriesController],
   providers: [
     CategoriesQueryService,
-    CategoriesCommandService,
     CategoryCacheService,
     CategoryImageService,
     CategoryUniquenessService,

@@ -102,6 +102,22 @@ function context() {
 }
 
 describe('ProviderAvailabilityService', () => {
+  it('reports all setup checks from actual server data and the configured balance threshold', async () => {
+    const { service, provider } = context();
+    provider._count.workingHours = 0;
+    provider.wallet = { balanceAmount: 60000, heldAmount: 20000 };
+    const result = await service.getStatus('user-id');
+    expect(result.data.receivingEligibility).toMatchObject({
+      minimumBalance: 50000,
+      availableBalance: 40000,
+      checks: [
+        { code: 'AREA', ready: true },
+        { code: 'WORKING_HOURS', ready: false },
+        { code: 'SERVICES', ready: true },
+        { code: 'WALLET', ready: false },
+      ],
+    });
+  });
   afterEach(() => jest.useRealTimers());
 
   it('blocks online activation while a safety incident is open', async () => {

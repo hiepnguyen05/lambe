@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class ApiEndpoints {
   ApiEndpoints._();
 
@@ -7,6 +9,21 @@ class ApiEndpoints {
     'API_BASE_URL',
     defaultValue: 'http://10.0.2.2:5000/api',
   );
+
+  static bool isValidBaseUrl(String url, {required bool isRelease}) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return false;
+    if (isRelease) return trimmed.startsWith('https://');
+    return trimmed.startsWith('http://') || trimmed.startsWith('https://');
+  }
+
+  static void validateForRelease() {
+    if (!isValidBaseUrl(baseUrl, isRelease: kReleaseMode)) {
+      throw StateError(
+        'API_BASE_URL must use HTTPS in release builds (got: $baseUrl).',
+      );
+    }
+  }
 
   static const Duration connectionTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);
@@ -46,6 +63,7 @@ class ApiEndpoints {
 
   // Discovery
   static const String providerDiscoverySearch = '/discovery/providers/search';
+  static const String providerDiscoveryNearby = '/discovery/providers/nearby';
   static String publicProviderProfile(String id) => '/providers/$id/public';
 
   // Customer Addresses
@@ -123,6 +141,10 @@ class ApiEndpoints {
   static String arriveProviderOrder(String id) =>
       '${meProviderOrder(id)}/arrive';
   static String startProviderOrder(String id) => '${meProviderOrder(id)}/start';
+  static String pauseProviderOrderWork(String id) =>
+      '${meProviderOrder(id)}/work/pause';
+  static String resumeProviderOrderWork(String id) =>
+      '${meProviderOrder(id)}/work/resume';
   static String completeProviderOrder(String id) =>
       '${meProviderOrder(id)}/complete';
   static String providerOrderPaymentDispute(String id) =>

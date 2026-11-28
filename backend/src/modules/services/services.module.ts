@@ -10,7 +10,6 @@ import { ReorderServicesService } from './application/reorder-services.service';
 import { ServiceCacheService } from './application/service-cache.service';
 import { ServiceImageService } from './application/service-image.service';
 import { ServiceUniquenessService } from './application/service-uniqueness.service';
-import { ServicesCommandService } from './application/services-command.service';
 import { ServicesQueryService } from './application/services-query.service';
 import { UpdateServiceService } from './application/update-service.service';
 import { AdminServiceOrderingController } from './controllers/admin-service-ordering.controller';
@@ -32,7 +31,6 @@ import { PublicServicesController } from './controllers/public-services.controll
   ],
   providers: [
     ServicesQueryService,
-    ServicesCommandService,
     ServiceCacheService,
     ServiceImageService,
     ServiceUniquenessService,

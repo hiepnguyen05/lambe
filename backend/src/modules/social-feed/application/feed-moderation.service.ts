@@ -33,6 +33,7 @@ export class FeedModerationService {
       totalPosts,
       publishedPosts,
       hiddenPosts,
+      pendingModeration,
       pendingReports,
       totalLikes,
       totalComments,
@@ -46,6 +47,12 @@ export class FeedModerationService {
       this.prisma.feedPost.count({
         where: { status: FeedPostStatus.HIDDEN },
       }),
+      this.prisma.feedPost.count({
+        where: {
+          moderationStatus: 'PENDING',
+          status: { not: FeedPostStatus.DELETED },
+        },
+      }),
       this.prisma.feedReport.count({ where: { resolution: null } }),
       this.prisma.feedLike.count(),
       this.prisma.feedComment.count({ where: { deletedAt: null } }),
@@ -54,6 +61,7 @@ export class FeedModerationService {
       totalPosts,
       publishedPosts,
       hiddenPosts,
+      pendingModeration,
       pendingReports,
       totalLikes,
       totalComments,
@@ -77,6 +85,13 @@ export class FeedModerationService {
       where.providerId = query.providerId;
     }
 
+    if (query.moderationStatus && query.moderationStatus !== 'ALL') {
+      where.moderationStatus = query.moderationStatus as
+        | 'PENDING'
+        | 'APPROVED'
+        | 'REJECTED';
+    }
+
     if (query.hasReports) {
       where.reports = { some: { resolution: null } };
     }
@@ -95,7 +110,12 @@ export class FeedModerationService {
         where,
         include: {
           provider: {
-            select: { id: true, displayName: true, avatarUrl: true },
+            select: {
+              id: true,
+              displayName: true,
+              avatarUrl: true,
+              feedPostingBlocked: true,
+            },
           },
           authorMember: {
             select: { id: true, displayName: true, avatarUrl: true },
@@ -157,6 +177,11 @@ export class FeedModerationService {
         revisionNumber: post.revisionNumber,
         organizationReviewStatus: post.organizationReviewStatus,
         moderationStatus: post.moderationStatus,
+        recommendationStatus: post.recommendationStatus,
+        moderationPolicyCode: post.moderationPolicyCode,
+        moderationNote: post.moderationNote,
+        safetyScore: post.safetyScore,
+        safetyLabels: post.safetyLabels,
         createdAt: post.createdAt,
         updatedAt: post.updatedAt,
         provider: post.provider,
@@ -271,8 +296,24 @@ export class FeedModerationService {
         },
         data: { status },
       });
-      if (!updated.count)
-        throw new NotFoundException('Không tìm thấy bài đăng.');
+      if (!updated.count) {
+        const current = await tx.feedPost.findUnique({
+          where: { id: postId },
+          select: { status: true, moderationStatus: true },
+        });
+        if (!current || current.status === FeedPostStatus.DELETED) {
+          throw new NotFoundException('Không tìm thấy bài đăng.');
+        }
+        if (
+          status === FeedPostStatus.PUBLISHED &&
+          current.moderationStatus !== 'APPROVED'
+        ) {
+          throw new ConflictException(
+            'Bài chưa được duyệt nội dung nên không thể hiển thị.',
+          );
+        }
+        throw new ConflictException('Không thể cập nhật trạng thái bài đăng.');
+      }
       await this.audit.record(
         {
           actorInternalAccountId: reviewerId,

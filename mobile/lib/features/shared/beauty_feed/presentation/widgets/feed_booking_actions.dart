@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 import 'package:mobile/features/customer/booking/domain/entities/provider_booking_entry.dart';
 import 'package:mobile/features/customer/catalog/presentation/providers/catalog_providers.dart';
 import 'package:mobile/features/shared/auth/di/auth_providers.dart';
@@ -31,6 +32,7 @@ class _FeedBookingActionsState extends ConsumerState<FeedBookingActions> {
     ref
         .read(feedEngagementReporterProvider)
         .report(widget.post.id, 'OPEN_SERVICE');
+    var showUnavailableError = false;
     try {
       final profile = await ref
           .read(partnerProfileRepositoryProvider)
@@ -68,17 +70,16 @@ class _FeedBookingActionsState extends ConsumerState<FeedBookingActions> {
         ),
       );
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Dịch vụ vừa thay đổi hoặc chưa khả dụng. Hãy tải lại hồ sơ chuyên viên.',
-            ),
-          ),
-        );
-      }
+      showUnavailableError = true;
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+    if (showUnavailableError && mounted) {
+      await AppDialog.error(
+        context,
+        message:
+            'Dịch vụ vừa thay đổi hoặc chưa khả dụng. Hãy tải lại hồ sơ chuyên viên.',
+      );
     }
   }
 

@@ -137,4 +137,114 @@ describe('AdminOrderQueryService', () => {
     );
     expect(result.data.url).toBe('https://example.test/signed');
   });
+
+  it('aggregates analytics KPIs, trends, and alerts without a 100-row cap', async () => {
+    const { service, prisma } = fixture();
+    (prisma.serviceOrder as Record<string, unknown>).groupBy = jest
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          status: 'COMPLETED',
+          _count: { id: 120 },
+          _sum: { totalAmount: 24_000_000 },
+        },
+        {
+          status: 'IN_PROGRESS',
+          _count: { id: 15 },
+          _sum: { totalAmount: 3_000_000 },
+        },
+        {
+          status: 'EXPIRED',
+          _count: { id: 5 },
+          _sum: { totalAmount: 1_000_000 },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          status: 'COMPLETED',
+          _count: { id: 80 },
+          _sum: { totalAmount: 16_000_000 },
+        },
+        {
+          status: 'CANCELLED',
+          _count: { id: 20 },
+          _sum: { totalAmount: 4_000_000 },
+        },
+      ])
+      .mockResolvedValueOnce([
+        { serviceName: 'Cắt tóc nữ', _count: { id: 140 } },
+      ])
+      .mockResolvedValueOnce([
+        { serviceName: 'Cắt tóc nữ', _sum: { totalAmount: 24_000_000 } },
+      ]);
+    (prisma as Record<string, unknown>).providerProfile = {
+      count: jest.fn().mockResolvedValueOnce(42).mockResolvedValueOnce(7),
+    };
+    (prisma as Record<string, unknown>).orderOperationalAlert = {
+      count: jest.fn().mockResolvedValue(3),
+      findMany: jest.fn().mockResolvedValue([
+        {
+          id: 'alert-1',
+          type: 'SAFETY_HOLD_STALE',
+          status: 'OPEN',
+          detectedAt: new Date('2026-11-28T07:00:00Z'),
+          order: {
+            id: 'order-1',
+            serviceName: 'Cắt tóc nữ',
+            providerDisplayName: 'Minh Anh',
+          },
+        },
+      ]),
+    };
+    const vnNow = new Date(Date.now() + 7 * 60 * 60_000);
+    const todayKey = `${vnNow.getUTCDate()}/${vnNow.getUTCMonth() + 1}`;
+    (prisma as Record<string, unknown>).$queryRaw = jest
+      .fn()
+      .mockResolvedValueOnce([
+        { bucket: todayKey, orders: 140n, revenue: 24000000n },
+      ])
+      .mockResolvedValueOnce([
+        { week_index: 1, customers: 10n, providers: 2n },
+        { week_index: 2, customers: 12n, providers: 3n },
+        { week_index: 3, customers: 8n, providers: 1n },
+        { week_index: 4, customers: 15n, providers: 4n },
+      ]);
+
+    const result = await service.analytics('7d', admin);
+
+    expect(result.success).toBe(true);
+    expect(result.data.kpis).toMatchObject({
+      gmv: 24_000_000,
+      gmvGrowth: 50,
+      totalBookings: 140,
+      bookingGrowth: 40,
+      completionRate: 86,
+      activeProviders: 42,
+      activeProvidersDelta: 7,
+      urgentAlertsCount: 3,
+    });
+    expect(
+      result.data.revenueTrend.find((p) => p.date === todayKey),
+    ).toMatchObject({
+      orders: 140,
+      revenue: 24_000_000,
+    });
+    expect(
+      result.data.statusDistribution.find((s) => s.status === 'DISPUTED')
+        ?.count,
+    ).toBe(0);
+    expect(
+      result.data.statusDistribution.find((s) => s.status === 'CANCELLED')
+        ?.count,
+    ).toBe(5);
+    expect(result.data.categoryBreakdown[0]).toMatchObject({
+      name: 'Cắt tóc nữ',
+      orders: 140,
+      revenue: 24_000_000,
+    });
+    expect(result.data.growthTrend.map((g) => g.newCustomers)).toEqual([
+      10, 12, 8, 15,
+    ]);
+    expect(result.data.recentAlerts).toHaveLength(1);
+  });
 });

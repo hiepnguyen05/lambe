@@ -6,6 +6,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import 'package:mobile/core/utils/address_utils.dart';
 import 'package:mobile/core/widgets/app_dialog.dart';
 import 'package:mobile/features/shared/auth/di/auth_providers.dart';
 
@@ -159,13 +160,11 @@ class _EditAddressScreenState extends ConsumerState<EditAddressScreen> {
 
     setState(() => _isLoading = true);
 
-    final parts = [
-      _streetController.text.trim(),
-      _wardController.text.trim(),
-      _provinceController.text.trim(),
-    ].where((e) => e.isNotEmpty).toList();
-
-    final fullAddressLine = parts.join(', ');
+    final fullAddressLine = AddressUtils.joinUnique([
+      _streetController.text,
+      _wardController.text,
+      _provinceController.text,
+    ]);
 
     String finalDistrict = _districtController.text.trim();
     String finalWard = _wardController.text.trim();
@@ -270,11 +269,11 @@ class _EditAddressScreenState extends ConsumerState<EditAddressScreen> {
   }
 
   Future<void> _geocodeManualAddress() async {
-    final fullAddress = [
-      _streetController.text.trim(),
-      _wardController.text.trim(),
-      _provinceController.text.trim(),
-    ].where((e) => e.isNotEmpty).join(', ');
+    final fullAddress = AddressUtils.joinUnique([
+      _streetController.text,
+      _wardController.text,
+      _provinceController.text,
+    ]);
 
     if (fullAddress.isEmpty) return;
 
@@ -301,95 +300,96 @@ class _EditAddressScreenState extends ConsumerState<EditAddressScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FF),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text(
           widget.address == null ? 'Thêm địa chỉ mới' : 'Cập nhật địa chỉ',
           style: const TextStyle(
             color: Color(0xFF0B1C30),
-            fontWeight: FontWeight.bold,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
           ),
         ),
+        centerTitle: true,
         backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Color(0xFF0B1C30)),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ContactInfoSection(
-                nameController: _contactNameController,
-                phoneController: _contactPhoneController,
-                noteController: _noteController,
+              _AddressFormCard(
+                child: ContactInfoSection(
+                  nameController: _contactNameController,
+                  phoneController: _contactPhoneController,
+                  noteController: _noteController,
+                ),
               ),
-              const SizedBox(height: 32),
-
-              AddressTypeSection(
-                selectedType: _selectedType,
-                onTypeSelected: (type) => setState(() => _selectedType = type),
+              const SizedBox(height: 12),
+              _AddressFormCard(
+                child: AddressTypeSection(
+                  selectedType: _selectedType,
+                  onTypeSelected: (type) =>
+                      setState(() => _selectedType = type),
+                ),
               ),
-              const SizedBox(height: 32),
-
-              AddressDetailsSection(
-                provinceController: _provinceController,
-                wardController: _wardController,
-                streetController: _streetController,
-                onAddressSubmitted: _geocodeManualAddress,
+              const SizedBox(height: 12),
+              _AddressFormCard(
+                child: AddressDetailsSection(
+                  provinceController: _provinceController,
+                  wardController: _wardController,
+                  streetController: _streetController,
+                  onAddressSubmitted: _geocodeManualAddress,
+                ),
               ),
-              const SizedBox(height: 24),
-
-              // 4. Định vị và Bản đồ
-              AddressLocationPickerSection(
-                isLocating: _isLocating,
-                onGetCurrentLocation: _getCurrentLocation,
-                latitude: _latitude,
-                longitude: _longitude,
-                mapController: _mapController,
-                onMapTap: (point) async {
-                  setState(() {
-                    _latitude = point.latitude;
-                    _longitude = point.longitude;
-                  });
-                  await _updateAddressFromCoordinates(
-                    point.latitude,
-                    point.longitude,
-                  );
-                },
-                isDefault: _isDefault,
-                onDefaultChanged: (val) {
-                  setState(() => _isDefault = val);
-                },
+              const SizedBox(height: 12),
+              _AddressFormCard(
+                child: AddressLocationPickerSection(
+                  isLocating: _isLocating,
+                  onGetCurrentLocation: _getCurrentLocation,
+                  latitude: _latitude,
+                  longitude: _longitude,
+                  mapController: _mapController,
+                  onMapTap: (point) async {
+                    setState(() {
+                      _latitude = point.latitude;
+                      _longitude = point.longitude;
+                    });
+                    await _updateAddressFromCoordinates(
+                      point.latitude,
+                      point.longitude,
+                    );
+                  },
+                  isDefault: _isDefault,
+                  onDefaultChanged: (val) {
+                    setState(() => _isDefault = val);
+                  },
+                ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
             ],
           ),
         ),
       ),
       bottomNavigationBar: SafeArea(
         child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          decoration: const BoxDecoration(
             color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, -4),
-              ),
-            ],
+            border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
           ),
-          child: ElevatedButton(
+          child: FilledButton(
             onPressed: _isLoading ? null : _save,
-            style: ElevatedButton.styleFrom(
+            style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFF0F766E),
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              elevation: 4,
-              shadowColor: const Color(0xFF0F766E).withValues(alpha: 0.3),
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(100),
               ),
@@ -405,11 +405,33 @@ class _EditAddressScreenState extends ConsumerState<EditAddressScreen> {
                   )
                 : const Text(
                     'Lưu địa chỉ',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _AddressFormCard extends StatelessWidget {
+  final Widget child;
+
+  const _AddressFormCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: child,
     );
   }
 }

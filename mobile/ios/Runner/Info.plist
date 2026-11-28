@@ -83,7 +83,6 @@
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
-
 		<!-- Facebook Sign-in Configuration -->
 		<key>FacebookAppID</key>
 		<string>2576686669461082</string>

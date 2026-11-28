@@ -1,4 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
+import { ServicesQueryService } from './services-query.service';
 import {
   ServiceCategoryStatus,
   ServiceStatus,
@@ -129,5 +130,82 @@ describe('ServicesQueryService', () => {
     await expect(
       queryService.findActiveBySlug('hidden-service'),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('enriches active service list and detail with real order reviews when available', async () => {
+    const prisma = {
+      service: {
+        findMany: jest.fn().mockResolvedValue([PUBLIC_SERVICE]),
+        findFirst: jest.fn().mockResolvedValue(PUBLIC_SERVICE),
+      },
+      $queryRaw: jest.fn().mockResolvedValue([
+        {
+          serviceId: PUBLIC_SERVICE.id,
+          count: 4,
+          averageRating: 4.75,
+        },
+      ]),
+      orderReview: {
+        aggregate: jest.fn().mockResolvedValue({
+          _count: { id: 4 },
+          _avg: { rating: 4.75 },
+        }),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'rev-1',
+            rating: 5,
+            comment: 'Rất hài lòng',
+            createdAt: new Date('2026-11-20T10:00:00.000Z'),
+            memberId: null,
+            memberDisplayName: null,
+            memberAvatarUrl: null,
+            customer: { fullName: 'Thu Hà', avatarUrl: null },
+          },
+        ]),
+      },
+    };
+    const cache = {
+      getActive: jest.fn().mockResolvedValue(null),
+      setActive: jest.fn().mockResolvedValue(undefined),
+    };
+    const richService = new ServicesQueryService(
+      prisma as never,
+      cache as never,
+    );
+
+    const listRes = await richService.findActive({});
+    expect(listRes.data[0]).toMatchObject({
+      id: PUBLIC_SERVICE.id,
+      reviewSummary: { count: 4, averageRating: 4.75 },
+    });
+
+    const detailRes = await richService.findActiveBySlug('cat-toc-nam');
+    expect(detailRes.data).toMatchObject({
+      id: PUBLIC_SERVICE.id,
+      reviewSummary: { count: 4, averageRating: 4.75 },
+      reviews: [
+        expect.objectContaining({
+          id: 'rev-1',
+          rating: 5,
+          comment: 'Rất hài lòng',
+          customerName: 'Thu Hà',
+        }),
+      ],
+    });
+
+    const reviewsPage = await richService.findReviewsBySlug('cat-toc-nam');
+    expect(reviewsPage.data).toMatchObject({
+      count: 4,
+      averageRating: 4.75,
+      nextCursor: null,
+      reviews: [
+        expect.objectContaining({
+          id: 'rev-1',
+          rating: 5,
+          comment: 'Rất hài lòng',
+          customerName: 'Thu Hà',
+        }),
+      ],
+    });
   });
 });

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mobile/core/constants/api_endpoints.dart';
@@ -40,93 +39,17 @@ class HomeCategoryItem {
   }
 }
 
-/// Danh mục dịch vụ chuẩn theo mô hình thiết kế
-const List<HomeCategoryItem> kDefaultCoreCategories = [
-  HomeCategoryItem(
-    id: 'nail',
-    code: 'NAIL',
-    name: 'Làm Nail & Móng',
-    slug: 'nail-mong',
-    iconUrl: 'brush',
-    sortOrder: 1,
-  ),
-  HomeCategoryItem(
-    id: 'skincare',
-    code: 'SKINCARE',
-    name: 'Chăm sóc Da & Spa',
-    slug: 'cham-soc-da-spa',
-    iconUrl: 'spa',
-    sortOrder: 2,
-  ),
-  HomeCategoryItem(
-    id: 'haircut',
-    code: 'HAIRCUT',
-    name: 'Cắt & Tạo kiểu',
-    slug: 'cat-tao-kieu',
-    iconUrl: 'content_cut',
-    sortOrder: 3,
-  ),
-  HomeCategoryItem(
-    id: 'massage',
-    code: 'MASSAGE',
-    name: 'Massage Thư giãn',
-    slug: 'massage-thu-gian',
-    iconUrl: 'self_improvement',
-    sortOrder: 4,
-  ),
-  HomeCategoryItem(
-    id: 'shampoo',
-    code: 'SHAMPOO',
-    name: 'Gội Dưỡng Sinh',
-    slug: 'goi-duong-sinh',
-    iconUrl: 'water_drop',
-    sortOrder: 5,
-  ),
-  HomeCategoryItem(
-    id: 'makeup',
-    code: 'MAKEUP',
-    name: 'Trang điểm & Mi',
-    slug: 'trang-diem-mi',
-    iconUrl: 'face_retouching_natural',
-    sortOrder: 6,
-  ),
-  HomeCategoryItem(
-    id: 'waxing',
-    code: 'WAXING',
-    name: 'Waxing & Triệt lông',
-    slug: 'waxing-triet-long',
-    iconUrl: 'auto_awesome',
-    sortOrder: 7,
-  ),
-  HomeCategoryItem(
-    id: 'aesthetic',
-    code: 'AESTHETIC',
-    name: 'Thẩm mỹ & Khác',
-    slug: 'tham-my-khac',
-    iconUrl: 'health_and_beauty',
-    sortOrder: 8,
-  ),
-];
-
-/// Provider kết nối trực tiếp với API thật GET /categories
+/// Provider kết nối trực tiếp với API thật GET /categories.
+/// Không trả dữ liệu danh mục ảo khi đang tải, rỗng hoặc gặp lỗi mạng.
 final homeCategoriesProvider = FutureProvider<List<HomeCategoryItem>>((
   ref,
 ) async {
   final dio = ref.watch(dioProvider);
+  final response = await dio.get(ApiEndpoints.categories);
+  final dataList = ApiResponseParser.dataList(response);
 
-  try {
-    final response = await dio.get(ApiEndpoints.categories);
-    final dataList = ApiResponseParser.dataList(response);
-
-    if (dataList.isEmpty) {
-      return kDefaultCoreCategories;
-    }
-
-    return dataList
-        .map((item) => HomeCategoryItem.fromJson(item as Map<String, dynamic>))
-        .toList();
-  } catch (e, stack) {
-    debugPrint('⚠️ Failed to fetch categories: $e\n$stack');
-    return kDefaultCoreCategories;
-  }
+  return dataList
+      .whereType<Map<String, dynamic>>()
+      .map(HomeCategoryItem.fromJson)
+      .toList();
 });

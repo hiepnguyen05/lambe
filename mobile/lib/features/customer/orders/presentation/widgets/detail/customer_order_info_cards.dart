@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 
 import '../../../domain/entities/customer_order_entity.dart';
 
@@ -49,29 +50,41 @@ class CustomerOrderServiceTimeCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
-                Icons.schedule_rounded,
-                size: 15,
-                color: Color(0xFF64748B),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                timeStr,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: isAsap
-                      ? const Color(0xFFD97706)
-                      : const Color(0xFF0F766E),
+              const Padding(
+                padding: EdgeInsets.only(top: 1),
+                child: Icon(
+                  Icons.schedule_rounded,
+                  size: 15,
+                  color: Color(0xFF64748B),
                 ),
               ),
-              const Text(' • ', style: TextStyle(color: Color(0xFFCBD5E1))),
-              Text(
-                '${order.durationMinutes} phút',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: Color(0xFF64748B),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 2,
+                  children: [
+                    Text(
+                      timeStr,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: isAsap
+                            ? const Color(0xFFD97706)
+                            : const Color(0xFF0F766E),
+                      ),
+                    ),
+                    const Text('•', style: TextStyle(color: Color(0xFFCBD5E1))),
+                    Text(
+                      '${order.durationMinutes} phút',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -108,8 +121,13 @@ class CustomerOrderServiceTimeCard extends StatelessWidget {
 
 class CustomerOrderAddressCard extends StatelessWidget {
   final CustomerOrderEntity order;
+  final String? addressOverride;
 
-  const CustomerOrderAddressCard({super.key, required this.order});
+  const CustomerOrderAddressCard({
+    super.key,
+    required this.order,
+    this.addressOverride,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -131,19 +149,25 @@ class CustomerOrderAddressCard extends StatelessWidget {
                 color: Color(0xFF0F766E),
               ),
               SizedBox(width: 8),
-              Text(
-                'Địa chỉ & Người nhận',
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+              Expanded(
+                child: Text(
+                  'Địa chỉ & Người nhận',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
           Text(
-            order.addressLine ?? 'Tại địa chỉ khách hàng cung cấp',
+            addressOverride ??
+                order.addressLine ??
+                'Tại địa chỉ khách hàng cung cấp',
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -160,29 +184,44 @@ class CustomerOrderAddressCard extends StatelessWidget {
           ],
           const SizedBox(height: 6),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
-                Icons.person_outline_rounded,
-                size: 14,
-                color: Color(0xFF64748B),
+              const Padding(
+                padding: EdgeInsets.only(top: 1),
+                child: Icon(
+                  Icons.person_outline_rounded,
+                  size: 14,
+                  color: Color(0xFF64748B),
+                ),
               ),
               const SizedBox(width: 4),
-              Text(
-                order.contactName ?? 'Khách hàng',
-                style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
-              ),
-              if (order.contactPhone != null &&
-                  order.contactPhone!.isNotEmpty) ...[
-                const Text(' • ', style: TextStyle(color: Color(0xFFCBD5E1))),
-                Text(
-                  order.contactPhone!,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF0F766E),
-                  ),
+              Expanded(
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 2,
+                  children: [
+                    Text(
+                      order.contactName ?? 'Khách hàng',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF475569),
+                      ),
+                    ),
+                    if (order.contactPhone != null &&
+                        order.contactPhone!.isNotEmpty) ...[
+                      const Text('•', style: TextStyle(color: Color(0xFFCBD5E1))),
+                      Text(
+                        order.contactPhone!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF0F766E),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
+              ),
             ],
           ),
         ],
@@ -193,27 +232,51 @@ class CustomerOrderAddressCard extends StatelessWidget {
 
 class CustomerOrderPricingCard extends StatelessWidget {
   final CustomerOrderEntity order;
-  final NumberFormat currencyFormatter;
+  final NumberFormat? currencyFormatter;
+  final int platformFundedAmount;
+  final int commissionAmount;
+  final int commissionRateBps;
+  final int? netEarnings;
+  final String? earningsLabel;
+  final bool showEarningsBreakdown;
 
   const CustomerOrderPricingCard({
     super.key,
     required this.order,
-    required this.currencyFormatter,
+    this.currencyFormatter,
+    this.platformFundedAmount = 0,
+    this.commissionAmount = 0,
+    this.commissionRateBps = 0,
+    this.netEarnings,
+    this.earningsLabel,
+    this.showEarningsBreakdown = false,
   });
 
-  Widget _buildRow(String label, String value, {Color? valueColor}) {
+  Widget _buildRow(
+    String label,
+    String value, {
+    Color? valueColor,
+    bool isBold = false,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: isBold ? FontWeight.w700 : FontWeight.w400,
+              color: isBold ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+            ),
+          ),
         ),
+        const SizedBox(width: 8),
         Text(
           value,
           style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
+            fontSize: isBold ? 14 : 13,
+            fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
             color: valueColor ?? const Color(0xFF1E293B),
           ),
         ),
@@ -223,6 +286,7 @@ class CustomerOrderPricingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final formatter = currencyFormatter ?? CurrencyUtils.vndCurrency;
     final hasVoucherDiscount = order.discountAmount > 0;
     final subtotal =
         order.subtotalAmount ??
@@ -247,12 +311,16 @@ class CustomerOrderPricingCard extends StatelessWidget {
                 color: Color(0xFF0F766E),
               ),
               SizedBox(width: 8),
-              Text(
-                'Chi tiết thanh toán',
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+              Expanded(
+                child: Text(
+                  'Chi tiết thanh toán',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
                 ),
               ),
             ],
@@ -260,13 +328,13 @@ class CustomerOrderPricingCard extends StatelessWidget {
           const SizedBox(height: 10),
           _buildRow(
             'Giá dịch vụ',
-            currencyFormatter.format(order.servicePriceAmount),
+            formatter.format(order.servicePriceAmount),
           ),
           for (final item in order.addOnSnapshot?.accepted ?? []) ...[
             const SizedBox(height: 6),
             _buildRow(
               '${item.serviceName} (phát sinh)',
-              currencyFormatter.format(item.priceAmount),
+              formatter.format(item.priceAmount),
             ),
           ],
           const SizedBox(height: 6),
@@ -276,7 +344,7 @@ class CustomerOrderPricingCard extends StatelessWidget {
                 : 'Phí di chuyển',
             order.travelFeeAmount == 0
                 ? 'Miễn phí'
-                : currencyFormatter.format(order.travelFeeAmount),
+                : formatter.format(order.travelFeeAmount),
             valueColor: order.travelFeeAmount == 0
                 ? const Color(0xFF16A34A)
                 : const Color(0xFF1E293B),
@@ -285,73 +353,74 @@ class CustomerOrderPricingCard extends StatelessWidget {
             const SizedBox(height: 6),
             _buildRow(
               'Tạm tính',
-              currencyFormatter.format(subtotal),
+              formatter.format(subtotal),
               valueColor: const Color(0xFF64748B),
             ),
             const SizedBox(height: 6),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Text(
-                      'Giảm giá voucher',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: Color(0xFF64748B),
+                Expanded(
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    children: [
+                      const Text(
+                        'Giảm giá voucher',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: Color(0xFF64748B),
+                        ),
                       ),
-                    ),
-                    if (order.voucherCode != null) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 1.5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                        ),
-                        child: Text(
-                          order.voucherCode!,
-                          style: const TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF334155),
+                      if (order.voucherCode != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                          ),
+                          child: Text(
+                            order.voucherCode!,
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF334155),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                    if (order.voucherIssuer != null) ...[
-                      const SizedBox(width: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 1.5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isPlatformVoucher
-                              ? const Color(0xFFCCFBF1)
-                              : const Color(0xFFEDE9FE),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          isPlatformVoucher ? 'Sàn' : 'Thợ',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
+                      if (order.voucherIssuer != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
                             color: isPlatformVoucher
-                                ? const Color(0xFF0F766E)
-                                : const Color(0xFF7C3AED),
+                                ? const Color(0xFFCCFBF1)
+                                : const Color(0xFFEDE9FE),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            isPlatformVoucher ? 'Sàn' : 'Thợ',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: isPlatformVoucher
+                                  ? const Color(0xFF0F766E)
+                                  : const Color(0xFF7C3AED),
+                            ),
                           ),
                         ),
-                      ),
                     ],
-                  ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Text(
-                  '-${currencyFormatter.format(order.discountAmount)}',
+                  '-${formatter.format(order.discountAmount)}',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -368,16 +437,19 @@ class CustomerOrderPricingCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Tổng tiền mặt COD',
-                style: TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+              const Expanded(
+                child: Text(
+                  'Tổng tiền mặt COD',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
-                currencyFormatter.format(order.totalAmount),
+                formatter.format(order.totalAmount),
                 style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
@@ -386,6 +458,34 @@ class CustomerOrderPricingCard extends StatelessWidget {
               ),
             ],
           ),
+          if (showEarningsBreakdown) ...[
+            const SizedBox(height: 8),
+            if (platformFundedAmount > 0) ...[
+              _buildRow(
+                'Trợ giá từ sàn',
+                '+${formatter.format(platformFundedAmount)}',
+                valueColor: const Color(0xFF16A34A),
+              ),
+              const SizedBox(height: 6),
+            ],
+            _buildRow(
+              commissionRateBps > 0
+                  ? 'Phí nền tảng (${(commissionRateBps / 100).toStringAsFixed(0)}%)'
+                  : 'Phí nền tảng',
+              '-${formatter.format(commissionAmount)}',
+              valueColor: const Color(0xFFDC2626),
+            ),
+            const SizedBox(height: 6),
+            _buildRow(
+              earningsLabel ?? 'Thực nhận',
+              formatter.format(
+                netEarnings ??
+                    (order.totalAmount + platformFundedAmount - commissionAmount),
+              ),
+              valueColor: const Color(0xFF15803D),
+              isBold: true,
+            ),
+          ],
         ],
       ),
     );
@@ -394,8 +494,13 @@ class CustomerOrderPricingCard extends StatelessWidget {
 
 class CustomerOrderReviewSummaryCard extends StatelessWidget {
   final OrderReviewEntity review;
+  final String title;
 
-  const CustomerOrderReviewSummaryCard({super.key, required this.review});
+  const CustomerOrderReviewSummaryCard({
+    super.key,
+    required this.review,
+    this.title = 'Đánh giá của bạn',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -412,14 +517,19 @@ class CustomerOrderReviewSummaryCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Đánh giá của bạn',
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF15803D),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF15803D),
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Row(
                 children: List.generate(
                   5,
@@ -428,7 +538,7 @@ class CustomerOrderReviewSummaryCard extends StatelessWidget {
                         ? Icons.star_rounded
                         : Icons.star_outline_rounded,
                     size: 16,
-                    color: const Color(0xFFF59E0B),
+                    color: const Color(0xFF0F766E),
                   ),
                 ),
               ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 
 import '../../di/feed_providers.dart';
 import '../../application/feed_error.dart';
@@ -77,13 +78,14 @@ class _ReportState extends ConsumerState<_Report> {
                       .read(feedRepositoryProvider)
                       .report(widget.id, _reason, _detail.text, _cancel);
                   if (context.mounted) {
-                    final messenger = ScaffoldMessenger.of(context);
+                    final parentContext = Navigator.of(context).context;
                     Navigator.pop(context);
-                    messenger.showSnackBar(
-                      const SnackBar(
-                        content: Text('Đã gửi báo cáo để kiểm duyệt.'),
-                      ),
-                    );
+                    if (parentContext.mounted) {
+                      await AppDialog.success(
+                        parentContext,
+                        message: 'Đã gửi báo cáo để kiểm duyệt.',
+                      );
+                    }
                   }
                 } catch (error) {
                   if (mounted) setState(() => _error = feedError(error));

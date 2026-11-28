@@ -138,21 +138,8 @@ class _CategoryServicesScreenState
             parent: BouncingScrollPhysics(),
           ),
           slivers: [
-            // 1. Top Header App Bar (Kính mờ - Stack Screen)
-            CategoryHeaderAppBar(
-              onSearchTap: () {
-                _searchFocus.requestFocus();
-              },
-              onShareTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Đã sao chép liên kết danh sách dịch vụ!'),
-                    behavior: SnackBarBehavior.floating,
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
-            ),
+            // 1. Top Header App Bar
+            const CategoryHeaderAppBar(),
 
             // 2. Khu vực Điều khiển Tìm kiếm, Bộ lọc & Tabs Danh mục
             SliverToBoxAdapter(

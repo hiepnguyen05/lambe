@@ -40,6 +40,7 @@ const MAX_STREAMS_PER_USER = 3;
 @UseGuards(JwtAuthGuard)
 @Controller('me/conversations')
 export class ChatEventsController {
+  // shortcut: per-user cap is in-process memory; move activeStreams to Redis INCR/DECR with TTL when horizontally scaling SSE replicas.
   private readonly activeStreams = new Map<string, number>();
 
   constructor(

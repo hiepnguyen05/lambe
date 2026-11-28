@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 import 'package:mobile/features/shared/auth/di/auth_providers.dart';
 
 import '../../di/feed_providers.dart';
@@ -60,9 +61,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
       );
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Chưa mở được bảng chia sẻ.')),
-        );
+        await AppDialog.error(context, message: 'Chưa mở được bảng chia sẻ.');
       }
     }
   }
@@ -115,8 +114,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
           .read(feedSignalsProvider.notifier)
           .toggle(post, kind);
       if (error != null && context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error)));
+        await AppDialog.error(context, message: error);
       }
     }
 

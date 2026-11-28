@@ -3,11 +3,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 
 import 'package:mobile/core/error/app_failure.dart';
 import 'package:mobile/core/network/dio_client.dart';
-import 'package:mobile/core/network/upload_payload.dart';
 import 'package:mobile/core/routing/app_mode.dart';
 import 'package:mobile/core/routing/app_mode_provider.dart';
 import 'package:mobile/core/storage/secure_storage_service.dart';
@@ -24,6 +22,7 @@ import 'package:mobile/features/shared/notifications/data/push_device_service.da
 
 import '../../di/partner_profile_providers.dart';
 import '../../domain/entities/partner_profile_entity.dart';
+import '../utils/profile_avatar_uploader.dart';
 import '../widgets/layout/partner_account_app_bar.dart';
 import '../widgets/layout/partner_account_tile.dart';
 import '../widgets/layout/partner_logout_footer.dart';
@@ -152,8 +151,10 @@ class PartnerProfileScreen extends ConsumerWidget {
         ? ref.watch(workerWorkspaceProvider)
         : null;
     final isOrgEnabled = ref.watch(isOrganizationFeatureEnabledProvider);
-    final isWorker = isOrgEnabled && (workerWorkspace?.isWorkerInOrganization ?? false);
-    final isOrgOwner = isOrgEnabled && (workerWorkspace?.activeMembership?.isOwner ?? false);
+    final isWorker =
+        isOrgEnabled && (workerWorkspace?.isWorkerInOrganization ?? false);
+    final isOrgOwner =
+        isOrgEnabled && (workerWorkspace?.activeMembership?.isOwner ?? false);
 
     final baseProfile = profileAsync?.valueOrNull;
     final defaultDisplayName = isProvider
@@ -180,7 +181,8 @@ class PartnerProfileScreen extends ConsumerWidget {
                   baseProfile?.isDispatchEnabled,
             );
 
-    final isOrganization = isOrgEnabled && (effectiveProfile.isOrganization || isOrgOwner);
+    final isOrganization =
+        isOrgEnabled && (effectiveProfile.isOrganization || isOrgOwner);
 
     final walletBalance = walletState?.wallet?.availableAmount ?? 0;
 
@@ -228,7 +230,7 @@ class PartnerProfileScreen extends ConsumerWidget {
                     profile: effectiveProfile,
                     isProvider: isProvider,
                     customerPhone: user?.phone,
-                    onAvatarTap: () => _handleAvatarUpload(context, ref),
+                    onAvatarTap: () => pickAndUploadProfileAvatar(context, ref),
                     onViewPublicProfileTap: isProvider
                         ? () {
                             if (effectiveProfile.id.isNotEmpty) {
@@ -256,19 +258,30 @@ class PartnerProfileScreen extends ConsumerWidget {
                     const SizedBox(height: 14),
                   ],
 
-                  // Mode Switch / Partner Registration Card
-                  PartnerModeSwitchCard(
-                    isProvider: isProvider,
-                    isProviderMode: isProviderMode,
-                    onSwitchTap: () => _handleModeSwitch(
-                      context,
-                      ref,
+                  // Mode Switch (only near top when already a Partner)
+                  if (isProvider) ...[
+                    PartnerModeSwitchCard(
                       isProvider: isProvider,
                       isProviderMode: isProviderMode,
+                      onSwitchTap: () => _handleModeSwitch(
+                        context,
+                        ref,
+                        isProvider: isProvider,
+                        isProviderMode: isProviderMode,
+                      ),
                     ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  PartnerAccountTile(
+                    icon: Icons.help_outline_rounded,
+                    iconBackgroundColor: AppColors.surfaceContainer,
+                    iconColor: AppColors.primary,
+                    title: 'Hướng dẫn sử dụng',
+                    subtitle: 'Xem lại các bước đặt lịch và thực hiện đơn',
+                    onTap: () => context.push('/profile/guidance'),
                   ),
                   const SizedBox(height: 16),
-
                   // Mode-specific sections:
                   if (isProviderMode) ...[
                     // Provider: Services & Expertise
@@ -298,16 +311,16 @@ class PartnerProfileScreen extends ConsumerWidget {
                         profile: effectiveProfile,
                         onToggleDispatch: (enabled) =>
                             _toggleDispatch(context, ref, enabled),
-                        onRadiusTap: () {
-                          PartnerProfileModals.showRadiusDialog(
-                            context,
-                            currentRadius: effectiveProfile.serviceRadiusKm,
-                            onSave: (radius) {
-                              ref
-                                  .read(providerDashboardProvider.notifier)
-                                  .setRadius(radius);
-                            },
+                        onRadiusTap: () async {
+                          final saved = await context.push<bool>(
+                            '/provider/service-area',
                           );
+                          if (saved == true && context.mounted) {
+                            AppDialog.success(
+                              context,
+                              message: 'Đã lưu khu vực phục vụ.',
+                            );
+                          }
                         },
                         onScheduleTap: () {
                           context.push('/provider/schedule');
@@ -405,17 +418,6 @@ class PartnerProfileScreen extends ConsumerWidget {
                                   context.push('/provider/feed-review');
                                 },
                               ),
-                              const Divider(height: 1, indent: 64),
-                              PartnerAccountTile(
-                                icon: Icons.payments_outlined,
-                                iconBackgroundColor: const Color(0xFFD1FAE5),
-                                iconColor: const Color(0xFF059669),
-                                title: 'Đối soát tiền mặt thợ nộp',
-                                subtitle: 'Báo cáo tiền mặt các thợ đang thu hộ',
-                                onTap: () {
-                                  context.push('/provider/finance/reconciliation');
-                                },
-                              ),
                             ],
                           ),
                         ),
@@ -462,13 +464,6 @@ class PartnerProfileScreen extends ConsumerWidget {
                         onIdentityTap: () {
                           context.push('/profile/edit');
                         },
-                        onNotificationSoundTap: () {
-                          _showInfoDialog(
-                            context,
-                            title: 'Chuông báo đơn hàng',
-                            message: 'Cài đặt âm thanh nhận đơn đang được phát triển.',
-                          );
-                        },
                         onSafetyStandardsTap: () {
                           _showInfoDialog(
                             context,
@@ -480,7 +475,7 @@ class PartnerProfileScreen extends ConsumerWidget {
                           _showInfoDialog(
                             context,
                             title: 'Trung tâm hỗ trợ đối tác',
-                            message: 'Kênh hỗ trợ đối tác qua hotline 1900-xxxx hoặc email partner@lambe.vn.',
+                            message: 'Vui lòng liên hệ đội ngũ hỗ trợ đối tác qua email partner@lambe.vn.',
                           );
                         },
                       ),
@@ -504,7 +499,7 @@ class PartnerProfileScreen extends ConsumerWidget {
                         _showInfoDialog(
                           context,
                           title: 'Trung tâm trợ giúp Lambe',
-                          message: 'Tổng đài hỗ trợ khách hàng: 1900-xxxx (8:00 - 22:00 hàng ngày) hoặc email cs@lambe.vn.',
+                          message: 'Hỗ trợ khách hàng (8:00 - 22:00 hàng ngày) qua email cs@lambe.vn.',
                         );
                       },
                       onTermsTap: () {
@@ -518,6 +513,21 @@ class PartnerProfileScreen extends ConsumerWidget {
                   ],
 
                   const SizedBox(height: 20),
+
+                  // Partner Registration at bottom of Account screen for Customers
+                  if (!isProvider) ...[
+                    PartnerModeSwitchCard(
+                      isProvider: isProvider,
+                      isProviderMode: isProviderMode,
+                      onSwitchTap: () => _handleModeSwitch(
+                        context,
+                        ref,
+                        isProvider: isProvider,
+                        isProviderMode: isProviderMode,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Logout & Version Footer
                   PartnerLogoutFooter(
@@ -574,118 +584,6 @@ class PartnerProfileScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _handleAvatarUpload(BuildContext context, WidgetRef ref) async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null && context.mounted) {
-      final imageBytes = await image.readAsBytes();
-      if (!context.mounted) return;
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: const Text(
-            'Xem trước ảnh đại diện',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: ClipOval(
-                  child: Image.memory(
-                    imageBytes,
-                    width: 140,
-                    height: 140,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Bạn có muốn sử dụng ảnh này làm ảnh đại diện?',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.black54),
-              ),
-            ],
-          ),
-          actionsAlignment: MainAxisAlignment.center,
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-              ),
-              child: const Text(
-                'Hủy',
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(ctx);
-                await ref
-                    .read(authNotifierProvider.notifier)
-                    .uploadAvatar(
-                      UploadPayload(bytes: imageBytes, fileName: image.name),
-                    );
-                if (context.mounted) {
-                  final error = ref.read(authNotifierProvider).error;
-                  if (error == null) {
-                    AppDialog.showMessageDialog(
-                      context,
-                      title: 'Thành công',
-                      message: 'Cập nhật ảnh đại diện thành công!',
-                    );
-                  } else {
-                    AppDialog.showErrorDialog(
-                      context,
-                      message: error.toString(),
-                    );
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(100),
-                ),
-              ),
-              child: const Text(
-                'Lưu ảnh',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-  }
-
   Future<void> _handleNotificationSettings(
     BuildContext context,
     WidgetRef ref,
@@ -707,22 +605,21 @@ class PartnerProfileScreen extends ConsumerWidget {
       await service.register();
       final status = await service.authorizationStatus();
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            status == AuthorizationStatus.authorized ||
-                    status == AuthorizationStatus.provisional
-                ? 'Đã bật thông báo cho lịch hẹn và tin nhắn.'
-                : 'Hãy bật thông báo cho Lambe trong cài đặt của điện thoại.',
-          ),
-        ),
+      final granted =
+          status == AuthorizationStatus.authorized ||
+          status == AuthorizationStatus.provisional;
+      await AppDialog.info(
+        context,
+        title: 'Cài đặt thông báo',
+        message: granted
+            ? 'Đã bật thông báo cho lịch hẹn và tin nhắn.'
+            : 'Hãy bật thông báo cho Lambe trong cài đặt của điện thoại.',
       );
     } catch (_) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Chưa thể bật thông báo. Vui lòng thử lại.'),
-        ),
+      await AppDialog.error(
+        context,
+        message: 'Chưa thể bật thông báo. Vui lòng thử lại.',
       );
     }
   }

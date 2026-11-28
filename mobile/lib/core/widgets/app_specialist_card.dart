@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 import 'package:mobile/features/customer/booking/domain/entities/booking_provider_candidate_entity.dart';
 import 'package:mobile/features/customer/catalog/domain/entities/nearby_technician_entity.dart';
 import 'package:mobile/features/customer/home/domain/entities/specialist_item.dart';
@@ -10,7 +11,7 @@ import 'package:mobile/features/customer/home/domain/entities/specialist_item.da
 export 'package:mobile/features/customer/home/domain/entities/specialist_item.dart';
 
 class AppSpecialistCard extends StatelessWidget {
-  static final _currency = NumberFormat.decimalPattern('vi_VN');
+  static final _currency = CurrencyUtils.vndDecimal;
 
   final String id;
   final String name;
@@ -404,7 +405,13 @@ class _SpecialistInfo extends StatelessWidget {
             ),
             if (reviewCount > 0) ...[
               const SizedBox(width: 2),
-              Text('($reviewCount)'),
+              Text(
+                '($reviewCount)',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textMuted,
+                ),
+              ),
             ],
           ],
         ),

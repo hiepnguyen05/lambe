@@ -5,7 +5,7 @@ class IncomingOrderCustomerCard extends StatelessWidget {
   final String customerName;
   final String? customerAvatarUrl;
   final bool isVip;
-  final double rating;
+  final double? rating;
   final int bookingCount;
   final String address;
   final double? distanceKm;
@@ -16,7 +16,7 @@ class IncomingOrderCustomerCard extends StatelessWidget {
     required this.customerName,
     this.customerAvatarUrl,
     required this.isVip,
-    required this.rating,
+    this.rating,
     required this.bookingCount,
     required this.address,
     required this.distanceKm,
@@ -105,7 +105,9 @@ class IncomingOrderCustomerCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '★ ${rating.toStringAsFixed(1)} ($bookingCount lượt đặt dịch vụ)',
+                      rating != null
+                          ? '★ ${rating!.toStringAsFixed(1)} ($bookingCount lượt đặt dịch vụ)'
+                          : '★ Chưa có đánh giá ($bookingCount lượt đặt dịch vụ)',
                       style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,

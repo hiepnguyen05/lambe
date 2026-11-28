@@ -25,6 +25,7 @@ import { BookingCalendarController } from '../src/modules/orders/controllers/boo
 import { ProviderDiscoveryService } from '../src/modules/discovery/application/provider-discovery.service';
 import { ScheduledProviderCandidatesService } from '../src/modules/discovery/application/scheduled-provider-candidates.service';
 import { MaintenanceService } from '../src/infrastructure/maintenance/maintenance.service';
+import { OrderOperationalAlertService } from '../src/modules/orders/application/operations/order-operational-alert.service';
 import { ConfigService } from '@nestjs/config';
 import { OrderCancellationService } from '../src/modules/orders/application/cancellation/order-cancellation.service';
 import { OrderReviewService } from '../src/modules/orders/application/reviews/order-review.service';
@@ -51,6 +52,10 @@ import { MemberDiscoveryService } from '../src/modules/discovery/application/mem
 import { MEMBER_LOCATION_STORE } from '../src/infrastructure/location/member-location.store';
 import { ObservabilityMetrics } from '../src/infrastructure/observability/observability-metrics.service';
 import { ProviderServicesController } from '../src/modules/providers/controllers/provider-services.controller';
+import { ProviderSetupController } from '../src/modules/providers/controllers/provider-setup.controller';
+import { ProviderSetupService } from '../src/modules/providers/application/provider-setup.service';
+import { GuidanceController } from '../src/modules/guidance/guidance.controller';
+import { GuidanceService } from '../src/modules/guidance/guidance.service';
 import { ProviderServiceChangesController } from '../src/modules/providers/controllers/provider-service-changes.controller';
 import { ProviderServicesService } from '../src/modules/providers/application/services/provider-services.service';
 import { ProviderServiceChangesService } from '../src/modules/providers/application/services/provider-service-changes.service';
@@ -101,11 +106,15 @@ describe('booking HTTP + PostgreSQL concurrency', () => {
         OrderAddOnsController,
         RematchController,
         ProviderServicesController,
+        ProviderSetupController,
+        GuidanceController,
         ProviderServiceChangesController,
       ],
       providers: [
         ObservabilityMetrics,
         OrdersService,
+        ProviderSetupService,
+        GuidanceService,
         ProviderServicesService,
         ProviderServiceChangesService,
         ProviderServiceChangeDocumentsService,
@@ -122,7 +131,10 @@ describe('booking HTTP + PostgreSQL concurrency', () => {
         OrderBookingService,
         {
           provide: OsrmRoutingService,
-          useValue: { getRoute: jest.fn().mockResolvedValue(null) },
+          useValue: {
+            getRoute: jest.fn().mockResolvedValue(null),
+            getDistanceMeters: jest.fn().mockResolvedValue(null),
+          },
         },
         VoucherService,
         ChatService,
@@ -815,6 +827,255 @@ describe('booking HTTP + PostgreSQL concurrency', () => {
     ).toBe(0);
   });
 
+  it('lets the provider propose a new appointment and only the customer decide it', async () => {
+    const f = await fixture();
+    const body = scheduledBody(f);
+    const created = await create(f.token, body).expect(201);
+    const id = (created.body as { data: { id: string } }).data.id;
+    await action(f.providerToken, id, 'accept').expect(200);
+    const proposedStartAt = new Date(
+      Date.parse(body.scheduledAt) + 3 * 60 * 60_000,
+    ).toISOString();
+    const wallet = await prisma.providerWallet.findUniqueOrThrow({
+      where: { providerId: f.provider.id },
+    });
+    const proposal = await request(app.getHttpServer())
+      .post(`/api/me/provider/orders/${id}/reschedule`)
+      .auth(f.providerToken, { type: 'bearer' })
+      .send({ scheduledAt: proposedStartAt })
+      .expect(200);
+    const receipt = (
+      proposal.body as { data: { id: string; requestedByRole: string } }
+    ).data;
+    expect(receipt.requestedByRole).toBe('PROVIDER');
+    expect(
+      (
+        await prisma.serviceOrder.findUniqueOrThrow({ where: { id } })
+      ).scheduledAt?.toISOString(),
+    ).toBe(body.scheduledAt);
+    await request(app.getHttpServer())
+      .post(`/api/me/provider/orders/${id}/reschedule/decision`)
+      .auth(f.providerToken, { type: 'bearer' })
+      .send({ requestId: receipt.id, approve: true })
+      .expect(409);
+    await request(app.getHttpServer())
+      .post(`/api/me/orders/${id}/reschedule`)
+      .auth(f.token, { type: 'bearer' })
+      .send({ scheduledAt: proposedStartAt })
+      .expect(409);
+    const stranger = await fixture();
+    await request(app.getHttpServer())
+      .post(`/api/me/orders/${id}/reschedule/decision`)
+      .auth(stranger.token, { type: 'bearer' })
+      .send({ requestId: receipt.id, approve: true })
+      .expect(404);
+    await request(app.getHttpServer())
+      .post(`/api/me/orders/${id}/reschedule/decision`)
+      .auth(f.token, { type: 'bearer' })
+      .send({ requestId: receipt.id, approve: true })
+      .expect(200);
+    const after = await prisma.serviceOrder.findUniqueOrThrow({
+      where: { id },
+      include: { calendarBlock: true },
+    });
+    expect(after.scheduledAt?.toISOString()).toBe(proposedStartAt);
+    expect(after.calendarBlock?.startAt.toISOString()).toBe(proposedStartAt);
+    expect(
+      await prisma.providerWallet.findUniqueOrThrow({
+        where: { id: wallet.id },
+      }),
+    ).toMatchObject({
+      balanceAmount: wallet.balanceAmount,
+      heldAmount: wallet.heldAmount,
+    });
+    const notice = await prisma.orderNotification.findFirst({
+      where: { orderId: id, event: 'ORDER_RESCHEDULE_ACCEPTED' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(notice?.userId).toBe(f.owner.id);
+  });
+
+  it('expires unanswered proposals without moving the appointment or releasing its money', async () => {
+    const f = await fixture();
+    const body = scheduledBody(f);
+    const result = await create(f.token, body).expect(201);
+    const id = (result.body as { data: { id: string } }).data.id;
+    await action(f.providerToken, id, 'accept').expect(200);
+    const beforeWallet = await prisma.providerWallet.findUniqueOrThrow({
+      where: { providerId: f.provider.id },
+    });
+    const response = await request(app.getHttpServer())
+      .post(`/api/me/provider/orders/${id}/reschedule`)
+      .auth(f.providerToken, { type: 'bearer' })
+      .send({
+        scheduledAt: new Date(
+          Date.parse(body.scheduledAt) + 3 * 60 * 60_000,
+        ).toISOString(),
+      })
+      .expect(200);
+    const proposalId = (response.body as { data: { id: string } }).data.id;
+    await prisma.orderRescheduleRequest.update({
+      where: { id: proposalId },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    const service = app.get(OrderRescheduleService);
+    await service.expirePendingRequests();
+    expect(
+      await prisma.orderRescheduleRequest.findUniqueOrThrow({
+        where: { id: proposalId },
+      }),
+    ).toMatchObject({ status: 'EXPIRED' });
+    expect(
+      (
+        await prisma.serviceOrder.findUniqueOrThrow({ where: { id } })
+      ).scheduledAt?.toISOString(),
+    ).toBe(body.scheduledAt);
+    expect(
+      await prisma.providerWallet.findUniqueOrThrow({
+        where: { id: beforeWallet.id },
+      }),
+    ).toMatchObject({
+      balanceAmount: beforeWallet.balanceAmount,
+      heldAmount: beforeWallet.heldAmount,
+    });
+    expect(
+      await prisma.orderNotification.count({
+        where: { orderId: id, event: 'ORDER_RESCHEDULE_EXPIRED' },
+      }),
+    ).toBe(2);
+    await service.expirePendingRequests();
+    expect(
+      await prisma.orderNotification.count({
+        where: { orderId: id, event: 'ORDER_RESCHEDULE_EXPIRED' },
+      }),
+    ).toBe(2);
+    await request(app.getHttpServer())
+      .post(`/api/me/orders/${id}/reschedule/decision`)
+      .auth(f.token, { type: 'bearer' })
+      .send({ requestId: proposalId, approve: true })
+      .expect(409);
+  });
+
+  it('exposes an overdue appointment and clears its alert only after a new time is agreed', async () => {
+    const f = await fixture();
+    const result = await create(f.token, scheduledBody(f)).expect(201);
+    const id = (result.body as { data: { id: string } }).data.id;
+    await action(f.providerToken, id, 'accept').expect(200);
+    const oldStart = new Date(Date.now() - 20 * 60_000);
+    await prisma.serviceOrder.update({
+      where: { id },
+      data: { scheduledAt: oldStart, expectedStartAt: oldStart },
+    });
+    const alert = await prisma.orderOperationalAlert.create({
+      data: { orderId: id, type: 'ACCEPTED_START_OVERDUE' },
+    });
+    const read = await request(app.getHttpServer())
+      .get(`/api/me/orders/${id}`)
+      .auth(f.token, { type: 'bearer' })
+      .expect(200);
+    const dueAt = (
+      read.body as { data: { scheduleOverdueAt: string; status: string } }
+    ).data;
+    expect(dueAt.status).toBe('ACCEPTED');
+    expect(Date.parse(dueAt.scheduleOverdueAt)).toBe(
+      oldStart.getTime() + 15 * 60_000,
+    );
+    const future = new Date(
+      Date.parse(scheduledBody(f).scheduledAt) + 2 * 60 * 60_000,
+    ).toISOString();
+    const proposal = await request(app.getHttpServer())
+      .post(`/api/me/orders/${id}/reschedule`)
+      .auth(f.token, { type: 'bearer' })
+      .send({ scheduledAt: future })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post(`/api/me/provider/orders/${id}/reschedule/decision`)
+      .auth(f.providerToken, { type: 'bearer' })
+      .send({
+        requestId: (proposal.body as { data: { id: string } }).data.id,
+        approve: true,
+      })
+      .expect(200);
+    expect(
+      await prisma.orderOperationalAlert.findUniqueOrThrow({
+        where: { id: alert.id },
+      }),
+    ).toMatchObject({
+      status: 'RESOLVED',
+      resolutionNote: 'RESCHEDULE_ACCEPTED',
+    });
+    expect(
+      await prisma.walletHold.findUniqueOrThrow({ where: { orderId: id } }),
+    ).toMatchObject({ status: 'ACTIVE' });
+    await prisma.serviceOrder.update({
+      where: { id },
+      data: { scheduledAt: oldStart, expectedStartAt: oldStart },
+    });
+    const watchdog = new OrderOperationalAlertService(
+      prisma,
+      { record: jest.fn() } as never,
+      { enqueue: jest.fn() } as never,
+    );
+    await watchdog.scan();
+    expect(
+      await prisma.orderOperationalAlert.count({
+        where: { orderId: id, type: 'ACCEPTED_START_OVERDUE', status: 'OPEN' },
+      }),
+    ).toBe(1);
+    await watchdog.scan();
+    expect(
+      await prisma.orderOperationalAlert.count({
+        where: { orderId: id, type: 'ACCEPTED_START_OVERDUE', status: 'OPEN' },
+      }),
+    ).toBe(1);
+  });
+
+  it('serializes concurrent responses to one provider proposal', async () => {
+    const f = await fixture();
+    const body = scheduledBody(f);
+    const created = await create(f.token, body).expect(201);
+    const id = (created.body as { data: { id: string } }).data.id;
+    await action(f.providerToken, id, 'accept').expect(200);
+    const proposed = new Date(
+      Date.parse(body.scheduledAt) + 3 * 60 * 60_000,
+    ).toISOString();
+    const proposal = await request(app.getHttpServer())
+      .post(`/api/me/provider/orders/${id}/reschedule`)
+      .auth(f.providerToken, { type: 'bearer' })
+      .send({ scheduledAt: proposed })
+      .expect(200);
+    const proposalId = (proposal.body as { data: { id: string } }).data.id;
+    const replies = await Promise.all(
+      [true, false].map((approve) =>
+        request(app.getHttpServer())
+          .post(`/api/me/orders/${id}/reschedule/decision`)
+          .auth(f.token, { type: 'bearer' })
+          .send({ requestId: proposalId, approve }),
+      ),
+    );
+    expect(replies.map((reply) => reply.status).sort()).toEqual([200, 409]);
+    const after = await prisma.orderRescheduleRequest.findUniqueOrThrow({
+      where: { id: proposalId },
+    });
+    const order = await prisma.serviceOrder.findUniqueOrThrow({
+      where: { id },
+      include: { calendarBlock: true },
+    });
+    const confirmed = after.status === 'ACCEPTED' ? proposed : body.scheduledAt;
+    expect(order.scheduledAt?.toISOString()).toBe(confirmed);
+    expect(order.calendarBlock?.startAt.toISOString()).toBe(confirmed);
+    expect(
+      await prisma.orderNotification.count({
+        where: {
+          orderId: id,
+          event: {
+            in: ['ORDER_RESCHEDULE_ACCEPTED', 'ORDER_RESCHEDULE_REJECTED'],
+          },
+        },
+      }),
+    ).toBe(1);
+  });
+
   it('changes an accepted scheduled order only after provider approval', async () => {
     const f = await fixture();
     const body = scheduledBody(f);
@@ -1469,6 +1730,232 @@ describe('booking HTTP + PostgreSQL concurrency', () => {
     expect(
       await prisma.providerCalendarBlock.findUnique({ where: { orderId: id } }),
     ).toMatchObject({ active: true });
+  });
+
+  it('lists only the providers accepted appointments in service-time order', async () => {
+    const f = await fixture();
+    const body = scheduledBody(f);
+    const early = new Date(body.scheduledAt);
+    const late = new Date(early.getTime() + 3 * 60 * 60_000);
+    const later = await create(f.token, {
+      ...body,
+      scheduledAt: late.toISOString(),
+    }).expect(201);
+    const sooner = await create(f.token, body).expect(201);
+    const lateId = (later.body as { data: { id: string } }).data.id;
+    const earlyId = (sooner.body as { data: { id: string } }).data.id;
+    await action(f.providerToken, lateId, 'accept').expect(200);
+    await action(f.providerToken, earlyId, 'accept').expect(200);
+    await create(f.token, {
+      ...body,
+      scheduledAt: new Date(late.getTime() + 3 * 60 * 60_000).toISOString(),
+    }).expect(201);
+    const path = '/api/me/provider/orders/upcoming';
+    await request(app.getHttpServer()).get(path).expect(401);
+    const response = await request(app.getHttpServer())
+      .get(path)
+      .auth(f.providerToken, { type: 'bearer' })
+      .expect(200);
+    const records = (response.body as { data: { id: string }[] }).data;
+    expect(records.map((row) => row.id)).toEqual([earlyId, lateId]);
+    const saved = await prisma.serviceOrder.findUniqueOrThrow({
+      where: { id: earlyId },
+    });
+    expect(records[0]).toHaveProperty(
+      'travelDistanceKm',
+      saved.travelDistanceKm,
+    );
+    expect(records[0]).not.toHaveProperty('commissionHold');
+    const outsider = await fixture();
+    const other = await request(app.getHttpServer())
+      .get(path)
+      .auth(outsider.providerToken, { type: 'bearer' })
+      .expect(200);
+    expect((other.body as { data: unknown[] }).data).toEqual([]);
+    await request(app.getHttpServer())
+      .post(`/api/me/provider/orders/${lateId}/cancel`)
+      .auth(f.providerToken, { type: 'bearer' })
+      .send({ reason: 'Thay đổi kế hoạch' })
+      .expect(200);
+    const refreshed = await request(app.getHttpServer())
+      .get(path)
+      .auth(f.providerToken, { type: 'bearer' })
+      .expect(200);
+    expect(
+      (refreshed.body as { data: { id: string }[] }).data.map((row) => row.id),
+    ).toEqual([earlyId]);
+  });
+
+  it('keeps an accepted scheduled order waiting until its departure window', async () => {
+    const f = await fixture();
+    const result = await create(f.token, scheduledBody(f)).expect(201);
+    const data = (
+      result.body as {
+        data: {
+          id: string;
+          providerResponseDeadlineAt: string;
+          scheduledAt: string;
+        };
+      }
+    ).data;
+    const accepted = await action(f.providerToken, data.id, 'accept').expect(
+      200,
+    );
+    expect(
+      (accepted.body as { data: Record<string, unknown> }).data,
+    ).toMatchObject({
+      status: 'ACCEPTED',
+      departureAvailableAt: new Date(
+        Date.parse(data.scheduledAt) - 60 * 60_000,
+      ).toISOString(),
+    });
+    const early = await action(f.providerToken, data.id, 'en-route').expect(
+      409,
+    );
+    expect((early.body as { code: string }).code).toBe('TOO_EARLY_TO_DEPART');
+    expect(
+      await prisma.serviceOrder.findUnique({ where: { id: data.id } }),
+    ).toMatchObject({ status: 'ACCEPTED' });
+  });
+
+  it('blocks departure as soon as the appointment has passed without changing the order or hold', async () => {
+    const f = await fixture();
+    const result = await create(f.token, scheduledBody(f)).expect(201);
+    const id = (result.body as { data: { id: string } }).data.id;
+    await action(f.providerToken, id, 'accept').expect(200);
+    const hold = await prisma.walletHold.findUniqueOrThrow({
+      where: { orderId: id },
+    });
+    const oldStart = new Date(Date.now() - 60_000);
+    await prisma.serviceOrder.update({
+      where: { id },
+      data: { scheduledAt: oldStart, expectedStartAt: oldStart },
+    });
+    const response = await action(f.providerToken, id, 'en-route').expect(409);
+    expect((response.body as { code: string }).code).toBe('APPOINTMENT_PASSED');
+    expect(
+      await prisma.serviceOrder.findUniqueOrThrow({ where: { id } }),
+    ).toMatchObject({
+      status: 'ACCEPTED',
+      scheduledAt: oldStart,
+    });
+    expect(
+      await prisma.walletHold.findUniqueOrThrow({ where: { orderId: id } }),
+    ).toEqual(hold);
+    expect(
+      await prisma.orderNotification.count({
+        where: { orderId: id, event: 'ORDER_EN_ROUTE' },
+      }),
+    ).toBe(0);
+    // A new agreed appointment must reopen departure; lateness is not a permanent lock.
+    const futureStart = new Date(Date.now() + 30 * 60_000);
+    await prisma.serviceOrder.update({
+      where: { id },
+      data: { scheduledAt: futureStart, expectedStartAt: futureStart },
+    });
+    await action(f.providerToken, id, 'en-route').expect(200);
+  });
+
+  it('stores guidance progress only for the authenticated user and validates writes', async () => {
+    const f = await fixture();
+    const path = '/api/me/guidance/customer_home';
+    await request(app.getHttpServer())
+      .put(path)
+      .send({ version: 1, stepIndex: 0, status: 'STARTED' })
+      .expect(401);
+    await request(app.getHttpServer())
+      .put(path)
+      .auth(f.token, { type: 'bearer' })
+      .send({
+        version: 1,
+        stepIndex: 2,
+        status: 'COMPLETED',
+        userId: f.owner.id,
+      })
+      .expect(400);
+    await request(app.getHttpServer())
+      .put('/api/me/guidance/unknown')
+      .auth(f.token, { type: 'bearer' })
+      .send({ version: 1, stepIndex: 0, status: 'STARTED' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .put(path)
+      .auth(f.token, { type: 'bearer' })
+      .send({ version: 1, stepIndex: 2, status: 'COMPLETED' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .put(path)
+      .auth(f.token, { type: 'bearer' })
+      .send({ version: 1, stepIndex: 0, status: 'STARTED' })
+      .expect(200);
+    const own = await request(app.getHttpServer())
+      .get('/api/me/guidance')
+      .auth(f.token, { type: 'bearer' })
+      .expect(200);
+    expect(
+      (own.body as { data: { status: string; userId?: string }[] }).data,
+    ).toEqual([expect.objectContaining({ status: 'COMPLETED' })]);
+    expect(
+      (own.body as { data: { userId?: string }[] }).data[0],
+    ).not.toHaveProperty('userId');
+    const other = await request(app.getHttpServer())
+      .get('/api/me/guidance')
+      .auth(f.providerToken, { type: 'bearer' })
+      .expect(200);
+    expect((other.body as { data: unknown[] }).data).toEqual([]);
+  });
+
+  it('finds a scheduled provider after the owner updates the fixed service area', async () => {
+    const f = await fixture();
+    await prisma.providerProfile.update({
+      where: { id: f.provider.id },
+      data: { serviceAreaLatitude: point.latitude + 1 },
+    });
+    const candidates = app.get(ScheduledProviderCandidatesService);
+    expect(
+      await candidates.find(
+        f.service.serviceId,
+        point.latitude,
+        point.longitude,
+        30,
+      ),
+    ).toHaveLength(0);
+    const area = {
+      serviceAreaName: 'Khu vực thử nghiệm',
+      serviceAreaLatitude: point.latitude,
+      serviceAreaLongitude: point.longitude,
+      serviceRadiusKm: 5,
+    };
+    const save = () =>
+      request(app.getHttpServer())
+        .patch('/api/me/provider/setup/service-area')
+        .auth(f.providerToken, { type: 'bearer' });
+    await save()
+      .send({ ...area, workingHours: [] })
+      .expect(400);
+    await save()
+      .send({ ...area, serviceAreaLatitude: 100 })
+      .expect(400);
+    await save().send(area).expect(200);
+    expect(
+      await candidates.find(
+        f.service.serviceId,
+        point.latitude,
+        point.longitude,
+        30,
+      ),
+    ).toHaveLength(1);
+    expect(
+      await prisma.providerWorkingHour.count({
+        where: { providerId: f.provider.id },
+      }),
+    ).toBe(7);
+    await create(f.token, scheduledBody(f)).expect(201);
+    await prisma.providerProfile.update({
+      where: { id: f.provider.id },
+      data: { status: 'SUSPENDED' },
+    });
+    await save().send(area).expect(403);
   });
 
   it('scheduled discovery works offline with each provider radius and shared calendar checks', async () => {

@@ -29,7 +29,10 @@ import {
   ensureChatConversation,
   presentChatMessage,
 } from './chat.helpers';
-import { OrderChatService } from './order-chat.service';
+import {
+  OrderChatService,
+  type AttachOrderChatOptions,
+} from './order-chat.service';
 
 @Injectable()
 export class ChatService {
@@ -149,8 +152,9 @@ export class ChatService {
       customerId: string;
       providerId: string;
     },
+    options?: AttachOrderChatOptions,
   ): Promise<string> {
-    return this.orderChats.attach(tx, order);
+    return this.orderChats.attach(tx, order, options);
   }
 
   private async assertProviderActive(tx: Prisma.TransactionClient, id: string) {

@@ -8,7 +8,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:mobile/core/network/dio_client.dart';
+import 'package:mobile/core/routing/app_route_readiness.dart';
 import 'package:mobile/core/storage/secure_storage_service.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 import 'package:mobile/features/customer/orders/presentation/providers/customer_orders_providers.dart';
 import 'package:mobile/features/provider/workspace/di/provider_workspace_providers.dart';
 import 'package:mobile/features/provider/registration/di/partner_providers.dart';
@@ -19,6 +21,11 @@ import 'package:mobile/features/shared/order_notifications/presentation/order_no
 import '../data/push_device_service.dart';
 import '../domain/entities/app_notification_entity.dart';
 import 'providers/notifications_providers.dart';
+
+final initialPushMessageProvider = FutureProvider<RemoteMessage?>((ref) async {
+  if (Firebase.apps.isEmpty) return null;
+  return FirebaseMessaging.instance.getInitialMessage();
+});
 
 class PushNotificationCoordinator extends ConsumerStatefulWidget {
   const PushNotificationCoordinator({
@@ -31,6 +38,8 @@ class PushNotificationCoordinator extends ConsumerStatefulWidget {
   final GoRouter router;
   final GlobalKey<ScaffoldMessengerState> messengerKey;
   final Widget child;
+
+  static bool shouldShowForegroundBanner(Map<String, dynamic> data) => false;
 
   @override
   ConsumerState<PushNotificationCoordinator> createState() =>
@@ -46,11 +55,24 @@ class _PushNotificationCoordinatorState
   RemoteMessage? _pendingOpen;
   String? _registeredUserId;
   bool _registering = false;
+  bool _navigationScheduled = false;
+  bool _registrationDeferred = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.router.routerDelegate.addListener(_schedulePendingNavigation);
+    unawaited(
+      ref
+          .read(initialPushMessageProvider.future)
+          .then((message) {
+            if (mounted && message != null) _openMessage(message);
+          })
+          .catchError((Object error) {
+            debugPrint('Unable to read initial push: $error');
+          }),
+    );
     if (Firebase.apps.isEmpty) return;
     _foreground = FirebaseMessaging.onMessage.listen(_refreshOnMessage);
     _opened = FirebaseMessaging.onMessageOpenedApp.listen(_openMessage);
@@ -65,16 +87,6 @@ class _PushNotificationCoordinatorState
         badge: false,
         sound: false,
       ),
-    );
-    unawaited(
-      FirebaseMessaging.instance
-          .getInitialMessage()
-          .then((message) {
-            if (message != null) _openMessage(message);
-          })
-          .catchError((Object error) {
-            debugPrint('Unable to read initial push: $error');
-          }),
     );
   }
 
@@ -98,6 +110,11 @@ class _PushNotificationCoordinatorState
       return;
     }
     final userId = _registeredUserId;
+    if (!_canNavigate) {
+      _registrationDeferred = true;
+      return;
+    }
+    _registrationDeferred = false;
     _registering = true;
     try {
       final storage = ref.read(secureStorageProvider);
@@ -106,6 +123,11 @@ class _PushNotificationCoordinatorState
       if (status != AuthorizationStatus.authorized &&
           status != AuthorizationStatus.provisional) {
         if (await storage.wasPushPermissionExplained()) return;
+        if (_registeredUserId != userId) return;
+        if (!_canNavigate) {
+          _registrationDeferred = true;
+          return;
+        }
         final dialogContext =
             widget.router.routerDelegate.navigatorKey.currentContext;
         if (dialogContext == null || !dialogContext.mounted) return;
@@ -133,6 +155,10 @@ class _PushNotificationCoordinatorState
         if (allow != true) return;
       }
       if (_registeredUserId != userId) return;
+      if (!_canNavigate) {
+        _registrationDeferred = true;
+        return;
+      }
       await service.register();
     } catch (error) {
       debugPrint('Push registration unavailable: $error');
@@ -166,6 +192,7 @@ class _PushNotificationCoordinatorState
     final data = message.data;
     if (data['entityType'] == 'ORDER') {
       ref.invalidate(orderNotificationsProvider(user.id));
+      ref.invalidate(notificationsNotifierProvider(user.id));
       final orderId = data['entityId'];
       if (orderId is String &&
           RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(orderId)) {
@@ -204,34 +231,40 @@ class _PushNotificationCoordinatorState
         );
       }
     }
-    if (const {
-      'CHAT',
-      'APPLICATION',
-      'SERVICE_CHANGE',
-      'FEED_NOTICE',
-    }.contains(data['entityType'])) {
-      final messenger = widget.messengerKey.currentState;
-      messenger?.hideCurrentSnackBar();
-      messenger?.showSnackBar(
-        SnackBar(
-          content: Text(
-            message.notification?.title ?? 'Có cập nhật mới từ Lambe',
-          ),
-          action: SnackBarAction(
-            label: 'Xem',
-            onPressed: () => _openMessage(message),
-          ),
-        ),
-      );
-    }
   }
 
   void _openMessage(RemoteMessage message) {
     _pendingOpen = message;
-    if (_registeredUserId != null) unawaited(_navigatePending());
+    _schedulePendingNavigation();
+  }
+
+  // Auth can finish before splash's GPS/mode checks. Wait for its landing route
+  // to be committed so splash cannot replace the notification destination.
+  bool get _canNavigate {
+    final auth = ref.read(authNotifierProvider);
+    return !auth.isLoading &&
+        auth.valueOrNull != null &&
+        isAppContentReady(widget.router);
+  }
+
+  void _schedulePendingNavigation() {
+    if (!mounted ||
+        (_pendingOpen == null && !_registrationDeferred) ||
+        _navigationScheduled) {
+      return;
+    }
+    _navigationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _navigationScheduled = false;
+      if (!mounted || !_canNavigate) return;
+      unawaited(_navigatePending());
+      if (_registrationDeferred) unawaited(_register());
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   Future<void> _navigatePending() async {
+    if (!_canNavigate) return;
     final message = _pendingOpen;
     final user = ref.read(authNotifierProvider).valueOrNull;
     if (message == null || user == null) return;
@@ -239,7 +272,7 @@ class _PushNotificationCoordinatorState
     final type = message.data['entityType'];
     final id = message.data['entityId'];
     final role = message.data['recipientRole'];
-    if (id == null || !RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(id)) return;
+    if (id is! String || !RegExp(r'^[a-fA-F0-9-]{36}$').hasMatch(id)) return;
     if (role == 'PROVIDER' &&
         type != 'FEED_NOTICE' &&
         !user.roles.contains('PROVIDER')) {
@@ -270,17 +303,24 @@ class _PushNotificationCoordinatorState
         if (mounted &&
             ref.read(authNotifierProvider).valueOrNull?.id == user.id &&
             destination != null) {
+          if (!_canNavigate) {
+            _pendingOpen ??= message;
+            return;
+          }
           _refreshOnMessage(message);
           widget.router.push(destination);
         }
       } catch (_) {
-        if (mounted) {
-          widget.messengerKey.currentState?.showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Chưa mở được đơn từ thông báo. Vui lòng kiểm tra lại trong danh sách đơn.',
-              ),
-            ),
+        final targetContext =
+            widget.router.routerDelegate.navigatorKey.currentContext;
+        if (mounted &&
+            ref.read(authNotifierProvider).valueOrNull?.id == user.id &&
+            _canNavigate &&
+            targetContext != null &&
+            targetContext.mounted) {
+          await AppDialog.error(
+            targetContext,
+            message: 'Chưa mở được đơn từ thông báo. Vui lòng kiểm tra lại trong danh sách đơn.',
           );
         }
       }
@@ -321,18 +361,31 @@ class _PushNotificationCoordinatorState
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           unawaited(_register());
-          unawaited(_navigatePending());
         });
       } else {
         _pendingOpen = null;
       }
     }
+    _schedulePendingNavigation();
     return widget.child;
+  }
+
+  @override
+  void didUpdateWidget(covariant PushNotificationCoordinator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.router != widget.router) {
+      oldWidget.router.routerDelegate.removeListener(
+        _schedulePendingNavigation,
+      );
+      widget.router.routerDelegate.addListener(_schedulePendingNavigation);
+      _schedulePendingNavigation();
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.router.routerDelegate.removeListener(_schedulePendingNavigation);
     _foreground?.cancel();
     _opened?.cancel();
     _tokenRefresh?.cancel();

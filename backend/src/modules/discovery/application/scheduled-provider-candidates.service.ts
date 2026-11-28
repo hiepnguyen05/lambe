@@ -40,6 +40,48 @@ export class ScheduledProviderCandidatesService {
     `);
   }
 
+  findAllInArea(latitude: number, longitude: number, radiusKm: number) {
+    const latDelta = radiusKm / 110.5;
+    const lonDelta = Math.min(
+      180,
+      radiusKm / (110.5 * Math.max(0.01, Math.cos((latitude * Math.PI) / 180))),
+    );
+    return this.prisma.$queryRaw<
+      Array<{
+        providerId: string;
+        serviceAreaLatitude: number;
+        serviceAreaLongitude: number;
+        serviceRadiusKm: number;
+      }>
+    >(Prisma.sql`
+      SELECT c."providerId", c."serviceAreaLatitude", c."serviceAreaLongitude", c."serviceRadiusKm" FROM (
+        SELECT p."id" AS "providerId",
+          p."serviceAreaLatitude",
+          p."serviceAreaLongitude",
+          p."serviceRadiusKm",
+          6371 * acos(least(1.0, greatest(-1.0,
+            sin(radians(${latitude}::float8)) * sin(radians(p."serviceAreaLatitude")) +
+            cos(radians(${latitude}::float8)) * cos(radians(p."serviceAreaLatitude")) *
+            cos(radians(p."serviceAreaLongitude" - ${longitude}::float8))))) AS "distanceKm"
+        FROM "provider_profiles" p
+        WHERE p."providerType" = 'INDIVIDUAL' AND p."status" = 'ACTIVE' AND p."setupCompletedAt" IS NOT NULL
+          AND p."serviceRadiusKm" IS NOT NULL
+          AND point(p."serviceAreaLongitude", p."serviceAreaLatitude") <@
+            box(point(${longitude - lonDelta}::float8, ${latitude - latDelta}::float8), point(${longitude + lonDelta}::float8, ${latitude + latDelta}::float8))
+          AND EXISTS (
+            SELECT 1 FROM "provider_services" ps
+            JOIN "services" s ON s."id" = ps."serviceId"
+            JOIN "service_categories" sc ON sc."id" = s."categoryId"
+            WHERE ps."providerId" = p."id" AND ps."status" = 'ACTIVE'
+              AND s."status" = 'ACTIVE' AND sc."status" = 'ACTIVE'
+          )
+          AND NOT EXISTS (SELECT 1 FROM "service_orders" so WHERE so."providerId" = p."id" AND so."status" = 'SAFETY_HOLD')
+      ) c
+      WHERE c."distanceKm" <= ${radiusKm} AND c."distanceKm" <= c."serviceRadiusKm"
+      ORDER BY c."distanceKm", c."providerId" LIMIT 300
+    `);
+  }
+
   findMembers(
     serviceId: string,
     latitude: number,

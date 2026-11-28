@@ -31,7 +31,7 @@ class NotificationsRepositoryImpl implements NotificationsRepository {
                 (n) => AppNotificationEntity(
                   id: n.id,
                   title: n.title,
-                  body: 'Mở đơn để xem trạng thái và thao tác mới nhất.',
+                  body: _orderNotificationBody(n.event),
                   category: NotificationCategory.order,
                   createdAt: n.createdAt,
                   isRead: !n.isUnread,
@@ -121,4 +121,32 @@ class NotificationsRepositoryImpl implements NotificationsRepository {
       throw ExceptionHandler.handleDioError(error);
     }
   }
+
+  static String _orderNotificationBody(String event) => switch (event) {
+    'ORDER_ADD_ON_REQUESTED' =>
+      'Chuyên viên đề nghị bổ sung dịch vụ mới. Mở đơn hàng để xem giá và xác nhận.',
+    'ORDER_ADD_ON_ACCEPTED' =>
+      'Khách hàng đã đồng ý dịch vụ phát sinh. Đơn hàng đã cập nhật tổng tiền.',
+    'ORDER_ADD_ON_REJECTED' => 'Khách hàng chưa đồng ý dịch vụ phát sinh.',
+    'ORDER_ADD_ON_CANCELLED' => 'Đề nghị dịch vụ phát sinh đã được rút lại.',
+    'ORDER_ADD_ON_EXPIRED' => 'Đề nghị dịch vụ phát sinh đã hết thời gian xác nhận.',
+    'ORDER_EN_ROUTE' => 'Chuyên viên đang trên đường đến điểm hẹn của bạn.',
+    'ORDER_ARRIVED' => 'Chuyên viên đã đến địa chỉ đặt lịch.',
+    'ORDER_IN_PROGRESS' => 'Chuyên viên đã bắt đầu thực hiện dịch vụ.',
+    'ORDER_WORK_PAUSED' => 'Chuyên viên tạm dừng đồng hồ thực hiện dịch vụ.',
+    'ORDER_WORK_RESUMED' => 'Chuyên viên đã tiếp tục thực hiện dịch vụ.',
+    'CANCELLATION_REQUESTED' =>
+      'Vui lòng mở đơn hàng để kiểm tra và phản hồi yêu cầu hủy.',
+    'ORDER_RESCHEDULE_REQUESTED' =>
+      'Vui lòng mở đơn hàng để xác nhận khung giờ hẹn mới.',
+    'ORDER_RESCHEDULE_ACCEPTED' =>
+      'Đề xuất đổi giờ hẹn đã được xác nhận. Mở đơn để xem lịch mới.',
+    'ORDER_RESCHEDULE_REJECTED' =>
+      'Đề xuất đổi giờ hẹn chưa được đồng ý. Lịch hẹn cũ vẫn được giữ nguyên.',
+    'ORDER_RESCHEDULE_EXPIRED' =>
+      'Đề xuất đổi giờ hẹn đã hết hạn phản hồi. Lịch hẹn cũ vẫn được giữ.',
+    'ORDER_RESCHEDULE_CANCELLED' =>
+      'Đề xuất đổi giờ không còn hiệu lực do đơn đã chuyển trạng thái.',
+    _ => 'Mở đơn để xem trạng thái và thao tác mới nhất.',
+  };
 }

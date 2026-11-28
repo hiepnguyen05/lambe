@@ -59,7 +59,7 @@ describe('RedisThrottlerStorage', () => {
     expect(fallback.increment).not.toHaveBeenCalled();
   });
 
-  it('keeps public Feed reads available with a conservative local limit', async () => {
+  it('keeps public catalogue and Feed reads available with a conservative local limit', async () => {
     const { storage, fallback } = context('down');
     await runWithRequestId(
       'read',
@@ -75,7 +75,7 @@ describe('RedisThrottlerStorage', () => {
     );
   });
 
-  it('uses a native 100 ms command deadline for public Feed reads', async () => {
+  it('keeps the shared Redis connection deadline independent of a public read fallback', async () => {
     const { storage, redis, fallback } = context('up');
     await runWithRequestId(
       'feed-read',
@@ -88,9 +88,33 @@ describe('RedisThrottlerStorage', () => {
       10,
       1000,
       'short',
-      100,
+      undefined,
     );
     expect(fallback.increment).not.toHaveBeenCalled();
+  });
+
+  it('returns the conservative local limit after 100 ms without retiring Redis', async () => {
+    jest.useFakeTimers();
+    try {
+      const { storage, redis, fallback } = context('up');
+      redis.incrementRateLimit.mockReturnValue(new Promise(() => undefined));
+      const request = runWithRequestId(
+        'public-read',
+        () => storage.increment('key', 1000, 10, 1000, 'short'),
+        true,
+      );
+      await jest.advanceTimersByTimeAsync(100);
+      await expect(request).resolves.toEqual(record);
+      expect(fallback.increment).toHaveBeenCalledWith(
+        'key',
+        1000,
+        5,
+        1000,
+        'short',
+      );
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('handles a Redis disconnect after readiness without relaxing write protection', async () => {

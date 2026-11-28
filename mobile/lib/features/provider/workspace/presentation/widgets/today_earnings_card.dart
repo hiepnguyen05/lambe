@@ -1,27 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
+import 'package:mobile/features/provider/income/presentation/widgets/topup/topup_bottom_sheet.dart';
 
+import '../../application/provider_earnings_summary.dart';
 import '../../di/provider_workspace_providers.dart';
 
 class TodayEarningsCard extends ConsumerWidget {
   const TodayEarningsCard({super.key});
+
+  void _openTopupSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => const TopupBottomSheet(),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final dashboardState = ref.watch(providerDashboardProvider);
-    final todayEarnings = dashboardState.value?.todayEarnings ?? 0.0;
-    final completedBookings = dashboardState.value?.completedBookings ?? 0;
+    final earningsAsync = ref.watch(providerEarningsProvider(IncomePeriod.today));
+    final summary = earningsAsync.valueOrNull;
+    final todayEarnings = summary?.netIncome ?? 0.0;
+    final completedBookings = summary?.completedOrders ?? 0;
+    final isLoading = earningsAsync.isLoading && !earningsAsync.hasValue;
 
-    final currencyFormat = NumberFormat.currency(
-      locale: 'vi_VN',
-      symbol: '',
-      decimalDigits: 0,
+    final formattedAmount = CurrencyUtils.vndDecimal.format(
+      todayEarnings.round(),
     );
-    final formattedAmount = currencyFormat.format(todayEarnings).trim();
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -89,27 +103,41 @@ class TodayEarningsCard extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(
-                formattedAmount,
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
-                  letterSpacing: -0.5,
+              if (isLoading)
+                SizedBox(
+                  height: 32,
+                  width: 90,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                )
+              else ...[
+                Text(
+                  formattedAmount,
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'đ',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.primary,
+                const SizedBox(width: 4),
+                Text(
+                  'đ',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
                 ),
-              ),
+              ],
               const Spacer(),
               Row(
                 children: [
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () => context.go('/provider/income'),
                     style: TextButton.styleFrom(
                       backgroundColor: colorScheme.surfaceContainerHighest,
                       foregroundColor: colorScheme.onSurface,
@@ -133,7 +161,7 @@ class TodayEarningsCard extends ConsumerWidget {
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
-                    onPressed: () {},
+                    onPressed: () => _openTopupSheet(context),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: colorScheme.primaryContainer,
                       foregroundColor: colorScheme.onPrimary,
@@ -149,7 +177,7 @@ class TodayEarningsCard extends ConsumerWidget {
                       ),
                     ),
                     child: const Text(
-                      'Rút ví',
+                      'Nạp ví',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,

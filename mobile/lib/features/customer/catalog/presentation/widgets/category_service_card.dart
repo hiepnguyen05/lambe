@@ -106,7 +106,7 @@ class CategoryServiceCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 3),
 
-                          // Hàng 2: Thời lượng • Đánh giá sao (4.9 / 320)
+                          // Hàng 2: Thời lượng • Đánh giá sao thực tế
                           Row(
                             children: [
                               const Icon(
@@ -137,22 +137,32 @@ class CategoryServiceCard extends StatelessWidget {
                                 color: AppColors.secondary, // text-secondary
                               ),
                               const SizedBox(width: 2),
-                              const Text(
-                                '4.9',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.secondary,
+                              if (service.rating != null &&
+                                  service.reviewCount > 0) ...[
+                                Text(
+                                  service.rating!.toStringAsFixed(1),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.secondary,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 2),
-                              const Text(
-                                '(320)',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.outline,
+                                const SizedBox(width: 2),
+                                Text(
+                                  '(${service.reviewCount})',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.outline,
+                                  ),
                                 ),
-                              ),
+                              ] else
+                                const Text(
+                                  'Chưa có đánh giá',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.outline,
+                                  ),
+                                ),
                             ],
                           ),
                         ],

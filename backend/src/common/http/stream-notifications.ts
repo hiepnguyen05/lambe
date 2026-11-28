@@ -44,6 +44,7 @@ export async function streamNotifications<T extends { id: string }>(
   let closed = response.destroyed || response.writableEnded;
   const timers: {
     poll?: ReturnType<typeof setInterval>;
+    keepalive?: ReturnType<typeof setInterval>;
     timeout?: ReturnType<typeof setTimeout>;
   } = {};
   const stopSubscription = async () => {
@@ -54,6 +55,7 @@ export async function streamNotifications<T extends { id: string }>(
   const cleanup = () => {
     closed = true;
     clearInterval(timers.poll);
+    clearInterval(timers.keepalive);
     clearTimeout(timers.timeout);
     void stopSubscription().catch(() => undefined);
   };
@@ -87,5 +89,10 @@ export async function streamNotifications<T extends { id: string }>(
   if (pending || initial.length === 50) void refresh();
   if (closed) return;
   timers.poll = setInterval(() => void refresh(), 10_000);
-  timers.timeout = setTimeout(() => response.end(), 30_000);
+  timers.keepalive = setInterval(() => {
+    if (!response.destroyed && !response.writableEnded) {
+      response.write(': ping\n\n');
+    }
+  }, 25_000);
+  timers.timeout = setTimeout(() => response.end(), 120_000);
 }

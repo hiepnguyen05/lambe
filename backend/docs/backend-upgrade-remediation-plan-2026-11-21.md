@@ -83,6 +83,8 @@ Không bắt đầu WP5/WP6 khi WP2 chưa cung cấp đủ số liệu truy vấ
 
 **Cập nhật cuối phiên 24/11/2026:** Subscriber acknowledgement cũng có deadline và recovery test; Redis fault suite đạt 9/9. Avatar backfill có guard tránh ghi đè khi hai lượt chạy đụng cùng hồ sơ. Ba synthetic baseline liên tiếp sau reset đạt, nhưng một lượt trước đó đo Feed 9→10 SQL nên nguồn nhiễu cần tiếp tục xác định. WP0 local reset đã tự động hóa; coverage và staging đại diện vẫn chặn Checkpoint A.
 
+**Cập nhật phép đo và tối ưu 24/11/2026:** HTTP runtime cũ gặp 503 tại Redis rate-limit path. Các GET danh mục/dịch vụ công khai được giới hạn cục bộ chặt hơn khi Redis lỗi, giữ fail-closed cho đặt lịch và thao tác ghi. Hai cặp truy vấn độc lập trên đường báo giá/lịch hẹn được chạy đồng thời; kết quả đọc-only PostgreSQL development và giới hạn ở `qa/booking-and-public-read-optimization-2026-11-24.md`. Image đang chạy chưa chứa các sửa đổi này; WP5/WP6/WP8 và mục tiêu p95 vẫn mở.
+
 ## WP0 — Chốt baseline và môi trường kiểm thử cô lập
 
 **Ưu tiên:** P1  

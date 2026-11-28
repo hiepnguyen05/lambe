@@ -6,8 +6,13 @@ import '../domain/repositories/address_repository.dart';
 class AddressNotifier extends StateNotifier<AsyncValue<List<AddressEntity>>> {
   final AddressRepository _repository;
 
-  AddressNotifier(this._repository) : super(const AsyncValue.loading()) {
-    fetchAddresses();
+  AddressNotifier(this._repository, {bool autoLoad = true})
+    : super(
+        autoLoad ? const AsyncValue.loading() : const AsyncValue.data([]),
+      ) {
+    if (autoLoad) {
+      fetchAddresses();
+    }
   }
 
   Future<void> fetchAddresses() async {

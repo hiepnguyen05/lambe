@@ -9,6 +9,11 @@ import '../../domain/entities/service_item_entity.dart';
 abstract class CatalogRemoteDataSource {
   Future<List<ServiceItemEntity>> getServices(ServiceFilterParams params);
   Future<ServiceItemEntity> getServiceBySlug(String slug);
+  Future<ServiceReviewsPage> getServiceReviews(
+    String slug, {
+    String? cursor,
+    int limit = 20,
+  });
 }
 
 class CatalogRemoteDataSourceImpl implements CatalogRemoteDataSource {
@@ -39,5 +44,22 @@ class CatalogRemoteDataSourceImpl implements CatalogRemoteDataSource {
     final response = await _dio.get('${ApiEndpoints.services}/$slug');
     final map = ApiResponseParser.dataMap(response);
     return ServiceItemEntity.fromJson(map);
+  }
+
+  @override
+  Future<ServiceReviewsPage> getServiceReviews(
+    String slug, {
+    String? cursor,
+    int limit = 20,
+  }) async {
+    final response = await _dio.get(
+      '${ApiEndpoints.services}/$slug/reviews',
+      queryParameters: {
+        'limit': limit,
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      },
+    );
+    final map = ApiResponseParser.dataMap(response);
+    return ServiceReviewsPage.fromJson(map);
   }
 }

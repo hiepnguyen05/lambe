@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mobile/core/network/dio_client.dart';
+import 'package:mobile/features/shared/auth/di/auth_providers.dart';
 
 import '../application/provider_wallet_notifier.dart';
 import '../application/provider_wallet_state.dart';
@@ -23,6 +24,9 @@ final providerWalletRepositoryProvider = Provider<ProviderWalletRepository>((
 
 final providerWalletNotifierProvider =
     StateNotifierProvider<ProviderWalletNotifier, ProviderWalletState>((ref) {
+      final userId = ref.watch(
+        authNotifierProvider.select((s) => s.valueOrNull?.id),
+      );
       final repository = ref.watch(providerWalletRepositoryProvider);
-      return ProviderWalletNotifier(repository);
+      return ProviderWalletNotifier(repository, autoLoad: userId != null);
     });

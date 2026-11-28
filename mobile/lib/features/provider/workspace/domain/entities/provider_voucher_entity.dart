@@ -1,5 +1,5 @@
 import 'package:equatable/equatable.dart';
-import 'package:intl/intl.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 
 class ProviderVoucherEntity extends Equatable {
   final String id;
@@ -50,11 +50,7 @@ class ProviderVoucherEntity extends Equatable {
   }
 
   String get discountDescription {
-    final currency = NumberFormat.currency(
-      locale: 'vi_VN',
-      symbol: 'đ',
-      decimalDigits: 0,
-    );
+    final currency = CurrencyUtils.vndCurrency;
     if (isPercentage) {
       if (maxDiscountAmount != null && maxDiscountAmount! > 0) {
         return 'Giảm $value% (tối đa ${currency.format(maxDiscountAmount)})';

@@ -110,7 +110,7 @@ export class OrderEligibilityService {
       throw new BadRequestException(
         'Chọn một địa chỉ đã lưu hoặc nhập địa chỉ mới.',
       );
-    const address =
+    const addressPromise =
       snapshotAddress ??
       (dto.inlineAddress
         ? {
@@ -127,13 +127,11 @@ export class OrderEligibilityService {
             contactPhone: null,
             note: dto.inlineAddress.note ?? null,
           }
-        : await tx.customerAddress.findFirst({
+        : tx.customerAddress.findFirst({
             where: { id: dto.customerAddressId, userId: customerId },
             select: addressSelect,
           }));
-    if (!address)
-      throw new NotFoundException('Không tìm thấy địa chỉ của khách hàng.');
-    const providerService = await tx.providerService.findFirst({
+    const providerServicePromise = tx.providerService.findFirst({
       where: {
         id: dto.providerServiceId,
         status: allowInactive ? { in: ['ACTIVE', 'INACTIVE'] } : 'ACTIVE',
@@ -145,11 +143,48 @@ export class OrderEligibilityService {
         },
         service: { status: 'ACTIVE', category: { status: 'ACTIVE' } },
       },
-      include: {
-        service: true,
-        provider: { include: { workingHours: true, wallet: true } },
+      select: {
+        id: true,
+        providerId: true,
+        serviceId: true,
+        priceAmount: true,
+        durationMinutes: true,
+        service: {
+          select: {
+            id: true,
+            iconUrl: true,
+            coverImageUrl: true,
+            category: { select: { code: true, iconUrl: true } },
+            name: true,
+            currencyCode: true,
+            minPriceAmount: true,
+            defaultDurationMinutes: true,
+          },
+        },
+        provider: {
+          select: {
+            id: true,
+            userId: true,
+            providerType: true,
+            displayName: true,
+            avatarUrl: true,
+            serviceRadiusKm: true,
+            serviceAreaLatitude: true,
+            serviceAreaLongitude: true,
+            workingHours: true,
+            wallet: { select: { balanceAmount: true, heldAmount: true } },
+          },
+        },
       },
     });
+    // Quote/availability reads use separate pooled connections; booking writes
+    // still recheck both values inside the transaction after taking locks.
+    const [address, providerService] = await Promise.all([
+      addressPromise,
+      providerServicePromise,
+    ]);
+    if (!address)
+      throw new NotFoundException('Không tìm thấy địa chỉ của khách hàng.');
     if (!providerService)
       throw new NotFoundException(
         'Không tìm thấy dịch vụ đang hoạt động của nhà cung cấp.',
@@ -365,19 +400,23 @@ export class OrderEligibilityService {
 
   async captureOrigin(
     dto: Pick<OrderQuoteDto, 'providerServiceId' | 'memberId' | 'bookingType'>,
+    knownProviderId?: string,
   ): Promise<OrderOriginSnapshot | undefined> {
     if (dto.bookingType !== 'ASAP') return undefined;
-    const offering = await this.prisma.providerService.findUnique({
-      where: { id: dto.providerServiceId },
-      select: { providerId: true },
-    });
-    if (!offering)
+    const providerId =
+      knownProviderId ??
+      (
+        await this.prisma.providerService.findUnique({
+          where: { id: dto.providerServiceId },
+          select: { providerId: true },
+        })
+      )?.providerId;
+    if (!providerId)
       throw new NotFoundException('Không tìm thấy dịch vụ của thợ.');
     const member = dto.memberId
       ? await this.members.capturePosition(dto.memberId)
       : undefined;
-    const point =
-      member ?? (await this.locations.getPosition(offering.providerId));
+    const point = member ?? (await this.locations.getPosition(providerId));
     if (!point)
       throw new ConflictException({
         code: 'PROVIDER_OFFLINE',
@@ -385,7 +424,7 @@ export class OrderEligibilityService {
       });
     return {
       ...point,
-      providerId: offering.providerId,
+      providerId,
       observedAt: Date.now(),
       member,
     };

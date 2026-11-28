@@ -4,12 +4,14 @@ class OrderReviewBottomSheet extends StatefulWidget {
   final String providerName;
   final String serviceName;
   final Future<bool> Function(int rating, String? comment) onConfirm;
+  final String? Function()? getErrorMessage;
 
   const OrderReviewBottomSheet({
     super.key,
     required this.providerName,
     required this.serviceName,
     required this.onConfirm,
+    this.getErrorMessage,
   });
 
   static Future<bool?> show(
@@ -17,6 +19,7 @@ class OrderReviewBottomSheet extends StatefulWidget {
     required String providerName,
     required String serviceName,
     required Future<bool> Function(int rating, String? comment) onConfirm,
+    String? Function()? getErrorMessage,
   }) {
     return showModalBottomSheet<bool>(
       context: context,
@@ -26,6 +29,7 @@ class OrderReviewBottomSheet extends StatefulWidget {
         providerName: providerName,
         serviceName: serviceName,
         onConfirm: onConfirm,
+        getErrorMessage: getErrorMessage,
       ),
     );
   }
@@ -38,6 +42,7 @@ class _OrderReviewBottomSheetState extends State<OrderReviewBottomSheet> {
   int _selectedRating = 5;
   final TextEditingController _commentController = TextEditingController();
   bool _isSubmitting = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -45,18 +50,34 @@ class _OrderReviewBottomSheetState extends State<OrderReviewBottomSheet> {
     super.dispose();
   }
 
-  void _submit() async {
-    setState(() => _isSubmitting = true);
+  Future<void> _submit() async {
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
     final comment = _commentController.text.trim();
-    final success = await widget.onConfirm(
-      _selectedRating,
-      comment.isNotEmpty ? comment : null,
-    );
+    var success = false;
+    String? caughtError;
+    try {
+      success = await widget.onConfirm(
+        _selectedRating,
+        comment.isNotEmpty ? comment : null,
+      );
+    } catch (e) {
+      caughtError = e.toString().replaceFirst('Exception: ', '');
+    }
     if (!mounted) return;
-    setState(() => _isSubmitting = false);
     if (success) {
       Navigator.of(context).pop(true);
+      return;
     }
+    setState(() {
+      _isSubmitting = false;
+      _errorMessage =
+          caughtError ??
+          widget.getErrorMessage?.call() ??
+          'Không thể gửi đánh giá. Vui lòng thử lại.';
+    });
   }
 
   @override
@@ -125,7 +146,7 @@ class _OrderReviewBottomSheetState extends State<OrderReviewBottomSheet> {
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: Color(0xFFB45309),
+              color: Color(0xFF0F766E),
             ),
           ),
           const SizedBox(height: 16),
@@ -151,6 +172,26 @@ class _OrderReviewBottomSheetState extends State<OrderReviewBottomSheet> {
             ),
           ),
           const SizedBox(height: 14),
+          if (_errorMessage != null) ...[
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Text(
+                _errorMessage!,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: Color(0xFFB91C1C),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
           SizedBox(
             width: double.infinity,
             height: 46,

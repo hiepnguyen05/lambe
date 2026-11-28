@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
+
 import '../providers/member_services_assignment_notifier.dart';
 
 class MemberServicesAssignmentScreen extends ConsumerStatefulWidget {
@@ -22,8 +24,9 @@ class MemberServicesAssignmentScreen extends ConsumerStatefulWidget {
 
 class _MemberServicesAssignmentScreenState
     extends ConsumerState<MemberServicesAssignmentScreen> {
-  final _reasonController =
-      TextEditingController(text: 'Cập nhật phân công chuyên môn');
+  final _reasonController = TextEditingController(
+    text: 'Cập nhật phân công chuyên môn',
+  );
 
   @override
   void dispose() {
@@ -34,8 +37,7 @@ class _MemberServicesAssignmentScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(memberServicesAssignmentProvider(widget.memberId));
-    final currencyFormatter =
-        NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0);
+    final currencyFormatter = CurrencyUtils.vndCurrency;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FF),
@@ -61,7 +63,9 @@ class _MemberServicesAssignmentScreenState
           IconButton(
             icon: const Icon(Icons.refresh, color: Color(0xFF0B1C30)),
             onPressed: () => ref
-                .read(memberServicesAssignmentProvider(widget.memberId).notifier)
+                .read(
+                  memberServicesAssignmentProvider(widget.memberId).notifier,
+                )
                 .loadServices(),
           ),
         ],
@@ -75,13 +79,18 @@ class _MemberServicesAssignmentScreenState
                 // Info banner
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   color: const Color(0xFFFEF3C7),
                   child: Row(
                     children: const [
-                      Icon(Icons.info_outline,
-                          color: Color(0xFFD97706), size: 20),
+                      Icon(
+                        Icons.info_outline,
+                        color: Color(0xFFD97706),
+                        size: 20,
+                      ),
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -179,8 +188,9 @@ class _MemberServicesAssignmentScreenState
                                         ),
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFFEE2E2),
-                                          borderRadius:
-                                              BorderRadius.circular(6),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
                                         ),
                                         child: Text(
                                           item.blockerLabel,
@@ -205,11 +215,12 @@ class _MemberServicesAssignmentScreenState
                                           ref
                                               .read(
                                                 memberServicesAssignmentProvider(
-                                                        widget.memberId)
-                                                    .notifier,
+                                                  widget.memberId,
+                                                ).notifier,
                                               )
                                               .toggleService(
-                                                  item.providerServiceId);
+                                                item.providerServiceId,
+                                              );
                                         }
                                       : null,
                                 ),
@@ -218,11 +229,12 @@ class _MemberServicesAssignmentScreenState
                                         ref
                                             .read(
                                               memberServicesAssignmentProvider(
-                                                      widget.memberId)
-                                                  .notifier,
+                                                widget.memberId,
+                                              ).notifier,
                                             )
                                             .toggleService(
-                                                item.providerServiceId);
+                                              item.providerServiceId,
+                                            );
                                       }
                                     : null,
                               ),
@@ -269,21 +281,19 @@ class _MemberServicesAssignmentScreenState
                               ? null
                               : () async {
                                   final success = await ref
-                                      .read(memberServicesAssignmentProvider(
-                                              widget.memberId)
-                                          .notifier)
-                                      .saveAssignment(
-                                          _reasonController.text);
+                                      .read(
+                                        memberServicesAssignmentProvider(
+                                          widget.memberId,
+                                        ).notifier,
+                                      )
+                                      .saveAssignment(_reasonController.text);
                                   if (!context.mounted) return;
                                   if (success) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                            'Đã lưu phân công dịch vụ thành công!'),
-                                        backgroundColor: Color(0xFF0F766E),
-                                      ),
+                                    await AppDialog.success(
+                                      context,
+                                      message: 'Đã lưu phân công dịch vụ thành công!',
                                     );
-                                    context.pop();
+                                    if (context.mounted) context.pop();
                                   }
                                 },
                           style: ElevatedButton.styleFrom(

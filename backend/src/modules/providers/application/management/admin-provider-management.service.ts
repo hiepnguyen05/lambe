@@ -117,7 +117,7 @@ export class AdminProviderManagementService {
       where: summaryWhere,
       _count: { _all: true },
     });
-    const [providers, groups] = await this.prisma.$transaction([
+    const [providers, groups] = await Promise.all([
       this.prisma.providerProfile.findMany({
         where,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],

@@ -28,6 +28,7 @@ class OrderNotificationsRemoteDataSource {
   Stream<OrderNotification> watch({CancelToken? cancelToken}) async* {
     String? after;
     while (!(cancelToken?.isCancelled ?? false)) {
+      var reconnectDelay = const Duration(milliseconds: 250);
       try {
         final response = await _dio.get<ResponseBody>(
           ApiEndpoints.notificationEvents,
@@ -58,12 +59,14 @@ class OrderNotificationsRemoteDataSource {
       } on DioException catch (error) {
         if (cancelToken?.isCancelled ?? false) break;
         if (error.response?.statusCode == 401) rethrow;
+        reconnectDelay = const Duration(seconds: 2);
       } catch (_) {
         if (cancelToken?.isCancelled ?? false) break;
+        reconnectDelay = const Duration(seconds: 2);
         // Tự phục hồi khi kết nối bị ngắt hoặc lỗi định dạng
       }
       if (cancelToken?.isCancelled ?? false) break;
-      await Future<void>.delayed(const Duration(seconds: 2));
+      await Future<void>.delayed(reconnectDelay);
     }
   }
 }

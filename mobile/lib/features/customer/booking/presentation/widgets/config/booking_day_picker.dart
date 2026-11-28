@@ -3,19 +3,26 @@ import 'package:flutter/material.dart';
 class BookingDayPicker extends StatelessWidget {
   final DateTime selectedDay;
   final ValueChanged<DateTime> onDaySelected;
+  final int dayCount;
+  final DateTime? baseDate;
 
   const BookingDayPicker({
     super.key,
     required this.selectedDay,
     required this.onDaySelected,
+    this.dayCount = 14,
+    this.baseDate,
   });
 
   static bool isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
-  static List<DateTime> generateUpcomingDays({int count = 14}) {
-    final now = DateTime.now();
+  static List<DateTime> generateUpcomingDays({
+    int count = 14,
+    DateTime? baseDate,
+  }) {
+    final now = baseDate ?? DateTime.now();
     return List.generate(count, (i) {
       final day = now.add(Duration(days: i));
       return DateTime(day.year, day.month, day.day);
@@ -45,11 +52,11 @@ class BookingDayPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final days = generateUpcomingDays();
-    final today = DateTime.now();
+    final today = baseDate ?? DateTime.now();
+    final days = generateUpcomingDays(count: dayCount, baseDate: today);
 
     return SizedBox(
-      height: 72,
+      height: 78,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
@@ -67,7 +74,7 @@ class BookingDayPicker extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             child: Container(
               width: 58,
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
               decoration: BoxDecoration(
                 color: isSelected
                     ? const Color(0xFF0F766E)
@@ -81,9 +88,12 @@ class BookingDayPicker extends StatelessWidget {
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     weekdayLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -92,7 +102,7 @@ class BookingDayPicker extends StatelessWidget {
                           : const Color(0xFF64748B),
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     '${day.day}',
                     style: TextStyle(

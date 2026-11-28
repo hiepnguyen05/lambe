@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:mobile/features/shared/guidance/presentation/guidance_trigger.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:mobile/core/widgets/app_dialog.dart';
 import 'package:mobile/features/provider/members/presentation/providers/worker_workspace_notifier.dart';
 import 'package:mobile/features/provider/members/presentation/widgets/worker_workspace_view.dart';
 import 'package:mobile/features/shared/profile/di/partner_profile_providers.dart';
 
 import '../../di/provider_workspace_providers.dart';
+import '../../application/provider_upcoming_appointments_provider.dart';
 import '../../domain/entities/incoming_order_entity.dart';
 import '../widgets/incoming_order/incoming_order_modal.dart';
 import '../widgets/online_status_card.dart';
@@ -44,30 +46,21 @@ class _ProviderHomeScreenState extends ConsumerState<ProviderHomeScreen> {
             ref.invalidate(providerDashboardProvider);
           },
           onReject: () {
-            ref
+            return ref
                 .read(providerIncomingOrdersProvider.notifier)
                 .rejectOrder(next.id);
+          },
+          onTimeout: () {
+            ref
+                .read(providerIncomingOrdersProvider.notifier)
+                .dismissOrder(next.id);
           },
         ).then((accepted) {
           _isModalShowing = false;
           if (!mounted) return;
 
           if (accepted == true) {
-            AppDialog.success(
-              context,
-              title: 'Nhận đơn thành công',
-              message: '🎉 Bạn đã nhận đơn thành công! Hãy chuẩn bị đồ nghề và di chuyển tới điểm hẹn.',
-              buttonText: 'Chi tiết đơn',
-              onPressed: () {
-                if (mounted) context.push('/provider/orders/${next.id}');
-              },
-            );
-          } else if (accepted == false) {
-            AppDialog.info(
-              context,
-              title: 'Thông báo đơn hàng',
-              message: 'Đã từ chối đơn hàng hoặc hết thời gian phản hồi.',
-            );
+            context.push('/provider/orders/${next.id}');
           }
         });
       }
@@ -83,80 +76,100 @@ class _ProviderHomeScreenState extends ConsumerState<ProviderHomeScreen> {
     final workerWorkspace = ref.watch(workerWorkspaceProvider);
     final isWorker = isOrgEnabled && workerWorkspace.isWorkerInOrganization;
     final isOrganization = ref.watch(isOrganizationProvider);
+    final incoming = ref.watch(providerIncomingOrdersProvider);
+    final audienceReady =
+        !isOrgEnabled ||
+        (!workerWorkspace.isLoading &&
+            !ref.watch(partnerProfileNotifierProvider).isLoading);
 
     if (isWorker) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFF8F9FF),
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          title: Text(
-            workerWorkspace.activeMembership?.provider?.displayName ??
-                'Không gian Kỹ thuật viên',
-            style: const TextStyle(
-              color: Color(0xFF0B1C30),
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
+      return GuidanceTrigger(
+        tourId: 'worker_start',
+        enabled: audienceReady && incoming == null && !_isModalShowing,
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF8F9FF),
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            title: Text(
+              workerWorkspace.activeMembership?.provider?.displayName ??
+                  'Không gian Kỹ thuật viên',
+              style: const TextStyle(
+                color: Color(0xFF0B1C30),
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
             ),
+            centerTitle: false,
+            actions: [
+              IconButton(
+                icon: const Icon(
+                  Icons.notifications_none_rounded,
+                  color: Color(0xFF0B1C30),
+                ),
+                onPressed: () => context.push('/notifications'),
+              ),
+            ],
           ),
-          centerTitle: false,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.notifications_none_rounded,
-                  color: Color(0xFF0B1C30)),
-              onPressed: () => context.push('/notifications'),
-            ),
-          ],
-        ),
-        body: RefreshIndicator(
-          color: const Color(0xFF0F766E),
-          onRefresh: () async {
-            await ref.read(workerWorkspaceProvider.notifier).loadWorkspace();
-          },
-          child: const WorkerWorkspaceView(),
+          body: RefreshIndicator(
+            color: const Color(0xFF0F766E),
+            onRefresh: () async {
+              await ref.read(workerWorkspaceProvider.notifier).loadWorkspace();
+            },
+            child: const WorkerWorkspaceView(),
+          ),
         ),
       );
     }
 
-    return Scaffold(
-      body: RefreshIndicator(
-        color: const Color(0xFF0F766E),
-        onRefresh: () async {
-          await ref
-              .read(providerIncomingOrdersProvider.notifier)
-              .checkPendingOrders();
-          ref.invalidate(providerDashboardProvider);
-          ref.invalidate(partnerProfileNotifierProvider);
-        },
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(
-            parent: BouncingScrollPhysics(),
-          ),
-          slivers: [
-            ProviderHomeAppBar(),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  if (isOrganization) ...[
-                    const OrganizationWorkspaceView(),
-                  ] else ...[
-                    const OnlineStatusCard(),
-                    const SizedBox(height: 16),
-                    const ServiceRadiusCard(),
-                    const SizedBox(height: 16),
-                    const TodayEarningsCard(),
-                    const SizedBox(height: 16),
-                    _buildVoucherPromotionCard(context),
-                    const SizedBox(height: 24),
-                  ],
-                  const UpcomingAppointmentsSection(),
-                  // Extra padding for bottom nav bar
-                  const SizedBox(height: 100),
-                ]),
-              ),
+    return GuidanceTrigger(
+      tourId: isOrganization ? 'organization_start' : 'provider_start',
+      enabled: audienceReady && incoming == null && !_isModalShowing,
+      child: Scaffold(
+        body: RefreshIndicator(
+          color: const Color(0xFF0F766E),
+          onRefresh: () async {
+            await ref
+                .read(providerIncomingOrdersProvider.notifier)
+                .checkPendingOrders();
+            ref.invalidate(providerDashboardProvider);
+            ref.invalidate(providerUpcomingAppointmentsProvider);
+            ref.invalidate(providerCompletedOrdersProvider);
+            ref.invalidate(partnerProfileNotifierProvider);
+          },
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
             ),
-          ],
+            slivers: [
+              ProviderHomeAppBar(),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 20,
+                ),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    if (isOrganization) ...[
+                      const OrganizationWorkspaceView(),
+                    ] else ...[
+                      const OnlineStatusCard(),
+                      const SizedBox(height: 16),
+                      const ServiceRadiusCard(),
+                      const SizedBox(height: 16),
+                      const TodayEarningsCard(),
+                      const SizedBox(height: 16),
+                      _buildVoucherPromotionCard(context),
+                      const SizedBox(height: 24),
+                    ],
+                    const UpcomingAppointmentsSection(),
+                    // Extra padding for bottom nav bar
+                    const SizedBox(height: 100),
+                  ]),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

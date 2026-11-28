@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mobile/core/network/upload_payload.dart';
@@ -102,12 +103,13 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
   }
 
   Future<void> logout() async {
-    state = const AsyncValue.loading();
+    state = const AsyncValue<UserEntity?>.loading().copyWithPrevious(state);
     try {
       await _repository.logout();
-      if (mounted) state = const AsyncValue.data(null);
     } catch (error, stack) {
-      if (mounted) state = AsyncValue.error(error, stack);
+      debugPrint('⚠️ [AuthNotifier] Logout failed: $error\n$stack');
+    } finally {
+      if (mounted) state = const AsyncValue.data(null);
     }
   }
 
@@ -133,24 +135,38 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserEntity?>> {
   }
 
   Future<void> _runUserAction(Future<UserEntity> Function() action) async {
-    state = const AsyncValue.loading();
+    final previous = state.valueOrNull != null ? state : null;
+    var loading = const AsyncValue<UserEntity?>.loading();
+    if (previous != null) loading = loading.copyWithPrevious(previous);
+    state = loading;
     try {
       final user = await action();
       if (mounted) state = AsyncValue.data(user);
     } catch (error, stack) {
-      if (mounted) state = AsyncValue.error(error, stack);
+      if (mounted) {
+        var failure = AsyncValue<UserEntity?>.error(error, stack);
+        if (previous != null) failure = failure.copyWithPrevious(previous);
+        state = failure;
+      }
     }
   }
 
   Future<void> _runOptionalUserAction(
     Future<UserEntity?> Function() action,
   ) async {
-    state = const AsyncValue.loading();
+    final previous = state.valueOrNull != null ? state : null;
+    var loading = const AsyncValue<UserEntity?>.loading();
+    if (previous != null) loading = loading.copyWithPrevious(previous);
+    state = loading;
     try {
       final user = await action();
       if (mounted) state = AsyncValue.data(user);
     } catch (error, stack) {
-      if (mounted) state = AsyncValue.error(error, stack);
+      if (mounted) {
+        var failure = AsyncValue<UserEntity?>.error(error, stack);
+        if (previous != null) failure = failure.copyWithPrevious(previous);
+        state = failure;
+      }
     }
   }
 }

@@ -38,15 +38,6 @@ class _MyInvitationsScreenState extends ConsumerState<MyInvitationsScreen> {
           icon: const Icon(Icons.arrow_back, color: Color(0xFF0B1C30)),
           onPressed: () => context.pop(),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Làm mới',
-            icon: const Icon(Icons.refresh, color: Color(0xFF0B1C30)),
-            onPressed: () => ref
-                .read(myInvitationsNotifierProvider.notifier)
-                .loadInvitations(),
-          ),
-        ],
       ),
       body: state.when(
         loading: () => const Center(child: CircularProgressIndicator()),

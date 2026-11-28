@@ -41,6 +41,7 @@ import {
   OrderQueryDto,
   OrderQuoteDto,
   RequestOrderRescheduleDto,
+  DecideOrderRescheduleDto,
 } from '../dto/order.dto';
 
 const quoteExample = {
@@ -184,6 +185,22 @@ export class CustomerOrdersController {
     @Headers('idempotency-key') idempotencyKey: string,
   ) {
     return this.orders.create(user.userId, dto, request, idempotencyKey);
+  }
+
+  @Post('me/orders/:id/reschedule/decision')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Khách chấp nhận hoặc từ chối giờ thợ đề xuất' })
+  @ApiStandardOk({
+    description: 'Khách phản hồi đề xuất giờ mới của thợ.',
+    data: { status: 'ACCEPTED' },
+  })
+  decideReschedule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param() params: OrderParamDto,
+    @Body() dto: DecideOrderRescheduleDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.reschedule.decide(user.userId, params.id, dto, request, true);
   }
 
   @Post('me/orders/:id/reschedule')

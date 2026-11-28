@@ -73,7 +73,7 @@ export class ProviderApplicationsQueryService {
       where.OR = conditions;
     }
 
-    const [applications, total] = await this.prisma.$transaction([
+    const [applications, total] = await Promise.all([
       this.prisma.providerApplication.findMany({
         where,
         orderBy: [{ submittedAt: 'asc' }, { createdAt: 'asc' }],

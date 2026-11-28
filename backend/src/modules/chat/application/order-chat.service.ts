@@ -3,6 +3,14 @@ import { Prisma } from '@prisma/client';
 import { AuditService } from '../../../infrastructure/audit/audit.service';
 import { ensureChatConversation, lockChat } from './chat.helpers';
 
+export interface AttachOrderChatOptions {
+  providerUserId?: string;
+  assignedMemberId?: string | null;
+  assignedMemberUserId?: string | null;
+  assignedMemberVersion?: number | null;
+  isNewOrder?: boolean;
+}
+
 @Injectable()
 export class OrderChatService {
   constructor(private readonly audit: AuditService) {}
@@ -10,25 +18,38 @@ export class OrderChatService {
   async attach(
     tx: Prisma.TransactionClient,
     order: { id: string; customerId: string; providerId: string },
+    options?: AttachOrderChatOptions,
   ) {
-    const snapshot = await tx.serviceOrder.findUniqueOrThrow({
-      where: { id: order.id },
-      select: {
-        id: true,
-        assignedMemberId: true,
-        assignedMemberUserId: true,
-        assignedMemberVersion: true,
-      },
-    });
-    const provider = await tx.providerProfile.findUniqueOrThrow({
-      where: { id: order.providerId },
-      select: { userId: true },
-    });
+    const snapshot =
+      options && options.assignedMemberId !== undefined
+        ? {
+            id: order.id,
+            assignedMemberId: options.assignedMemberId,
+            assignedMemberUserId: options.assignedMemberUserId ?? null,
+            assignedMemberVersion: options.assignedMemberVersion ?? null,
+          }
+        : await tx.serviceOrder.findUniqueOrThrow({
+            where: { id: order.id },
+            select: {
+              id: true,
+              assignedMemberId: true,
+              assignedMemberUserId: true,
+              assignedMemberVersion: true,
+            },
+          });
+    const ownerUserId =
+      options?.providerUserId ??
+      (
+        await tx.providerProfile.findUniqueOrThrow({
+          where: { id: order.providerId },
+          select: { userId: true },
+        })
+      ).userId;
     const { conversation, created } = await ensureChatConversation(
       tx,
       order.customerId,
       order.providerId,
-      provider.userId,
+      ownerUserId,
       snapshot.assignedMemberId ? snapshot : undefined,
     );
     await lockChat(tx, conversation.id);
@@ -37,17 +58,24 @@ export class OrderChatService {
       data: { conversationId: conversation.id },
     });
     const eventKey = `order:${order.id}:${snapshot.assignedMemberId ? 'member-chat' : 'created'}`;
-    if (
-      !(await tx.chatMessage.findUnique({
-        where: { eventKey },
-        select: { id: true },
-      }))
-    ) {
-      const fresh = await tx.chatConversation.findUniqueOrThrow({
-        where: { id: conversation.id },
-        select: { lastSequence: true },
-      });
-      const sequence = fresh.lastSequence + 1;
+    const alreadyExists = options?.isNewOrder
+      ? false
+      : Boolean(
+          await tx.chatMessage.findUnique({
+            where: { eventKey },
+            select: { id: true },
+          }),
+        );
+    if (!alreadyExists) {
+      const lastSeq = created
+        ? 0
+        : (
+            await tx.chatConversation.findUniqueOrThrow({
+              where: { id: conversation.id },
+              select: { lastSequence: true },
+            })
+          ).lastSequence;
+      const sequence = lastSeq + 1;
       await tx.chatMessage.create({
         data: {
           conversationId: conversation.id,

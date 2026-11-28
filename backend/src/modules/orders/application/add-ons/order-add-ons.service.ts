@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Prisma, WalletTransactionType, type OrderAddOn } from '@prisma/client';
@@ -14,6 +15,7 @@ import type {
   CreateOrderAddOnDto,
   DecideOrderAddOnDto,
 } from '../../dto/order-add-on.dto';
+import { OrderNotificationRelayService } from '../notifications/order-notification-relay.service';
 import {
   orderInclude,
   presentForCustomer,
@@ -37,6 +39,7 @@ export class OrderAddOnsService {
     private readonly calendar: BookingCalendarService,
     private readonly audit: AuditService,
     private readonly members: MemberServingService,
+    @Optional() private readonly notificationRelay?: OrderNotificationRelayService,
   ) {}
 
   async options(userId: string, orderId: string) {
@@ -313,7 +316,7 @@ export class OrderAddOnsService {
             expiresAt: new Date(now.getTime() + RESPONSE_MINUTES * MINUTE),
           },
         });
-        await tx.orderNotification.create({
+        const notification = await tx.orderNotification.create({
           data: {
             userId: order.customerId,
             orderId,
@@ -332,10 +335,22 @@ export class OrderAddOnsService {
           metadata,
           tx,
         );
-        return { success: true, data: this.presentAddOn(addOn) };
+        return {
+          response: { success: true, data: this.presentAddOn(addOn) },
+          notification,
+        };
       },
       { maxWait: 5000, timeout: 10000 },
-    );
+    ).then((result) => {
+      if ('notification' in result && result.notification) {
+        void this.notificationRelay?.publishNow(
+          result.notification.userId,
+          result.notification.id,
+        );
+        return result.response;
+      }
+      return result;
+    });
   }
 
   async cancel(
@@ -364,7 +379,7 @@ export class OrderAddOnsService {
         where: { id: addOnId },
         data: { status: 'CANCELLED', respondedAt: new Date() },
       });
-      await tx.orderNotification.create({
+      const notification = await tx.orderNotification.create({
         data: {
           userId: order.customerId,
           orderId,
@@ -382,7 +397,19 @@ export class OrderAddOnsService {
         metadata,
         tx,
       );
-      return { success: true, data: this.presentAddOn(updated) };
+      return {
+        response: { success: true, data: this.presentAddOn(updated) },
+        notification,
+      };
+    }).then((result) => {
+      if ('notification' in result && result.notification) {
+        void this.notificationRelay?.publishNow(
+          result.notification.userId,
+          result.notification.id,
+        );
+        return result.response;
+      }
+      return result;
     });
   }
 
@@ -512,7 +539,7 @@ export class OrderAddOnsService {
             data: { status: 'REJECTED', respondedAt: now },
           });
         }
-        await tx.orderNotification.create({
+        const notification = await tx.orderNotification.create({
           data: {
             userId: orderServingUserId(order),
             orderId,
@@ -539,15 +566,27 @@ export class OrderAddOnsService {
           include: orderInclude,
         });
         return {
-          success: true,
-          data: {
-            addOn: updated.addOns.find((item) => item.id === addOnId),
-            order: presentForCustomer(updated),
+          response: {
+            success: true,
+            data: {
+              addOn: updated.addOns.find((item) => item.id === addOnId),
+              order: presentForCustomer(updated),
+            },
           },
+          notification,
         };
       },
       { maxWait: 5000, timeout: 10000 },
-    );
+    ).then((result) => {
+      if ('notification' in result && result.notification) {
+        void this.notificationRelay?.publishNow(
+          result.notification.userId,
+          result.notification.id,
+        );
+        return result.response;
+      }
+      return result;
+    });
   }
 
   private async lockOwnedOrder(

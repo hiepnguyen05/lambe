@@ -43,28 +43,40 @@ abstract class CustomerOrderActionCoordinator {
     );
   }
 
-  static void openReviewSheet({
+  static Future<void> openReviewSheet({
     required BuildContext context,
     required WidgetRef ref,
     required CustomerOrderEntity order,
-  }) {
-    OrderReviewBottomSheet.show(
+  }) async {
+    String? latestError;
+    final saved = await OrderReviewBottomSheet.show(
       context,
       providerName: order.provider?.displayName ?? 'Chuyên viên',
       serviceName: order.serviceName,
+      getErrorMessage: () => latestError,
       onConfirm: (rating, comment) async {
-        final success = await ref
-            .read(customerOrderDetailNotifierProvider(order.id).notifier)
-            .submitReview(rating: rating, comment: comment);
-        if (context.mounted && success) {
-          AppDialog.success(
-            context,
-            message: 'Cảm ơn bạn đã gửi đánh giá dịch vụ!',
-          );
-          ref.invalidate(customerOrdersListProvider);
+        latestError = null;
+        final provider = customerOrderDetailNotifierProvider(order.id);
+        final sub = ref.listenManual(provider, (_, _) {});
+        try {
+          final success = await ref
+              .read(provider.notifier)
+              .submitReview(rating: rating, comment: comment);
+          if (!success) {
+            latestError = sub.read().errorMessage;
+          }
+          return success;
+        } finally {
+          sub.close();
         }
-        return success;
       },
     );
+    if (saved == true && context.mounted) {
+      ref.invalidate(customerOrdersListProvider);
+      await AppDialog.success(
+        context,
+        message: 'Cảm ơn bạn đã gửi đánh giá dịch vụ!',
+      );
+    }
   }
 }

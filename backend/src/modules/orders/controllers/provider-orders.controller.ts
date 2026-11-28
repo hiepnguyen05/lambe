@@ -37,7 +37,10 @@ import { OrderLocationDto } from '../dto/order-location.dto';
 import { OpenPaymentDisputeDto } from '../dto/order.dto';
 import { OrderPaymentDisputeService } from '../application/payments/order-payment-dispute.service';
 import { OrderRescheduleService } from '../application/scheduling/order-reschedule.service';
-import { DecideOrderRescheduleDto } from '../dto/order.dto';
+import {
+  DecideOrderRescheduleDto,
+  RequestOrderRescheduleDto,
+} from '../dto/order.dto';
 
 @ApiTags('Provider Orders')
 @ApiBearerAuth('user-token')
@@ -50,6 +53,22 @@ export class ProviderOrdersController {
     private readonly paymentDisputes: OrderPaymentDisputeService,
     private readonly reschedule: OrderRescheduleService,
   ) {}
+
+  @Post(':id/reschedule')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Thợ đề xuất giờ mới để khách xác nhận' })
+  @ApiStandardOk({
+    description: 'Lịch cũ giữ nguyên cho tới khi khách chấp nhận.',
+    data: { status: 'PENDING', requestedByRole: 'PROVIDER' },
+  })
+  requestReschedule(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param() params: OrderParamDto,
+    @Body() dto: RequestOrderRescheduleDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.reschedule.request(user.userId, params.id, dto, request, true);
+  }
 
   @Post(':id/reschedule/decision')
   @HttpCode(HttpStatus.OK)
@@ -145,6 +164,20 @@ export class ProviderOrdersController {
     @Query() query: OrderQueryDto,
   ) {
     return this.orders.findProviderOrders(user.userId, query);
+  }
+
+  @Get('upcoming')
+  @ApiOperation({
+    summary: 'Năm đơn đã nhận chờ khởi hành, sắp theo giờ phục vụ gần nhất',
+  })
+  @ApiStandardOk({
+    description:
+      'Chỉ trả lịch hẹn thuộc phạm vi đọc của đối tác hoặc nhân viên.',
+    data: [],
+  })
+  @ApiAuthenticationErrors()
+  upcoming(@CurrentUser() user: AuthenticatedUser) {
+    return this.orders.findUpcomingProviderOrders(user.userId);
   }
 
   @Get(':id')
@@ -259,6 +292,42 @@ export class ProviderOrdersController {
     @CurrentRequestMetadata() request: RequestMetadata,
   ) {
     return this.orders.start(user.userId, params.id, request);
+  }
+
+  @Post(':id/work/pause')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Tạm dừng đồng hồ làm việc khi đang thực hiện dịch vụ',
+  })
+  @ApiStandardOk({
+    description: 'Giữ trạng thái IN_PROGRESS và ghi nhận workPausedAt.',
+    data: { id: 'order-uuid', status: 'IN_PROGRESS' },
+  })
+  @ApiAuthenticationErrors()
+  @ApiConflictError('Đơn chưa ở trạng thái đang làm việc hoặc đã tạm dừng.')
+  pauseWork(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param() params: OrderParamDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.orders.pauseWork(user.userId, params.id, request);
+  }
+
+  @Post(':id/work/resume')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Tiếp tục đồng hồ làm việc sau khi tạm dừng' })
+  @ApiStandardOk({
+    description: 'Cộng dồn thời gian tạm dừng và xóa workPausedAt.',
+    data: { id: 'order-uuid', status: 'IN_PROGRESS' },
+  })
+  @ApiAuthenticationErrors()
+  @ApiConflictError('Đơn chưa tạm dừng hoặc không ở trạng thái đang làm việc.')
+  resumeWork(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param() params: OrderParamDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.orders.resumeWork(user.userId, params.id, request);
   }
 
   @Post(':id/complete')

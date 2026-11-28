@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node --test --experimental-strip-types tests/routes.test.ts tests/catalog-form.test.ts tests/api-client.test.ts tests/admin-permissions.test.ts",
+    "test": "node --test --experimental-strip-types tests/routes.test.ts tests/catalog-form.test.ts tests/api-client.test.ts tests/admin-permissions.test.ts tests/feed-helpers.test.ts tests/dashboard-analytics.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {

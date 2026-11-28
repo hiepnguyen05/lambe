@@ -9,7 +9,6 @@ import { configureApp } from '../src/bootstrap/configure-app';
 import { PrismaService } from '../src/infrastructure/persistence/postgres/prisma.service';
 import { RedisCacheService } from '../src/infrastructure/cache/redis-cache.service';
 import { FeedCacheService } from '../src/modules/social-feed/application/feed-cache.service';
-import { FeedTimelineService } from '../src/modules/social-feed/application/feed-timeline.service';
 import { FeedQueryService } from '../src/modules/social-feed/application/feed-query.service';
 import { FeedAccessService } from '../src/modules/social-feed/application/organization/feed-access.service';
 import { FeedLiveReadService } from '../src/modules/social-feed/application/feed-live-read.service';
@@ -49,7 +48,6 @@ async function main() {
     'cache.enabled': true,
     'cache.url': process.env.REDIS_URL,
     'cache.feedEnabled': false,
-    'cache.feedIndexEnabled': false,
   };
   const config = {
     get: (key: string, fallback: unknown) => settings[key] ?? fallback,
@@ -66,7 +64,6 @@ async function main() {
       prisma,
       new FeedAccessService(prisma),
       cache,
-      new FeedTimelineService(prisma, redis, config),
       new FeedLiveReadService(prisma),
     );
     const module = await Test.createTestingModule({
@@ -95,9 +92,8 @@ async function main() {
     });
     if (!post) throw new Error('Run Feed integration fixtures first');
     const output: object[] = [];
-    for (const mode of ['off', 'objects', 'objects-and-index'] as const) {
+    for (const mode of ['off', 'objects'] as const) {
       settings['cache.feedEnabled'] = mode !== 'off';
-      settings['cache.feedIndexEnabled'] = mode === 'objects-and-index';
       for (const route of ['list', 'detail'] as const) {
         if (mode !== 'off') {
           const identities = await prisma.feedPost.findMany({
@@ -111,15 +107,6 @@ async function main() {
                 `lambe:feed:v1:post:${row.id}:revision:${row.revisionNumber}:updated:${row.updatedAt.getTime()}`,
             ),
           );
-          await prisma.$transaction(async (tx) => {
-            const state = await tx.feedCacheState.update({
-              where: { id: 'global' },
-              data: { version: { increment: 1 } },
-            });
-            await tx.feedCacheEvent.create({
-              data: { sequence: state.version, eventType: 'BENCHMARK_REBUILD' },
-            });
-          });
         }
         const run = async () => {
           const path =

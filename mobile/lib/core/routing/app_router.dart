@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:mobile/core/error/app_failure.dart';
+import 'package:mobile/features/shared/auth/domain/entities/user_entity.dart';
+
 import 'app_route_observer.dart';
 
 import 'package:mobile/features/customer/ai_consultation/presentation/screens/ai_consultation_screen.dart';
@@ -21,7 +24,6 @@ import 'package:mobile/features/shared/auth/presentation/screens/otp_screen.dart
 import 'package:mobile/features/customer/booking/presentation/screens/booking_config_screen.dart';
 import 'package:mobile/features/customer/booking/domain/entities/provider_booking_entry.dart';
 import 'package:mobile/features/customer/booking/presentation/screens/booking_confirmation_screen.dart';
-import 'package:mobile/features/customer/booking/presentation/screens/booking_awaiting_response_screen.dart';
 import 'package:mobile/features/customer/booking/presentation/screens/select_provider_screen.dart';
 import 'package:mobile/features/customer/catalog/domain/entities/service_item_entity.dart';
 import 'package:mobile/features/customer/catalog/presentation/screens/service_detail_screen.dart';
@@ -39,15 +41,16 @@ import 'package:mobile/features/provider/registration/presentation/screens/partn
 import 'package:mobile/features/provider/registration/presentation/screens/partner_submit_screen.dart';
 import 'package:mobile/features/provider/registration/presentation/screens/partner_type_screen.dart';
 import 'package:mobile/features/shared/profile/presentation/screens/edit_profile_screen.dart';
-import 'package:mobile/features/customer/orders/presentation/screens/customer_appointments_screen.dart';
+import 'package:mobile/features/shared/orders/presentation/screens/shared_orders_history_screen.dart';
 import 'package:mobile/features/customer/orders/presentation/screens/customer_order_detail_screen.dart';
 import 'package:mobile/features/customer/orders/presentation/screens/customer_order_tracking_screen.dart';
-import 'package:mobile/features/provider/workspace/presentation/screens/provider_orders_list_screen.dart';
 import 'package:mobile/features/provider/workspace/presentation/screens/provider_order_execution_screen.dart';
 import 'package:mobile/features/provider/workspace/presentation/screens/provider_home_screen.dart';
 import 'package:mobile/features/provider/workspace/presentation/screens/provider_main_screen.dart';
 import 'package:mobile/features/provider/income/presentation/screens/provider_income_screen.dart';
 import 'package:mobile/features/provider/schedule/presentation/screens/provider_schedule_screen.dart';
+import 'package:mobile/features/provider/schedule/presentation/screens/provider_service_area_screen.dart';
+import 'package:mobile/features/shared/guidance/presentation/guidance_help_screen.dart';
 import 'package:mobile/features/provider/workspace/presentation/screens/provider_vouchers_screen.dart';
 import 'package:mobile/features/provider/workspace/presentation/screens/provider_reviews_screen.dart';
 import 'package:mobile/features/shared/profile/presentation/screens/partner_profile_screen.dart';
@@ -94,7 +97,9 @@ final rootNavigatorKey = GlobalKey<NavigatorState>();
 class GoRouterAuthRefreshNotifier extends ChangeNotifier {
   GoRouterAuthRefreshNotifier(Ref ref) {
     ref.listen(authNotifierProvider, (previous, next) {
-      if (previous?.valueOrNull != next.valueOrNull) {
+      if (previous?.valueOrNull != next.valueOrNull ||
+          previous?.isLoading != next.isLoading ||
+          previous?.hasError != next.hasError) {
         notifyListeners();
       }
     });
@@ -115,6 +120,32 @@ class GoRouterAuthRefreshNotifier extends ChangeNotifier {
   }
 }
 
+String? authGuardRedirect(AsyncValue<UserEntity?> auth, String location) {
+  if (location == '/splash') {
+    return null;
+  }
+
+  final isAuthRoute = location == '/auth' || location.startsWith('/auth/');
+  final user = auth.valueOrNull;
+
+  if (auth.isLoading && user == null) {
+    return isAuthRoute ? null : '/splash';
+  }
+
+  if (auth.hasError && user == null) {
+    final isOfflineHome =
+        auth.error is NetworkFailure &&
+        (location == '/home' || location == '/provider/home');
+    return (isAuthRoute || isOfflineHome) ? null : '/auth';
+  }
+
+  if (user == null) {
+    return isAuthRoute ? null : '/auth';
+  }
+
+  return null;
+}
+
 final goRouterProvider = Provider<GoRouter>((ref) {
   final refreshListenable = GoRouterAuthRefreshNotifier(ref);
   ref.onDispose(refreshListenable.dispose);
@@ -126,23 +157,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     refreshListenable: refreshListenable,
     redirect: (context, state) async {
       final location = state.matchedLocation;
-      final isSplash = location == '/splash';
-
-      // 1. Màn hình Splash tự đảm nhiệm kiểm tra phiên, vị trí, vai trò và điều hướng
-      if (isSplash) {
-        return null;
-      }
-
       final auth = ref.read(authNotifierProvider);
-      if (auth.isLoading || auth.hasError) {
-        return null;
+      final guard = authGuardRedirect(auth, location);
+      if (guard != null || location == '/splash') {
+        return guard;
       }
 
       final user = auth.valueOrNull;
-      final isAuthRoute = location == '/auth' || location.startsWith('/auth/');
-
       if (user == null) {
-        return isAuthRoute ? null : '/auth';
+        return null;
       }
 
       final mode = await ref.read(appModeProvider(user.id).future);
@@ -228,7 +251,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                 path: '/appointments',
                 pageBuilder: (context, state) => PageTransitions.fadeTransition(
                   key: state.pageKey,
-                  child: const CustomerAppointmentsScreen(),
+                  child: const SharedOrdersHistoryScreen(
+                    role: OrdersHistoryRole.customer,
+                  ),
                 ),
               ),
             ],
@@ -278,7 +303,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/feed',
         builder: (context, state) => FeedScreen(
-          showNotices:state.uri.queryParameters['notices']=='true',
+          showNotices: state.uri.queryParameters['notices'] == 'true',
           initialMode: FeedMode.values.firstWhere(
             (v) => v.name == state.uri.queryParameters['mode'],
             orElse: () => FeedMode.all,
@@ -394,12 +419,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/booking/waiting/:id',
-        pageBuilder: (context, state) => PageTransitions.slideRightToLeft(
-          key: state.pageKey,
-          child: BookingAwaitingResponseScreen(
-            orderId: state.pathParameters['id'] ?? '',
-          ),
-        ),
+        redirect: (_, state) =>
+            '/appointments/${state.pathParameters['id'] ?? ''}',
       ),
       GoRoute(
         path: '/notifications',
@@ -535,7 +556,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                 path: '/provider/orders',
                 pageBuilder: (context, state) => PageTransitions.fadeTransition(
                   key: state.pageKey,
-                  child: const ProviderOrdersListScreen(),
+                  child: const SharedOrdersHistoryScreen(
+                    role: OrdersHistoryRole.provider,
+                  ),
                 ),
               ),
             ],
@@ -558,17 +581,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                 pageBuilder: (context, state) => PageTransitions.fadeTransition(
                   key: state.pageKey,
                   child: const ProviderIncomeScreen(),
-                ),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/provider/reviews',
-                pageBuilder: (context, state) => PageTransitions.fadeTransition(
-                  key: state.pageKey,
-                  child: const ProviderReviewsScreen(),
                 ),
               ),
             ],
@@ -618,6 +630,24 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => PageTransitions.slideRightToLeft(
           key: state.pageKey,
           child: const ProviderScheduleScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/provider/service-area',
+        pageBuilder: (context, state) => PageTransitions.slideRightToLeft(
+          key: state.pageKey,
+          child: const ProviderServiceAreaScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/profile/guidance',
+        builder: (context, state) => const GuidanceHelpScreen(),
+      ),
+      GoRoute(
+        path: '/provider/reviews',
+        pageBuilder: (context, state) => PageTransitions.slideRightToLeft(
+          key: state.pageKey,
+          child: const ProviderReviewsScreen(),
         ),
       ),
       GoRoute(
@@ -744,7 +774,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/provider/members/:id/services',
         pageBuilder: (context, state) {
           final id = state.pathParameters['id'] ?? '';
-          final memberName = state.extra is String ? state.extra as String : null;
+          final memberName = state.extra is String
+              ? state.extra as String
+              : null;
           return PageTransitions.slideRightToLeft(
             key: state.pageKey,
             child: MemberServicesAssignmentScreen(
@@ -758,7 +790,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/provider/members/:id/schedule',
         pageBuilder: (context, state) {
           final id = state.pathParameters['id'] ?? '';
-          final memberName = state.extra is String ? state.extra as String : null;
+          final memberName = state.extra is String
+              ? state.extra as String
+              : null;
           return PageTransitions.slideRightToLeft(
             key: state.pageKey,
             child: MemberScheduleManagementScreen(

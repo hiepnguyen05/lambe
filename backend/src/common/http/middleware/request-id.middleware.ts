@@ -11,12 +11,15 @@ export function requestIdMiddleware(
 
   request.requestId = requestId;
   response.setHeader('x-request-id', requestId);
-  // Only public Feed reads may degrade to a conservative per-replica limiter.
-  // Writes and management/auth/payment endpoints retain shared fail-closed protection.
-  const publicFeedRead =
+  // Public catalogue and Feed reads can use a conservative per-replica limit.
+  // Booking, writes, management, auth and payment remain fail-closed.
+  const publicRead =
     request.method === 'GET' &&
-    /^\/api\/(?:feed\/posts(?:\/[a-f0-9-]{36}(?:\/comments(?:\/[a-f0-9-]{36}\/replies)?)?)?|me\/feed\/posts(?:\/[a-f0-9-]{36})?)\/?$/i.test(
+    (/^\/api\/(?:categories|services)(?:\/[a-z0-9-]+)?\/?$/i.test(
       request.path,
-    );
-  runWithRequestId(requestId, next, publicFeedRead);
+    ) ||
+      /^\/api\/(?:feed\/posts(?:\/[a-f0-9-]{36}(?:\/comments(?:\/[a-f0-9-]{36}\/replies)?)?)?|me\/feed\/posts(?:\/[a-f0-9-]{36})?)\/?$/i.test(
+        request.path,
+      ));
+  runWithRequestId(requestId, next, publicRead);
 }

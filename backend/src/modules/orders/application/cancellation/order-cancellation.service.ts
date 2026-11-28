@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   OrderCancellationReason,
@@ -17,6 +18,7 @@ import type {
   DecideOrderCancellationDto,
   RequestOrderCancellationDto,
 } from '../../dto/order.dto';
+import { OrderNotificationRelayService } from '../notifications/order-notification-relay.service';
 import { OrderWalletService } from '../payments/order-wallet.service';
 import {
   orderInclude,
@@ -43,6 +45,7 @@ export class OrderCancellationService {
     private readonly wallet: OrderWalletService,
     private readonly calendar: BookingCalendarService,
     private readonly audit: AuditService,
+    @Optional() private readonly notificationRelay?: OrderNotificationRelayService,
   ) {}
 
   async recordContactAttempt(userId: string, orderId: string) {
@@ -133,7 +136,7 @@ export class OrderCancellationService {
           requestedByUserId: userId,
         },
       });
-      await tx.orderNotification.create({
+      const notification = await tx.orderNotification.create({
         data: {
           userId: current.customerId,
           orderId,
@@ -152,12 +155,17 @@ export class OrderCancellationService {
         metadata,
         tx,
       );
-      return tx.serviceOrder.findUniqueOrThrow({
+      const updated = await tx.serviceOrder.findUniqueOrThrow({
         where: { id: orderId },
         include: orderInclude,
       });
+      return { order: updated, notification };
     });
-    return { success: true, data: presentForProvider(order) };
+    void this.notificationRelay?.publishNow(
+      order.notification.userId,
+      order.notification.id,
+    );
+    return { success: true, data: presentForProvider(order.order) };
   }
 
   async customerDecide(
@@ -211,7 +219,7 @@ export class OrderCancellationService {
         },
         data: { readAt: new Date() },
       });
-      await tx.orderNotification.create({
+      const notification = await tx.orderNotification.create({
         data: {
           userId: orderServingUserId(current),
           orderId,
@@ -233,12 +241,17 @@ export class OrderCancellationService {
         metadata,
         tx,
       );
-      return tx.serviceOrder.findUniqueOrThrow({
+      const updated = await tx.serviceOrder.findUniqueOrThrow({
         where: { id: orderId },
         include: orderInclude,
       });
+      return { order: updated, notification };
     });
-    return { success: true, data: presentForCustomer(order) };
+    void this.notificationRelay?.publishNow(
+      order.notification.userId,
+      order.notification.id,
+    );
+    return { success: true, data: presentForCustomer(order.order) };
   }
 
   async supportQueue() {

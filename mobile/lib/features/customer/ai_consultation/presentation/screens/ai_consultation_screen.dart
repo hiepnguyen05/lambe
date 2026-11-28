@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile/core/location/user_location_provider.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/widgets/app_dialog.dart';
-import 'package:mobile/core/widgets/mascot/lambe_mascot.dart';
 
 import '../../application/ai_consultation_notifier.dart';
 import '../../di/ai_consultation_providers.dart';
@@ -89,13 +88,20 @@ class _AiConsultationScreenState extends ConsumerState<AiConsultationScreen>
         backgroundColor: AppColors.surfaceContainerLowest,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(
           tooltip: 'Quay lại',
           onPressed: () => context.pop(),
           icon: const Icon(Icons.arrow_back_rounded),
         ),
-        titleSpacing: 0,
-        title: const _AiAppBarTitle(),
+        title: const Text(
+          'Trợ lý làm đẹp',
+          style: TextStyle(
+            color: AppColors.onSurface,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
       body: Column(
         children: [
@@ -213,14 +219,11 @@ class _AiConsultationScreenState extends ConsumerState<AiConsultationScreen>
       return;
     }
     if (fresh == null || !isValid(fresh)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            fresh == null
-                ? 'Chưa thể kiểm tra gợi ý. Bạn hãy thử lại nhé.'
-                : 'Gợi ý này không còn khả dụng. Bạn hãy chọn gợi ý mới nhé.',
-          ),
-        ),
+      await AppDialog.warning(
+        context,
+        message: fresh == null
+            ? 'Chưa thể kiểm tra gợi ý. Bạn hãy thử lại nhé.'
+            : 'Gợi ý này không còn khả dụng. Bạn hãy chọn gợi ý mới nhé.',
       );
       return;
     }
@@ -426,53 +429,6 @@ class _AiConsultationScreenState extends ConsumerState<AiConsultationScreen>
         curve: Curves.easeOutCubic,
       );
     });
-  }
-}
-
-class _AiAppBarTitle extends StatelessWidget {
-  const _AiAppBarTitle();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: AppColors.secondaryContainer.withValues(alpha: 0.5),
-            shape: BoxShape.circle,
-          ),
-          child: const Center(
-            child: LambeMascot(
-              size: 34,
-              showShadow: false,
-              enableInteraction: false,
-              isPlaying: false,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Trợ lý làm đẹp',
-              style: TextStyle(
-                color: AppColors.onSurface,
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            Text(
-              'Tư vấn bởi Lambe AI',
-              style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 11),
-            ),
-          ],
-        ),
-      ],
-    );
   }
 }
 

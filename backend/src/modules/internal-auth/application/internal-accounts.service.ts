@@ -58,7 +58,7 @@ export class InternalAccountsService {
           ]
         : undefined,
     };
-    const [rows, total] = await this.prisma.$transaction([
+    const [rows, total] = await Promise.all([
       this.prisma.internalAccount.findMany({
         where,
         select: accountSelect,

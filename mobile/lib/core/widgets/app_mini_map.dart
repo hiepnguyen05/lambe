@@ -66,8 +66,22 @@ class _AppMiniMapState extends State<AppMiniMap> with TickerProviderStateMixin {
     _pulse = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
-    )..repeat();
+    );
+    _syncPulseAnimation();
     _scheduleInitialFit();
+  }
+
+  void _syncPulseAnimation() {
+    final shouldPulse =
+        widget.mode != AppMiniMapMode.addressPicker &&
+        widget.currentPosition != null;
+    if (shouldPulse) {
+      if (!_pulse.isAnimating) {
+        _pulse.repeat();
+      }
+    } else if (_pulse.isAnimating) {
+      _pulse.stop();
+    }
   }
 
   @override
@@ -77,6 +91,7 @@ class _AppMiniMapState extends State<AppMiniMap> with TickerProviderStateMixin {
         widget.destination != oldWidget.destination) {
       _didFitRoute = false;
     }
+    _syncPulseAnimation();
     if (widget.currentPosition != oldWidget.currentPosition) {
       final next = widget.currentPosition;
       if (next == null) {
@@ -387,13 +402,16 @@ class _MapSummary extends StatelessWidget {
               children: [
                 const Icon(Icons.circle, size: 8, color: AppColors.primary),
                 const SizedBox(width: 6),
-                Text(
-                  title,
-                  maxLines: 1,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.onSurface,
+                Flexible(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface,
+                    ),
                   ),
                 ),
               ],

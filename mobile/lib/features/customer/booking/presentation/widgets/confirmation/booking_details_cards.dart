@@ -1,23 +1,21 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
-import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 
 import '../../../domain/entities/booking_draft_entity.dart';
 
 class BookingDetailsCards extends StatelessWidget {
-  static final _currency = NumberFormat.currency(
-    locale: 'vi_VN',
-    symbol: 'đ',
-    decimalDigits: 0,
-  );
+  static final _currency = CurrencyUtils.vndCurrency;
 
   final BookingDraftEntity draft;
   final TextEditingController contactNameController;
   final TextEditingController contactPhoneController;
   final TextEditingController noteController;
   final VoidCallback onChangeProvider;
+  final ValueChanged<String>? onContactNameChanged;
+  final ValueChanged<String>? onContactPhoneChanged;
+  final ValueChanged<String>? onNoteChanged;
 
   const BookingDetailsCards({
     super.key,
@@ -26,6 +24,9 @@ class BookingDetailsCards extends StatelessWidget {
     required this.contactPhoneController,
     required this.noteController,
     required this.onChangeProvider,
+    this.onContactNameChanged,
+    this.onContactPhoneChanged,
+    this.onNoteChanged,
   });
 
   @override
@@ -39,30 +40,7 @@ class BookingDetailsCards extends StatelessWidget {
         const SizedBox(height: 12),
         _contactCard(),
         const SizedBox(height: 12),
-        const _SectionCard(
-          title: 'Phương thức thanh toán',
-          icon: Icons.account_balance_wallet_rounded,
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: CircleAvatar(
-              child: Icon(Icons.payments_rounded, color: AppColors.primary),
-            ),
-            title: Text(
-              'Tiền mặt (COD)',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppColors.primary,
-              ),
-            ),
-            subtitle: Text(
-              'Thanh toán trực tiếp cho chuyên viên sau khi làm xong',
-            ),
-            trailing: Icon(
-              Icons.check_circle_rounded,
-              color: AppColors.primary,
-            ),
-          ),
-        ),
+        _paymentMethodCard(),
       ],
     );
   }
@@ -71,39 +49,76 @@ class BookingDetailsCards extends StatelessWidget {
     final avatarUrl = draft.providerAvatarUrl;
     return _SectionCard(
       title: 'Chuyên viên phục vụ',
-      icon: Icons.person_pin_rounded,
+      icon: Icons.person_outline_rounded,
       trailing: TextButton.icon(
         onPressed: onChangeProvider,
-        icon: const Icon(Icons.sync_rounded, size: 14),
-        label: const Text('Đổi thợ'),
-      ),
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: SizedBox(
-            width: 52,
-            height: 52,
-            child: avatarUrl?.startsWith('http') == true
-                ? CachedNetworkImage(
-                    imageUrl: avatarUrl!,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => const _ProviderFallback(),
-                  )
-                : const _ProviderFallback(),
+        icon: const Icon(Icons.sync_rounded, size: 14, color: Color(0xFF0F766E)),
+        label: const Text(
+          'Đổi thợ',
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF0F766E),
           ),
         ),
-        title: Text(
-          draft.providerDisplayName ?? 'Chuyên viên Lambe',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
-        subtitle: const Row(
-          children: [
-            Icon(Icons.verified_rounded, size: 14, color: AppColors.primary),
-            SizedBox(width: 4),
-            Text('Chuyên viên đối tác đã duyệt'),
-          ],
-        ),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: 46,
+              height: 46,
+              child: avatarUrl?.startsWith('http') == true
+                  ? CachedNetworkImage(
+                      imageUrl: avatarUrl!,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => const _ProviderFallback(),
+                    )
+                  : const _ProviderFallback(),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  draft.providerDisplayName ?? 'Chuyên viên Lambe',
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0B1C30),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                const Row(
+                  children: [
+                    Icon(
+                      Icons.verified_rounded,
+                      size: 14,
+                      color: Color(0xFF0F766E),
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'Chuyên viên đối tác đã xác minh',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -120,53 +135,83 @@ class BookingDetailsCards extends StatelessWidget {
           ).format(draft.scheduledAt!);
 
     return _SectionCard(
-      title: 'Thông tin dịch vụ & Thời gian',
-      icon: Icons.spa_rounded,
+      title: 'Dịch vụ & Lịch hẹn',
+      icon: Icons.spa_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Expanded(
-                child: Text(
-                  draft.service.name,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      draft.service.name,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0B1C30),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Thời lượng: ${draft.service.defaultDurationMinutes} phút',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Text(
                 _currency.format(servicePrice),
                 style: const TextStyle(
+                  fontSize: 15,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.primary,
+                  color: Color(0xFF0F766E),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text('Thời lượng: ${draft.service.defaultDurationMinutes} phút'),
-          const SizedBox(height: 12),
-          DecoratedBox(
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: asap
-                  ? AppColors.hotBadgeBg
-                  : AppColors.primaryFixed.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12),
+              color: asap ? const Color(0xFFFFFBEB) : const Color(0xFFEFF6F5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: asap
+                    ? const Color(0xFFFDE68A)
+                    : const Color(0xFF99F6E4).withValues(alpha: 0.6),
+              ),
             ),
-            child: ListTile(
-              dense: true,
-              leading: Icon(
-                asap ? Icons.bolt_rounded : Icons.calendar_month_rounded,
-                color: asap ? AppColors.hotBadgeText : AppColors.primary,
-              ),
-              title: Text(
-                asap
-                    ? 'Phục vụ làm ngay: chuyên viên di chuyển khi nhận đơn.'
-                    : 'Lịch hẹn: $scheduleText',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: asap ? AppColors.hotBadgeText : AppColors.primary,
+            child: Row(
+              children: [
+                Icon(
+                  asap ? Icons.bolt_rounded : Icons.calendar_month_rounded,
+                  size: 16,
+                  color: asap
+                      ? const Color(0xFFD97706)
+                      : const Color(0xFF0F766E),
                 ),
-              ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    asap
+                        ? 'Phục vụ làm ngay (chuyên viên di chuyển khi nhận đơn)'
+                        : 'Lịch hẹn: $scheduleText',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: asap
+                          ? const Color(0xFF92400E)
+                          : const Color(0xFF0F766E),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -183,27 +228,36 @@ class BookingDetailsCards extends StatelessWidget {
 
     return _SectionCard(
       title: 'Địa chỉ & Người nhận',
-      icon: Icons.location_on_rounded,
+      icon: Icons.location_on_outlined,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
-                Icons.place_outlined,
-                size: 18,
-                color: AppColors.primary,
+              const Padding(
+                padding: EdgeInsets.only(top: 2),
+                child: Icon(
+                  Icons.home_outlined,
+                  size: 17,
+                  color: Color(0xFF0F766E),
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   address,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF0B1C30),
+                    height: 1.35,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
@@ -211,6 +265,7 @@ class BookingDetailsCards extends StatelessWidget {
                   controller: contactNameController,
                   label: 'Người liên hệ',
                   readOnly: readOnly,
+                  onChanged: onContactNameChanged,
                 ),
               ),
               const SizedBox(width: 10),
@@ -220,15 +275,70 @@ class BookingDetailsCards extends StatelessWidget {
                   label: 'Số điện thoại',
                   readOnly: readOnly,
                   keyboardType: TextInputType.phone,
+                  onChanged: onContactPhoneChanged,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           _field(
             controller: noteController,
-            hint: 'Ghi chú cho thợ (số nhà, chuông cửa, ngõ...)',
+            hint: 'Ghi chú cho thợ (chỉ đường, dặn dò...)',
             readOnly: readOnly,
+            onChanged: onNoteChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _paymentMethodCard() {
+    return _SectionCard(
+      title: 'Phương thức thanh toán',
+      icon: Icons.payments_outlined,
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6F5),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.payments_rounded,
+              color: Color(0xFF0F766E),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Tiền mặt (COD)',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0B1C30),
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Thanh toán trực tiếp cho chuyên viên sau khi làm xong',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.check_circle_rounded,
+            color: Color(0xFF0F766E),
+            size: 20,
           ),
         ],
       ),
@@ -241,22 +351,38 @@ class BookingDetailsCards extends StatelessWidget {
     String? label,
     String? hint,
     TextInputType? keyboardType,
+    ValueChanged<String>? onChanged,
   }) {
     return TextField(
       controller: controller,
       readOnly: readOnly,
       keyboardType: keyboardType,
-      style: const TextStyle(fontSize: 13),
+      onChanged: onChanged,
+      style: const TextStyle(fontSize: 13, color: Color(0xFF0B1C30)),
       decoration: InputDecoration(
         labelText: label,
+        labelStyle: const TextStyle(fontSize: 11.5, color: Color(0xFF64748B)),
         hintText: hint,
+        hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
         filled: true,
-        fillColor: AppColors.surfaceContainerLow,
+        fillColor: const Color(0xFFF8FAFC),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
+          horizontal: 10,
+          vertical: 9,
         ),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        isDense: true,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF0F766E), width: 1.5),
+        ),
       ),
     );
   }
@@ -277,30 +403,52 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 18, color: AppColors.primary),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6F5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 16, color: const Color(0xFF0F766E)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0B1C30),
+                    letterSpacing: -0.2,
                   ),
                 ),
-                if (trailing != null) trailing!,
-              ],
-            ),
-            const SizedBox(height: 14),
-            child,
-          ],
-        ),
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
       ),
     );
   }
@@ -310,8 +458,8 @@ class _ProviderFallback extends StatelessWidget {
   const _ProviderFallback();
 
   @override
-  Widget build(BuildContext context) => const ColoredBox(
-    color: AppColors.surfaceContainerLow,
-    child: Icon(Icons.person_rounded, color: AppColors.outline),
+  Widget build(BuildContext context) => Container(
+    color: const Color(0xFFEFF6F5),
+    child: const Icon(Icons.person_rounded, color: Color(0xFF0F766E)),
   );
 }

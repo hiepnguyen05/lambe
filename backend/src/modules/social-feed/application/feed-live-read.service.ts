@@ -20,7 +20,13 @@ export interface LivePublicPost {
       priceAmount: number;
       durationMinutes: number | null;
       status: ProviderServiceStatus;
-      service: { id: string; name: string; categoryId: string };
+      service: {
+        id: string;
+        name: string;
+        categoryId: string;
+        category?: { slug: string } | null;
+        categorySlug?: string;
+      };
     };
   }[];
   _count: { likes: number; comments: number; saves: number };
@@ -37,7 +43,7 @@ export class FeedLiveReadService {
         jsonb_build_object('id',pr.id,'displayName',pr."displayName",'avatarUrl',pr."avatarUrl") AS provider,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('providerService',jsonb_build_object(
           'id',ps.id,'priceAmount',ps."priceAmount",'durationMinutes',ps."durationMinutes",'status',ps.status,
-          'service',jsonb_build_object('id',s.id,'name',s.name,'categoryId',s."categoryId"))))
+          'service',jsonb_build_object('id',s.id,'name',s.name,'categoryId',s."categoryId",'categorySlug',cat.slug))))
           FROM feed_post_services link JOIN provider_services ps ON ps.id=link."providerServiceId"
           JOIN services s ON s.id=ps."serviceId" JOIN service_categories cat ON cat.id=s."categoryId"
           WHERE link."postId"=p.id AND ps.status='ACTIVE' AND s.status='ACTIVE' AND cat.status='ACTIVE'), '[]'::jsonb) AS services,

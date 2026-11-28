@@ -25,6 +25,7 @@ final refreshDioProvider = Provider<Dio>((ref) {
 
 /// Provider cung cấp instance của Dio dùng chung cho toàn bộ ứng dụng
 final dioProvider = Provider<Dio>((ref) {
+  ApiEndpoints.validateForRelease();
   final options = BaseOptions(
     baseUrl: ApiEndpoints.baseUrl,
     connectTimeout: ApiEndpoints.connectionTimeout,
@@ -71,7 +72,8 @@ final dioProvider = Provider<Dio>((ref) {
       await handleSessionExpired();
       return null;
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401 || e.response?.statusCode == 403) {
+      final status = e.response?.statusCode;
+      if (status == 400 || status == 401 || status == 403 || status == 404) {
         await handleSessionExpired();
       }
       return null;
@@ -85,13 +87,36 @@ final dioProvider = Provider<Dio>((ref) {
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) async {
+        if (kDebugMode &&
+            (options.path.startsWith('/orders') ||
+                options.path.startsWith('/me/provider/orders'))) {
+          options.extra['_orderTiming'] = Stopwatch()..start();
+        }
         final token = await secureStorage.getAccessToken();
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }
         return handler.next(options);
       },
+      onResponse: (response, handler) {
+        final timer = response.requestOptions.extra.remove('_orderTiming');
+        if (timer is Stopwatch) {
+          debugPrint(
+            '[Order API] ${response.requestOptions.method} '
+            '${response.requestOptions.path}: ${timer.elapsedMilliseconds} ms '
+            '(${response.statusCode})',
+          );
+        }
+        handler.next(response);
+      },
       onError: (DioException e, handler) async {
+        final timer = e.requestOptions.extra.remove('_orderTiming');
+        if (timer is Stopwatch) {
+          debugPrint(
+            '[Order API] ${e.requestOptions.method} ${e.requestOptions.path}: '
+            '${timer.elapsedMilliseconds} ms (${e.response?.statusCode ?? e.type.name})',
+          );
+        }
         final path = e.requestOptions.path;
         final isAuthRequest =
             path.contains('/auth/firebase') ||
@@ -118,7 +143,10 @@ final dioProvider = Provider<Dio>((ref) {
               final retryResponse = await dio.fetch(retryOptions);
               return handler.resolve(retryResponse);
             } on DioException catch (retryErr) {
-              return handler.next(retryErr);
+              final appFailure = ExceptionHandler.handleDioError(retryErr);
+              return handler.next(
+                retryErr.copyWith(error: appFailure, message: appFailure.message),
+              );
             }
           }
         }

@@ -1,9 +1,14 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:mobile/features/shared/auth/di/auth_providers.dart';
 import '../../domain/entities/provider_membership_entity.dart';
 import '../../domain/entities/worker_availability_entity.dart';
 import '../../domain/repositories/provider_members_repository.dart';
 import '../../di/provider_members_providers.dart';
+
+typedef WorkerPositionLookup = Future<({double latitude, double longitude})?> Function();
 
 class WorkerWorkspaceState {
   final ProviderMembershipEntity? activeMembership;
@@ -47,13 +52,57 @@ class WorkerWorkspaceState {
 
 class WorkerWorkspaceNotifier extends StateNotifier<WorkerWorkspaceState> {
   final ProviderMembersRepository _repository;
+  final WorkerPositionLookup _getCurrentPosition;
   Timer? _heartbeatTimer;
-  double _lastLat = 10.7769; // Default HCM
-  double _lastLng = 106.7009;
+  double? _lastLat;
+  double? _lastLng;
 
-  WorkerWorkspaceNotifier(this._repository)
-      : super(const WorkerWorkspaceState(isLoading: true)) {
-    loadWorkspace();
+  WorkerWorkspaceNotifier(
+    this._repository, {
+    bool autoLoad = true,
+    WorkerPositionLookup? getCurrentPosition,
+  }) : _getCurrentPosition = getCurrentPosition ?? _defaultCurrentPosition,
+       super(WorkerWorkspaceState(isLoading: autoLoad)) {
+    if (autoLoad) {
+      loadWorkspace();
+    }
+  }
+
+  static Future<({double latitude, double longitude})?> _defaultCurrentPosition() async {
+    try {
+      final enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) return null;
+      final permission = await Geolocator.checkPermission();
+      if (permission != LocationPermission.always &&
+          permission != LocationPermission.whileInUse) {
+        return null;
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 6),
+        ),
+      );
+      return (latitude: position.latitude, longitude: position.longitude);
+    } catch (_) {
+      try {
+        final fallback = await Geolocator.getLastKnownPosition();
+        if (fallback == null) return null;
+        return (latitude: fallback.latitude, longitude: fallback.longitude);
+      } catch (error) {
+        debugPrint('[WorkerWorkspace] Unable to resolve worker GPS: $error');
+        return null;
+      }
+    }
+  }
+
+  Future<bool> _ensureCoordinates() async {
+    if (_lastLat != null && _lastLng != null) return true;
+    final pos = await _getCurrentPosition();
+    if (pos == null) return false;
+    _lastLat = pos.latitude;
+    _lastLng = pos.longitude;
+    return true;
   }
 
   @override
@@ -66,6 +115,7 @@ class WorkerWorkspaceNotifier extends StateNotifier<WorkerWorkspaceState> {
     state = state.copyWith(isLoading: true, errorMessage: null);
     try {
       final memberships = await _repository.getMyMemberships();
+      if (!mounted) return;
       final active = memberships.where((m) => m.isActive).firstOrNull;
 
       if (active == null) {
@@ -77,6 +127,7 @@ class WorkerWorkspaceNotifier extends StateNotifier<WorkerWorkspaceState> {
         _repository.getWorkerAvailability(active.id),
         _repository.getWorkerReceivingSettings(active.id),
       ]);
+      if (!mounted) return;
 
       final avail = results[0] as WorkerAvailabilityEntity;
       final settings = results[1] as WorkerReceivingSettingsEntity;
@@ -89,9 +140,12 @@ class WorkerWorkspaceNotifier extends StateNotifier<WorkerWorkspaceState> {
       );
 
       if (avail.online) {
+        await _ensureCoordinates();
+        if (!mounted) return;
         _startHeartbeat(active.id, avail.heartbeatTtlSeconds);
       }
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Lỗi tải không gian làm việc: ${e.toString()}',
@@ -107,14 +161,19 @@ class WorkerWorkspaceNotifier extends StateNotifier<WorkerWorkspaceState> {
       Duration(seconds: intervalSeconds),
       (_) async {
         try {
+          if (!await _ensureCoordinates()) return;
+          final lat = _lastLat;
+          final lng = _lastLng;
+          if (lat == null || lng == null) return;
           final res = await _repository.sendWorkerHeartbeat(
             membershipId,
-            _lastLat,
-            _lastLng,
+            lat,
+            lng,
           );
+          if (!mounted) return;
           state = state.copyWith(availability: res);
-        } catch (_) {
-          // Heartbeat background failure handled gracefully
+        } catch (error) {
+          debugPrint('[WorkerWorkspace] Heartbeat failed: $error');
         }
       },
     );
@@ -139,6 +198,7 @@ class WorkerWorkspaceNotifier extends StateNotifier<WorkerWorkspaceState> {
           reason: offlineReason ?? 'Chủ động tắt trực tuyến',
         );
         _heartbeatTimer?.cancel();
+        if (!mounted) return false;
         state = state.copyWith(availability: res, isTogglingOnline: false);
         return true;
       } else {
@@ -147,6 +207,7 @@ class WorkerWorkspaceNotifier extends StateNotifier<WorkerWorkspaceState> {
           latitude,
           longitude,
         );
+        if (!mounted) return false;
         state = state.copyWith(availability: res, isTogglingOnline: false);
         if (res.online) {
           _startHeartbeat(membership.id, res.heartbeatTtlSeconds);
@@ -154,6 +215,7 @@ class WorkerWorkspaceNotifier extends StateNotifier<WorkerWorkspaceState> {
         return true;
       }
     } catch (e) {
+      if (!mounted) return false;
       state = state.copyWith(
         isTogglingOnline: false,
         errorMessage: 'Không thể thay đổi trạng thái trực tuyến: ${e.toString()}',
@@ -170,9 +232,11 @@ class WorkerWorkspaceNotifier extends StateNotifier<WorkerWorkspaceState> {
         membership.id,
         radiusKm,
       );
+      if (!mounted) return false;
       state = state.copyWith(settings: updated);
       return true;
     } catch (e) {
+      if (!mounted) return false;
       state = state.copyWith(
         errorMessage: 'Lỗi lưu bán kính: ${e.toString()}',
       );
@@ -184,8 +248,11 @@ class WorkerWorkspaceNotifier extends StateNotifier<WorkerWorkspaceState> {
 final workerWorkspaceProvider =
     StateNotifierProvider<WorkerWorkspaceNotifier, WorkerWorkspaceState>(
   (ref) {
+    final userId = ref.watch(
+      authNotifierProvider.select((s) => s.valueOrNull?.id),
+    );
     final repository = ref.watch(providerMembersRepositoryProvider);
-    return WorkerWorkspaceNotifier(repository);
+    return WorkerWorkspaceNotifier(repository, autoLoad: userId != null);
   },
 );
 

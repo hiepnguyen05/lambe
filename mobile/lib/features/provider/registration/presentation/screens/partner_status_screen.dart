@@ -51,13 +51,6 @@ class _PartnerStatusScreenState extends ConsumerState<PartnerStatusScreen> {
           icon: const Icon(Icons.arrow_back, color: Color(0xFF0B1C30)),
           onPressed: () => context.pop(),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Làm mới trạng thái',
-            onPressed: state.isLoading ? null : _refresh,
-            icon: const Icon(Icons.refresh, color: Color(0xFF0F766E)),
-          ),
-        ],
       ),
       body: SafeArea(child: _buildBody(state, application)),
     );

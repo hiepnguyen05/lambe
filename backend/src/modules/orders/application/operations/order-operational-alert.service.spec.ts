@@ -183,4 +183,54 @@ describe('OrderOperationalAlertService', () => {
     expect(transaction.orderOperationalAlert.updateMany).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
   });
+
+  it('batches initial and escalation outbox emails in one enqueueMany call', async () => {
+    const { service, queryRaw, transaction, mail } = fixture();
+    const enqueueMany = jest.fn().mockResolvedValue(2);
+    (mail as Record<string, unknown>).enqueueMany = enqueueMany;
+    queryRaw
+      .mockReset()
+      .mockResolvedValueOnce([{ acquired: true }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'alert-new',
+          orderId: 'order-1',
+          type: OrderOperationalAlertType.ARRIVAL_START_OVERDUE,
+        },
+      ]);
+    transaction.orderOperationalAlert.findMany.mockResolvedValue([
+      {
+        id: 'alert-stale',
+        orderId: 'order-2',
+        type: OrderOperationalAlertType.SAFETY_HOLD_STALE,
+      },
+    ]);
+    transaction.internalAccount.findMany.mockResolvedValue([
+      { id: 'staff-1', email: 'staff1@example.test' },
+      { id: 'staff-2', email: 'staff2@example.test' },
+    ]);
+    transaction.serviceOrder.findMany.mockResolvedValue([
+      {
+        id: 'order-1',
+        customerId: 'customer-id',
+        assignedMemberUserId: null,
+        provider: { userId: 'provider-id' },
+      },
+    ]);
+
+    await service.scan();
+
+    expect(enqueueMany).toHaveBeenCalledTimes(1);
+    expect(mail.enqueue).not.toHaveBeenCalled();
+    const [items] = enqueueMany.mock.calls[0] as [
+      Array<{ deduplicationKey: string }>,
+    ];
+    expect(items.map((item) => item.deduplicationKey)).toEqual([
+      'order-alert:alert-new:initial:staff-1',
+      'order-alert:alert-new:initial:staff-2',
+      'order-alert:alert-stale:escalation:staff-1',
+      'order-alert:alert-stale:escalation:staff-2',
+    ]);
+  });
 });

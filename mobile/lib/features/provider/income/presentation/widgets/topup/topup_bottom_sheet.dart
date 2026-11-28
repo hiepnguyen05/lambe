@@ -90,13 +90,16 @@ class _TopupBottomSheetState extends ConsumerState<TopupBottomSheet> {
         _isLoading = false;
       });
 
-      if (topUp != null && (topUp.payUrl != null || topUp.qrCodeUrl != null)) {
+      if (topUp != null &&
+          (topUp.payUrl != null ||
+              topUp.qrCodeUrl != null ||
+              topUp.deeplink != null)) {
         Navigator.of(context).pop();
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => QrPaymentScreen(
-              qrData: topUp.payUrl ?? topUp.qrCodeUrl ?? '',
-              amount: _controller.text,
+              topUp: topUp,
+              amountFormatted: _controller.text,
             ),
           ),
         );

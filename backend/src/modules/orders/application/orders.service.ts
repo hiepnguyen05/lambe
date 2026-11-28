@@ -26,14 +26,17 @@ import { OrderEligibilityService } from './order-eligibility.service';
 import { BookingCalendarService } from './scheduling/booking-calendar.service';
 import { OrderWalletService } from './payments/order-wallet.service';
 import { OrderBookingService } from './booking/order-booking.service';
+import { OrderNotificationRelayService } from './notifications/order-notification-relay.service';
 import {
   orderInclude,
   orderViewInclude,
   presentForCustomer,
   presentForProvider,
   providerOrderViewInclude,
+  pendingOrderInclude,
 } from './persistence/order.presenter';
 import { MINUTE } from '../domain/booking-calendar.policy';
+import { scheduledOrderOverdueAt } from '../domain/order-time.policy';
 import { calculateDistanceKm } from '../../discovery/domain/distance';
 import type { OrderLocationDto } from '../dto/order-location.dto';
 import {
@@ -53,6 +56,8 @@ export class OrdersService {
     private readonly payments: OrderWalletService,
     private readonly booking: OrderBookingService,
     @Optional() private readonly metrics?: ObservabilityMetrics,
+    @Optional()
+    private readonly notificationRelay?: OrderNotificationRelayService,
   ) {}
 
   quote(customerId: string, dto: OrderQuoteDto) {
@@ -128,13 +133,51 @@ export class OrdersService {
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
-      include: providerOrderViewInclude,
+      include:
+        query.status === ServiceOrderStatus.PENDING_PROVIDER
+          ? pendingOrderInclude
+          : providerOrderViewInclude,
     });
     const page = orders.slice(0, limit);
     return {
       success: true,
       data: page.map((item) => presentForProvider(item)),
       meta: { nextCursor: orders.length > limit ? page.at(-1)?.id : null },
+    };
+  }
+
+  async findUpcomingProviderOrders(userId: string) {
+    const data = await this.prisma.serviceOrder.findMany({
+      where: {
+        ...providerOrderReadWhere(userId),
+        status: ServiceOrderStatus.ACCEPTED,
+      },
+      orderBy: [{ expectedStartAt: 'asc' }, { id: 'asc' }],
+      take: 5,
+      select: {
+        id: true,
+        bookingType: true,
+        status: true,
+        scheduledAt: true,
+        expectedStartAt: true,
+        serviceName: true,
+        addressLine: true,
+        addressLabel: true,
+        contactName: true,
+        contactPhone: true,
+        totalAmount: true,
+        travelDistanceKm: true,
+        customer: {
+          select: { id: true, fullName: true, avatarUrl: true, phone: true },
+        },
+      },
+    });
+    return {
+      success: true,
+      data: data.map((order) => ({
+        ...order,
+        scheduleOverdueAt: scheduledOrderOverdueAt(order),
+      })),
     };
   }
 
@@ -174,7 +217,10 @@ export class OrdersService {
       await this.lockOrder(transaction, id);
       const current = await transaction.serviceOrder.findFirst({
         where: { id, providerId: provider.id },
-        include: orderInclude,
+        // Validation needs scalar snapshots and the wallet ID, not the full order view.
+        include: {
+          provider: { select: { wallet: { select: { id: true } } } },
+        },
       });
       if (!current) throw new NotFoundException('Không tìm thấy đơn dịch vụ.');
       this.assertPending(current);
@@ -268,7 +314,7 @@ export class OrdersService {
           idempotencyKey: `order:${id}:hold`,
         },
       });
-      await this.changeStatus(
+      const updated = await this.changeStatus(
         transaction,
         current,
         ServiceOrderStatus.ACCEPTED,
@@ -279,7 +325,7 @@ export class OrdersService {
           expectedEndAt: prepared.expectedEndAt,
         },
       );
-      await transaction.orderNotification.create({
+      const notification = await transaction.orderNotification.create({
         data: {
           userId: current.customerId,
           orderId: id,
@@ -297,17 +343,18 @@ export class OrdersService {
         request,
         transaction,
       );
-      return transaction.serviceOrder.findUniqueOrThrow({
-        where: { id },
-        include: orderInclude,
-      });
+      return { order: updated, notificationId: notification.id };
     });
-    if (order.bookingAttempt > 1)
+    if (order.order.bookingAttempt > 1)
       this.metrics?.recordEvent('rematch', 'accepted');
+    void this.notificationRelay?.publishNow(
+      order.order.customerId,
+      order.notificationId,
+    );
     return {
       success: true,
       message: 'Đã nhận đơn dịch vụ.',
-      data: presentForProvider(order),
+      data: presentForProvider(order.order),
     };
   }
 
@@ -330,7 +377,18 @@ export class OrdersService {
       await this.lockOrder(transaction, id);
       const current = await transaction.serviceOrder.findFirst({
         where: { id, providerId: provider.id },
-        include: orderInclude,
+        select: {
+          id: true,
+          status: true,
+          customerId: true,
+          addressLatitude: true,
+          addressLongitude: true,
+          expectedStartAt: true,
+          assignedMemberId: true,
+          scheduledAt: true,
+          cancellationRequest: { select: { status: true } },
+          evidence: { select: { type: true } },
+        },
       });
       if (!current) throw new NotFoundException('Không tìm thấy đơn dịch vụ.');
       this.assertPending(current);
@@ -339,7 +397,7 @@ export class OrdersService {
         where: { orderId: id, status: 'RESERVED' },
         data: { status: 'RELEASED' },
       });
-      await this.changeStatus(
+      const updated = await this.changeStatus(
         transaction,
         current,
         ServiceOrderStatus.REJECTED,
@@ -347,7 +405,7 @@ export class OrdersService {
         { rejectedAt: new Date(), rejectionReason: reason },
         reason,
       );
-      await transaction.orderNotification.create({
+      const notification = await transaction.orderNotification.create({
         data: {
           userId: current.customerId,
           orderId: id,
@@ -365,15 +423,16 @@ export class OrdersService {
         request,
         transaction,
       );
-      return transaction.serviceOrder.findUniqueOrThrow({
-        where: { id },
-        include: orderInclude,
-      });
+      return { order: updated, notificationId: notification.id };
     });
+    void this.notificationRelay?.publishNow(
+      order.order.customerId,
+      order.notificationId,
+    );
     return {
       success: true,
       message: 'Đã từ chối đơn dịch vụ.',
-      data: presentForProvider(order),
+      data: presentForProvider(order.order),
     };
   }
 
@@ -412,7 +471,7 @@ export class OrdersService {
         where: { orderId: id, status: 'RESERVED' },
         data: { status: 'RELEASED' },
       });
-      await this.changeStatus(
+      const updated = await this.changeStatus(
         transaction,
         current,
         ServiceOrderStatus.CANCELLED,
@@ -420,7 +479,7 @@ export class OrdersService {
         { cancelledAt: new Date() },
         dto.reason,
       );
-      await transaction.orderNotification.create({
+      const notification = await transaction.orderNotification.create({
         data: {
           userId: owner ? current.customerId : orderServingUserId(current),
           orderId: id,
@@ -438,15 +497,18 @@ export class OrdersService {
         request,
         transaction,
       );
-      return transaction.serviceOrder.findUniqueOrThrow({
-        where: { id },
-        include: orderInclude,
-      });
+      return { order: updated, notification };
     });
+    void this.notificationRelay?.publishNow(
+      order.notification.userId,
+      order.notification.id,
+    );
     return {
       success: true,
       message: 'Đã hủy đơn dịch vụ.',
-      data: asProvider ? presentForProvider(order) : presentForCustomer(order),
+      data: asProvider
+        ? presentForProvider(order.order)
+        : presentForCustomer(order.order),
     };
   }
 
@@ -510,6 +572,100 @@ export class OrdersService {
     );
   }
 
+  async pauseWork(userId: string, id: string, request: RequestMetadata) {
+    return this.toggleWorkPause(userId, id, true, request);
+  }
+
+  async resumeWork(userId: string, id: string, request: RequestMetadata) {
+    return this.toggleWorkPause(userId, id, false, request);
+  }
+
+  private async toggleWorkPause(
+    userId: string,
+    id: string,
+    pause: boolean,
+    request: RequestMetadata,
+  ) {
+    const provider = await this.findProvider(userId, id);
+    const result = await this.prisma.$transaction(async (transaction) => {
+      await this.lockProviderForOrder(
+        transaction,
+        id,
+        { providerId: provider.id },
+        userId,
+      );
+      await this.lockOrder(transaction, id);
+      const current = await transaction.serviceOrder.findFirst({
+        where: { id, providerId: provider.id },
+        include: orderInclude,
+      });
+      if (!current) throw new NotFoundException('Không tìm thấy đơn dịch vụ.');
+      if (current.status !== ServiceOrderStatus.IN_PROGRESS) {
+        throw new ConflictException(
+          'Chỉ có thể tạm dừng hoặc tiếp tục khi đơn đang thực hiện.',
+        );
+      }
+      this.assertNoPendingCancellation(current.cancellationRequest);
+      if (pause && current.workPausedAt) {
+        throw new ConflictException('Công việc đang tạm dừng.');
+      }
+      if (!pause && !current.workPausedAt) {
+        throw new ConflictException('Công việc chưa tạm dừng.');
+      }
+      const now = new Date();
+      const extraPausedSeconds =
+        !pause && current.workPausedAt
+          ? Math.max(
+              0,
+              Math.round(
+                (now.getTime() - current.workPausedAt.getTime()) / 1000,
+              ),
+            )
+          : 0;
+      const updated = await transaction.serviceOrder.update({
+        where: { id },
+        data: pause
+          ? { workPausedAt: now }
+          : {
+              workPausedAt: null,
+              totalPausedSeconds:
+                current.totalPausedSeconds + extraPausedSeconds,
+            },
+        include: orderInclude,
+      });
+      const notification = await transaction.orderNotification.create({
+        data: {
+          userId: current.customerId,
+          orderId: id,
+          event: pause ? 'ORDER_WORK_PAUSED' : 'ORDER_WORK_RESUMED',
+        },
+      });
+      await this.audit.record(
+        {
+          actorUserId: userId,
+          action: pause
+            ? 'SERVICE_ORDER_WORK_PAUSED'
+            : 'SERVICE_ORDER_WORK_RESUMED',
+          resourceType: 'ServiceOrder',
+          resourceId: id,
+          result: 'SUCCESS',
+        },
+        request,
+        transaction,
+      );
+      return { order: updated, notificationId: notification.id };
+    });
+    void this.notificationRelay?.publishNow(
+      result.order.customerId,
+      result.notificationId,
+    );
+    return {
+      success: true,
+      message: pause ? 'Đã tạm dừng công việc.' : 'Đã tiếp tục công việc.',
+      data: presentForProvider(result.order),
+    };
+  }
+
   async complete(userId: string, id: string, request: RequestMetadata) {
     const provider = await this.findProvider(userId, id);
     const order = await this.prisma.$transaction(async (transaction) => {
@@ -551,19 +707,29 @@ export class OrdersService {
         data: { status: 'REDEEMED' },
       });
       await this.calendar.release(transaction, id);
-      await this.changeStatus(
+      const now = new Date();
+      const finalPausedSeconds = current.workPausedAt
+        ? current.totalPausedSeconds +
+          Math.max(
+            0,
+            Math.round((now.getTime() - current.workPausedAt.getTime()) / 1000),
+          )
+        : current.totalPausedSeconds;
+      const updated = await this.changeStatus(
         transaction,
         current,
         ServiceOrderStatus.COMPLETED,
         userId,
         {
-          completedAt: new Date(),
-          cashCollectedAt: new Date(),
+          completedAt: now,
+          workPausedAt: null,
+          totalPausedSeconds: finalPausedSeconds,
+          cashCollectedAt: now,
           cashCollectedByUserId: userId,
           cashCollectedAmount: current.totalAmount,
         },
       );
-      await transaction.orderNotification.create({
+      const notification = await transaction.orderNotification.create({
         data: {
           userId: current.customerId,
           orderId: id,
@@ -581,15 +747,16 @@ export class OrdersService {
         request,
         transaction,
       );
-      return transaction.serviceOrder.findUniqueOrThrow({
-        where: { id },
-        include: orderInclude,
-      });
+      return { order: updated, notificationId: notification.id };
     });
+    void this.notificationRelay?.publishNow(
+      order.order.customerId,
+      order.notificationId,
+    );
     return {
       success: true,
       message: 'Đơn đã hoàn thành và hoa hồng đã được trừ.',
-      data: presentForProvider(order),
+      data: presentForProvider(order.order),
     };
   }
 
@@ -667,7 +834,18 @@ export class OrdersService {
       await this.lockOrder(transaction, id);
       const current = await transaction.serviceOrder.findFirst({
         where: { id, providerId: provider.id },
-        include: orderInclude,
+        select: {
+          id: true,
+          status: true,
+          customerId: true,
+          addressLatitude: true,
+          addressLongitude: true,
+          expectedStartAt: true,
+          assignedMemberId: true,
+          scheduledAt: true,
+          cancellationRequest: { select: { status: true } },
+          evidence: { select: { type: true } },
+        },
       });
       if (!current) throw new NotFoundException('Không tìm thấy đơn dịch vụ.');
       if (current.status !== fromStatus) {
@@ -700,6 +878,16 @@ export class OrdersService {
           'Cần tải ảnh bằng chứng trước khi chuyển trạng thái.',
         );
       if (toStatus === ServiceOrderStatus.EN_ROUTE) {
+        if (
+          current.scheduledAt &&
+          current.scheduledAt.getTime() <= Date.now()
+        ) {
+          throw new ConflictException({
+            code: 'APPOINTMENT_PASSED',
+            message:
+              'Lịch hẹn đã quá giờ. Hãy thống nhất giờ hẹn mới với khách trước khi khởi hành.',
+          });
+        }
         await this.calendar.assertCanDepart(
           transaction,
           provider.id,
@@ -715,8 +903,14 @@ export class OrdersService {
       ) {
         throw new ConflictException('Chưa đến giờ bắt đầu lịch hẹn.');
       }
-      await this.changeStatus(transaction, current, toStatus, userId, data);
-      await transaction.orderNotification.create({
+      const updated = await this.changeStatus(
+        transaction,
+        current,
+        toStatus,
+        userId,
+        data,
+      );
+      const notification = await transaction.orderNotification.create({
         data: {
           userId: current.customerId,
           orderId: id,
@@ -734,12 +928,13 @@ export class OrdersService {
         request,
         transaction,
       );
-      return transaction.serviceOrder.findUniqueOrThrow({
-        where: { id },
-        include: orderInclude,
-      });
+      return { order: updated, notificationId: notification.id };
     });
-    return { success: true, message, data: presentForProvider(order) };
+    void this.notificationRelay?.publishNow(
+      order.order.customerId,
+      order.notificationId,
+    );
+    return { success: true, message, data: presentForProvider(order.order) };
   }
 
   private assertPending(order: { status: ServiceOrderStatus }): void {
@@ -771,6 +966,20 @@ export class OrdersService {
       data: {
         ...data,
         status: toStatus,
+        ...(order.status === ServiceOrderStatus.ACCEPTED &&
+        toStatus !== ServiceOrderStatus.ACCEPTED
+          ? {
+              rescheduleRequests: {
+                updateMany: {
+                  where: { status: 'PENDING' as const },
+                  data: {
+                    status: 'CANCELLED' as const,
+                    respondedAt: new Date(),
+                  },
+                },
+              },
+            }
+          : {}),
         statusHistory: {
           create: {
             fromStatus: order.status,
@@ -780,6 +989,10 @@ export class OrdersService {
           },
         },
       },
+      include:
+        order.status === ServiceOrderStatus.PENDING_PROVIDER
+          ? pendingOrderInclude
+          : providerOrderViewInclude,
     });
   }
 

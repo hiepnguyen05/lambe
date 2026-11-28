@@ -48,7 +48,12 @@ type RedisConnection = 'commands' | 'subscriber';
 type RedisConnectionEvent = 'errors' | 'reconnects' | 'timeouts';
 export type RedisCommandGroup =
   'read' | 'batchRead' | 'rateLimit' | 'publish' | 'write' | 'tracking';
-export type CacheDomain = 'categories' | 'services' | 'feedPosts' | 'other';
+export type CacheDomain =
+  | 'categories'
+  | 'services'
+  | 'feedPosts'
+  | 'discovery'
+  | 'other';
 type CacheOutcome = 'hits' | 'misses' | 'errors';
 
 export function boundedHttpRoute(method: unknown, template: unknown) {
@@ -145,6 +150,7 @@ export class ObservabilityMetrics implements OnModuleInit, OnModuleDestroy {
     categories: { hits: 0, misses: 0, errors: 0 },
     services: { hits: 0, misses: 0, errors: 0 },
     feedPosts: { hits: 0, misses: 0, errors: 0 },
+    discovery: { hits: 0, misses: 0, errors: 0 },
     other: { hits: 0, misses: 0, errors: 0 },
   };
   private readonly routes = new Map<string, ReturnType<typeof routeStats>>();

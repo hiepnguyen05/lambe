@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:mobile/core/widgets/app_dialog.dart';
+import 'package:mobile/features/shared/guidance/presentation/guidance_trigger.dart';
 
 import '../../di/provider_workspace_providers.dart';
 
@@ -70,62 +72,90 @@ class ServiceRadiusCard extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: radiusOptions.map((radius) {
-              final isSelected = radius == currentRadius;
-              return Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    right: radius == radiusOptions.last ? 0 : 8,
-                  ),
-                  child: InkWell(
-                    onTap: () async {
-                      final error = await ref
-                          .read(providerDashboardProvider.notifier)
-                          .setRadius(radius);
-                      if (error != null && context.mounted) {
-                        AppDialog.error(context, message: error);
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? colorScheme.primaryContainer
-                            : colorScheme.surfaceContainerHighest.withValues(
-                                alpha: 0.5,
-                              ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: colorScheme.primaryContainer
-                                      .withValues(alpha: 0.2),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Text(
-                        '$radius km',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.labelLarge?.copyWith(
+          GuidanceAnchor(
+            id: 'provider_radius',
+            child: Row(
+              children: radiusOptions.map((radius) {
+                final isSelected = radius == currentRadius;
+                return Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      right: radius == radiusOptions.last ? 0 : 8,
+                    ),
+                    child: InkWell(
+                      onTap: () async {
+                        final error = await ref
+                            .read(providerDashboardProvider.notifier)
+                            .setRadius(radius);
+                        if (error != null && context.mounted) {
+                          AppDialog.error(context, message: error);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
                           color: isSelected
-                              ? colorScheme.onPrimary
-                              : colorScheme.onSurfaceVariant,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.w500,
+                              ? colorScheme.primaryContainer
+                              : colorScheme.surfaceContainerHighest.withValues(
+                                  alpha: 0.5,
+                                ),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: colorScheme.primaryContainer
+                                        .withValues(alpha: 0.2),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Text(
+                          '$radius km',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: isSelected
+                                ? colorScheme.onPrimary
+                                : colorScheme.onSurfaceVariant,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              );
-            }).toList(),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Đặt trước tính quanh tâm khu vực đã lưu. Đặt ngay tính quanh GPS hiện tại.',
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: GuidanceAnchor(
+              id: 'provider_service_area',
+              child: TextButton.icon(
+                onPressed: () async {
+                  final saved = await context.push<bool>(
+                    '/provider/service-area',
+                  );
+                  if (saved == true && context.mounted) {
+                    AppDialog.success(
+                      context,
+                      message: 'Đã lưu khu vực phục vụ.',
+                    );
+                  }
+                },
+                icon: const Icon(Icons.edit_location_alt_outlined),
+                label: const Text('Chỉnh khu vực phục vụ'),
+              ),
+            ),
           ),
         ],
       ),

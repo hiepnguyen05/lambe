@@ -15,6 +15,10 @@ class ProviderScheduleRepositoryImpl implements ProviderScheduleRepository {
   }
 
   @override
+  Future<void> updateServiceArea(ProviderSetupEntity setup) =>
+      _remoteDataSource.updateServiceArea(setup);
+
+  @override
   Future<void> updateWorkingHours(
     List<ProviderWorkingHourEntity> workingHours,
   ) {

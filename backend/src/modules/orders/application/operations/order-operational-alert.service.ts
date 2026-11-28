@@ -17,6 +17,11 @@ import { PrismaService } from '../../../../infrastructure/persistence/postgres/p
 import { MailOutboxService } from '../../../../infrastructure/mail/mail-outbox.service';
 import type { AuthenticatedInternalAccount } from '../../../internal-auth/types/authenticated-internal-account.type';
 import { orderServingUserId } from '../persistence/order-actor.policy';
+import {
+  ACCEPTED_OVERDUE_MINUTES,
+  EN_ROUTE_OVERDUE_MINUTES,
+  ARRIVED_OVERDUE_MINUTES,
+} from '../../domain/order-time.policy';
 
 const WATCHDOG_LOCK_ID = 127_001_004;
 
@@ -105,14 +110,14 @@ export class OrderOperationalAlertService {
         Array<{ id: string; orderId: string; type: OrderOperationalAlertType }>
       >(Prisma.sql`
         WITH candidates("orderId", "type", "enteredAt", "dueAt") AS (
-          SELECT "id", 'ACCEPTED_START_OVERDUE', COALESCE("acceptedAt", "updatedAt"), "expectedStartAt" + INTERVAL '15 minutes'
-          FROM "service_orders" WHERE "status" = 'ACCEPTED' AND "expectedStartAt" + INTERVAL '15 minutes' <= NOW()
+          SELECT "id", 'ACCEPTED_START_OVERDUE', GREATEST(COALESCE("acceptedAt", "updatedAt"), "updatedAt"), "expectedStartAt" + ${ACCEPTED_OVERDUE_MINUTES} * INTERVAL '1 minute'
+          FROM "service_orders" WHERE "status" = 'ACCEPTED' AND "expectedStartAt" + ${ACCEPTED_OVERDUE_MINUTES} * INTERVAL '1 minute' <= NOW()
           UNION ALL
-          SELECT "id", 'EN_ROUTE_OVERDUE', COALESCE("enRouteAt", "updatedAt"), "expectedStartAt" + INTERVAL '30 minutes'
-          FROM "service_orders" WHERE "status" = 'EN_ROUTE' AND "expectedStartAt" + INTERVAL '30 minutes' <= NOW()
+          SELECT "id", 'EN_ROUTE_OVERDUE', COALESCE("enRouteAt", "updatedAt"), "expectedStartAt" + ${EN_ROUTE_OVERDUE_MINUTES} * INTERVAL '1 minute'
+          FROM "service_orders" WHERE "status" = 'EN_ROUTE' AND "expectedStartAt" + ${EN_ROUTE_OVERDUE_MINUTES} * INTERVAL '1 minute' <= NOW()
           UNION ALL
-          SELECT "id", 'ARRIVAL_START_OVERDUE', COALESCE("arrivedAt", "updatedAt"), COALESCE("arrivedAt", "updatedAt") + INTERVAL '30 minutes'
-          FROM "service_orders" WHERE "status" = 'ARRIVED' AND COALESCE("arrivedAt", "updatedAt") + INTERVAL '30 minutes' <= NOW()
+          SELECT "id", 'ARRIVAL_START_OVERDUE', COALESCE("arrivedAt", "updatedAt"), COALESCE("arrivedAt", "updatedAt") + ${ARRIVED_OVERDUE_MINUTES} * INTERVAL '1 minute'
+          FROM "service_orders" WHERE "status" = 'ARRIVED' AND COALESCE("arrivedAt", "updatedAt") + ${ARRIVED_OVERDUE_MINUTES} * INTERVAL '1 minute' <= NOW()
           UNION ALL
           SELECT "id", 'SERVICE_COMPLETION_OVERDUE', COALESCE("startedAt", "updatedAt"), "expectedEndAt" + INTERVAL '60 minutes'
           FROM "service_orders" WHERE "status" = 'IN_PROGRESS' AND "expectedEndAt" + INTERVAL '60 minutes' <= NOW()
@@ -135,7 +140,7 @@ export class OrderOperationalAlertService {
             SELECT 1 FROM "order_operational_alerts" existing
             WHERE existing."orderId" = candidate."orderId"
               AND existing."type" = candidate."type"::"OrderOperationalAlertType"
-              AND existing."detectedAt" >= candidate."enteredAt"
+              AND (existing."status" IN ('OPEN', 'ACKNOWLEDGED') OR existing."detectedAt" >= candidate."enteredAt")
           )
           ORDER BY candidate."dueAt", candidate."orderId", candidate."type"
           LIMIT 500
@@ -178,9 +183,11 @@ export class OrderOperationalAlertService {
           ),
         });
       }
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60_000);
       const dueEmails = await tx.orderOperationalAlert.findMany({
         where: {
           status: OrderOperationalAlertStatus.OPEN,
+          detectedAt: { gte: sevenDaysAgo },
           OR: [
             { detectedAt: { lte: new Date(Date.now() - 30 * 60_000) } },
             {
@@ -190,8 +197,8 @@ export class OrderOperationalAlertService {
           ],
         },
         select: { id: true, orderId: true, type: true },
-        orderBy: { detectedAt: 'asc' },
-        take: 100,
+        orderBy: { detectedAt: 'desc' },
+        take: 200,
       });
       const recipients = await tx.internalAccount.findMany({
         where: {
@@ -206,34 +213,36 @@ export class OrderOperationalAlertService {
         },
         select: { id: true, email: true },
       });
-      let queued = 0;
-      for (const alert of created) {
-        for (const recipient of recipients) {
-          await this.mail.enqueue(
-            {
+      const mailItems = [
+        ...created.flatMap((alert) =>
+          recipients.map((recipient) => ({
+            input: {
               to: recipient.email!,
               subject: 'Lambe: có đơn cần hỗ trợ',
               text: `Có cảnh báo ${alert.type} cho đơn ${alert.orderId}. Vui lòng mở trang vận hành để xử lý.`,
               html: '',
             },
-            `order-alert:${alert.id}:initial:${recipient.id}`,
-            tx,
-          );
-          queued++;
-        }
-      }
-      for (const alert of dueEmails) {
-        for (const recipient of recipients) {
-          await this.mail.enqueue(
-            {
+            deduplicationKey: `order-alert:${alert.id}:initial:${recipient.id}`,
+          })),
+        ),
+        ...dueEmails.flatMap((alert) =>
+          recipients.map((recipient) => ({
+            input: {
               to: recipient.email!,
               subject: 'Lambe: cảnh báo đơn quá hạn chưa được nhận',
               text: `Cảnh báo ${alert.type} cho đơn ${alert.orderId} chưa được nhận xử lý. Vui lòng kiểm tra trang vận hành.`,
               html: '',
             },
-            `order-alert:${alert.id}:escalation:${recipient.id}`,
-            tx,
-          );
+            deduplicationKey: `order-alert:${alert.id}:escalation:${recipient.id}`,
+          })),
+        ),
+      ];
+      let queued = 0;
+      if (typeof this.mail.enqueueMany === 'function') {
+        queued = await this.mail.enqueueMany(mailItems, tx);
+      } else {
+        for (const item of mailItems) {
+          await this.mail.enqueue(item.input, item.deduplicationKey, tx);
           queued++;
         }
       }

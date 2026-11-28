@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Put, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentRequestMetadata } from '../../../common/http/decorators/current-request-metadata.decorator';
 import { providerSetupExample } from '../../../common/openapi/api-examples';
@@ -13,7 +13,12 @@ import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
 import { ProviderSetupService } from '../application/provider-setup.service';
-import { ProviderSetupDto } from '../dto/provider-setup.dto';
+import {
+  ProviderRadiusDto,
+  ProviderServiceAreaDto,
+  ProviderSetupDto,
+  ProviderWorkingHoursDto,
+} from '../dto/provider-setup.dto';
 
 @ApiTags('Provider Setup')
 @ApiBearerAuth('user-token')
@@ -34,6 +39,49 @@ export class ProviderSetupController {
   @ApiNotFoundError('Hồ sơ nhà cung cấp')
   findMine(@CurrentUser() user: AuthenticatedUser) {
     return this.setup.findMine(user.userId);
+  }
+
+  @Patch('radius')
+  @ApiOperation({ summary: 'Cập nhật bán kính nhận đơn' })
+  @ApiAuthenticationErrors()
+  @ApiValidationError()
+  updateRadius(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ProviderRadiusDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.setup.updateRadius(user.userId, dto.serviceRadiusKm, request);
+  }
+
+  @Patch('service-area')
+  @ApiOperation({
+    summary: 'Cập nhật tâm khu vực cố định và bán kính phục vụ đặt trước',
+  })
+  @ApiAuthenticationErrors()
+  @ApiValidationError()
+  @ApiNotFoundError('Hồ sơ nhà cung cấp')
+  updateServiceArea(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ProviderServiceAreaDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.setup.updateServiceArea(user.userId, dto, request);
+  }
+
+  @Patch('working-hours')
+  @ApiOperation({ summary: 'Cập nhật lịch làm việc hàng tuần' })
+  @ApiAuthenticationErrors()
+  @ApiValidationError()
+  updateWorkingHours(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ProviderWorkingHoursDto,
+    @CurrentRequestMetadata() request: RequestMetadata,
+  ) {
+    return this.setup.updateWorkingHours(
+      user.userId,
+      dto.workingHours,
+      request,
+    );
   }
 
   @Put()

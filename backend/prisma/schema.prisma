@@ -283,6 +283,8 @@ enum OrderRescheduleStatus {
   PENDING
   ACCEPTED
   REJECTED
+  EXPIRED
+  CANCELLED
 }
 
 enum OrderAddOnStatus {
@@ -378,6 +380,7 @@ enum WalletTopUpStatus {
 }
 
 model User {
+  guidanceProgress            UserGuidanceProgress[]
   feedNotices                 FeedNotice[]
   feedCommentReports          FeedCommentReport[]
   id                          String                     @id @default(uuid())
@@ -425,6 +428,19 @@ model User {
   providerFollows             ProviderFollow[]
 
   @@map("users")
+}
+
+model UserGuidanceProgress {
+  userId    String
+  tourId    String   @db.VarChar(64)
+  version   Int
+  stepIndex Int      @default(0)
+  status    String   @db.VarChar(16)
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tourId, version])
+  @@map("user_guidance_progress")
 }
 
 model AiConversation {
@@ -1859,6 +1875,8 @@ model ServiceOrder {
   paymentDisputeDecidedAt    DateTime?
   paymentDisputeDecisionNote String?
   startedAt                  DateTime?
+  workPausedAt               DateTime?
+  totalPausedSeconds         Int                       @default(0)
   completedAt                DateTime?
   rejectedAt                 DateTime?
   rejectionReason            String?
@@ -2082,7 +2100,7 @@ model OrderEvidence {
   capturedAt       DateTime          @default(now())
   order            ServiceOrder      @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
-  @@unique([orderId, type])
+  @@index([orderId, type])
   @@map("order_evidence")
 }
 
@@ -2189,15 +2207,17 @@ model OrderNotification {
 }
 
 model OrderRescheduleRequest {
-  id              String                @id @default(uuid())
-  orderId         String
-  status          OrderRescheduleStatus @default(PENDING)
-  proposedStartAt DateTime
-  proposedEndAt   DateTime
-  expiresAt       DateTime
-  createdAt       DateTime              @default(now())
-  respondedAt     DateTime?
-  order           ServiceOrder          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  id                String                @id @default(uuid())
+  orderId           String
+  requestedByRole   String                @default("CUSTOMER") @db.VarChar(16)
+  requestedByUserId String?
+  status            OrderRescheduleStatus @default(PENDING)
+  proposedStartAt   DateTime
+  proposedEndAt     DateTime
+  expiresAt         DateTime
+  createdAt         DateTime              @default(now())
+  respondedAt       DateTime?
+  order             ServiceOrder          @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
   @@index([orderId, createdAt(sort: Desc)])
   @@index([status, expiresAt])

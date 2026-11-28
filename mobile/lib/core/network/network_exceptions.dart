@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import 'package:mobile/core/error/app_failure.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 
 class ExceptionHandler {
   static AppFailure handleDioError(DioException error) {
@@ -38,5 +39,38 @@ class ExceptionHandler {
       default:
         return ServerFailure(error.message ?? 'Đã xảy ra lỗi không xác định.');
     }
+  }
+
+  /// Extracts a human-readable message from a [DioException], preferring any
+  /// [AppFailure] already attached by the Dio error interceptor.
+  static String extractMessage(
+    DioException error, {
+    String fallback = 'Thao tác không thành công',
+  }) {
+    final walletMessage = _walletBalanceMessage(error.response?.data);
+    if (walletMessage != null) return walletMessage;
+    final attached = error.error;
+    if (attached is AppFailure && attached.message.isNotEmpty) {
+      return attached.message;
+    }
+    final parsed = handleDioError(error).message;
+    if (parsed.isNotEmpty && parsed != 'Thao tác không thành công') {
+      return parsed;
+    }
+    return fallback;
+  }
+
+  static String? _walletBalanceMessage(Object? data) {
+    if (data is! Map || data['code'] != 'PROVIDER_WALLET_BALANCE_TOO_LOW') {
+      return null;
+    }
+    final available = data['availableBalance'];
+    final minimum = data['minimumBalance'];
+    if (available is! num || minimum is! num) return null;
+    final formatter = CurrencyUtils.vndDecimal;
+    final shortfall = (minimum - available).clamp(0, double.infinity);
+    return 'Số dư khả dụng ${formatter.format(available)}đ. '
+        'Cần tối thiểu ${formatter.format(minimum)}đ để bật nhận đơn. '
+        'Vui lòng nạp thêm ${formatter.format(shortfall)}đ.';
   }
 }

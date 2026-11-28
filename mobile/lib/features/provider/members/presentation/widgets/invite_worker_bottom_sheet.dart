@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 
 import '../../di/provider_members_providers.dart';
 import '../../domain/entities/provider_member_invitation_entity.dart';
@@ -59,11 +60,9 @@ class _InviteWorkerBottomSheetState
     final text =
         'Bạn nhận được lời mời tham gia đội ngũ Lambe. Mã xác nhận của bạn là: ${_createdInvitation!.token}\n\nHãy mở ứng dụng Lambe > Hồ sơ cá nhân > Lời mời gia nhập để chấp nhận.';
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Đã sao chép tin nhắn lời mời kèm mã xác nhận!'),
-        backgroundColor: AppColors.primary,
-      ),
+    AppDialog.success(
+      context,
+      message: 'Đã sao chép tin nhắn lời mời kèm mã xác nhận!',
     );
   }
 
@@ -245,8 +244,9 @@ class _InviteWorkerBottomSheetState
                 tooltip: 'Sao chép',
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: token));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Đã sao chép mã xác nhận!')),
+                  AppDialog.success(
+                    context,
+                    message: 'Đã sao chép mã xác nhận!',
                   );
                 },
               ),

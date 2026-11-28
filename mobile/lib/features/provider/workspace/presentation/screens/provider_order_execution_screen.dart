@@ -6,6 +6,7 @@ import 'package:mobile/features/shared/order_safety/domain/order_safety.dart';
 import 'package:mobile/features/shared/order_safety/presentation/order_safety_button.dart';
 import 'package:mobile/features/shared/order_safety/presentation/order_safety_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:mobile/features/shared/guidance/presentation/guidance_trigger.dart';
 import 'package:mobile/features/shared/payment_dispute/application/payment_dispute_controller.dart';
 import 'package:mobile/features/shared/payment_dispute/domain/payment_dispute_order.dart';
 import 'package:mobile/features/shared/payment_dispute/presentation/payment_dispute_reason_dialog.dart';
@@ -14,6 +15,7 @@ import 'package:mobile/features/shared/payment_dispute/presentation/payment_disp
 import 'package:mobile/features/shared/payment_dispute/presentation/payment_dispute_updates.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -35,13 +37,12 @@ import 'package:mobile/features/shared/order_add_ons/domain/order_add_on.dart';
 
 import '../widgets/execution/provider_order_bottom_bar.dart';
 import '../widgets/execution/provider_order_customer_card.dart';
+import '../widgets/execution/provider_order_detail_view.dart';
 import '../widgets/execution/provider_order_destination_card.dart';
 import '../widgets/execution/provider_order_execution_cards.dart';
 import '../widgets/execution/provider_order_tracking_map.dart';
 import '../widgets/execution/provider_order_service_timer_view.dart';
-import '../widgets/execution/provider_order_evidence_inspection.dart';
 import '../widgets/execution/provider_order_settlement_card.dart';
-import '../widgets/execution/provider_order_status_progress.dart';
 
 class ProviderOrderExecutionScreen extends ConsumerStatefulWidget {
   final String orderId;
@@ -79,101 +80,20 @@ class _ProviderOrderExecutionScreenState
     super.dispose();
   }
 
-  void _showNotification(String message, {bool isError = false}) {
+  void _showError(String message) {
     if (!mounted) return;
-    if (isError) {
-      AppDialog.error(context, message: message);
-    } else {
-      AppDialog.info(context, message: message);
-    }
+    AppDialog.error(context, message: message);
   }
 
   Future<bool> _pickAndUploadEvidence(String type) async {
-    final evidenceLabel = switch (type) {
-      'ARRIVAL' => 'xác nhận đã đến',
-      'BEFORE_WORK' => 'trước khi thực hiện',
-      'AFTER_WORK' => 'kết quả sau khi thực hiện',
-      'INCIDENT' => 'sự cố',
-      _ => 'bằng chứng',
-    };
-
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFCBD5E1),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Thêm ảnh $evidenceLabel',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
-                ),
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6F5),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.camera_alt_rounded,
-                    color: Color(0xFF0F766E),
-                  ),
-                ),
-                title: const Text(
-                  'Chụp ảnh mới',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                onTap: () => Navigator.of(ctx).pop(ImageSource.camera),
-              ),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6F5),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.photo_library_rounded,
-                    color: Color(0xFF0F766E),
-                  ),
-                ),
-                title: const Text(
-                  'Chọn từ thư viện',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                onTap: () => Navigator.of(ctx).pop(ImageSource.gallery),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (source == null) return false;
-
     try {
       final picker = ImagePicker();
-      final picked = await picker.pickImage(source: source, imageQuality: 80);
+      final picked = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1080,
+        maxHeight: 1080,
+        imageQuality: 72,
+      );
       if (picked == null) return false;
 
       double? lat;
@@ -191,26 +111,17 @@ class _ProviderOrderExecutionScreenState
           lng = _providerLatLng?.longitude;
         }
         if (lat == null || lng == null) {
-          _showNotification(
-            'Cần bật vị trí thiết bị để chụp ảnh xác nhận đã đến.',
-            isError: true,
-          );
+          _showError('Cần bật vị trí thiết bị để chụp ảnh xác nhận đã đến.');
           return false;
         }
       }
 
-      final success = await ref
+      return await ref
           .read(providerOrderExecutionNotifierProvider(widget.orderId).notifier)
           .uploadEvidence(type, picked.path, latitude: lat, longitude: lng);
-
-      if (success) {
-        _showNotification('Đã tải ảnh lên.');
-      }
-      return success;
     } catch (e) {
-      _showNotification(
-        'Không thể tải ảnh: ${e.toString().replaceFirst("Exception: ", "")}',
-        isError: true,
+      _showError(
+        'Không thể chụp/tải ảnh: ${e.toString().replaceFirst("Exception: ", "")}',
       );
       return false;
     }
@@ -232,27 +143,23 @@ class _ProviderOrderExecutionScreenState
       contactAttempts: contactAttempts,
       onPickIncident: () => _pickAndUploadEvidence('INCIDENT'),
       onSubmit: (reason, detail) async {
-        final success = await ref
+        return ref
             .read(
               providerOrderExecutionNotifierProvider(widget.orderId).notifier,
             )
             .requestCancellation(reason: reason, detail: detail);
-        if (success) {
-          _showNotification('Đã gửi yêu cầu hủy để khách xác nhận.');
-        }
-        return success;
       },
     );
   }
 
   void _showAcceptedCancellationDialog() {
-    final controller = TextEditingController();
+    var reason = '';
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Hủy đơn đã nhận'),
         content: TextField(
-          controller: controller,
+          onChanged: (value) => reason = value.trim(),
           maxLines: 3,
           maxLength: 500,
           decoration: const InputDecoration(
@@ -268,7 +175,6 @@ class _ProviderOrderExecutionScreenState
           ),
           FilledButton(
             onPressed: () async {
-              final reason = controller.text.trim();
               if (reason.length < 3) return;
               final cancelled = await ref
                   .read(
@@ -278,14 +184,13 @@ class _ProviderOrderExecutionScreenState
                   .cancelOrder(reason: reason);
               if (cancelled && dialogContext.mounted) {
                 Navigator.of(dialogContext).pop();
-                _showNotification('Đã hủy đơn.');
               }
             },
             child: const Text('Xác nhận hủy'),
           ),
         ],
       ),
-    ).whenComplete(controller.dispose);
+    );
   }
 
   void _showRejectDialog() {
@@ -323,7 +228,6 @@ class _ProviderOrderExecutionScreenState
                   .rejectOrder(reason: reason);
               if (rejected && ctx.mounted) {
                 Navigator.of(ctx).pop();
-                _showNotification('Đã từ chối đơn.');
               }
             },
             style: ElevatedButton.styleFrom(
@@ -339,9 +243,27 @@ class _ProviderOrderExecutionScreenState
 
   Future<void> _makeCall(String phone) async {
     final cleanPhone = phone.replaceAll(RegExp(r'[^\d+]'), '');
+    if (cleanPhone.isEmpty) {
+      _showError('Chưa có số điện thoại của khách hàng.');
+      return;
+    }
     final uri = Uri(scheme: 'tel', path: cleanPhone);
-    if (cleanPhone.isNotEmpty && await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched) {
+      _showError('Không thể mở ứng dụng gọi điện trên thiết bị.');
+    }
+  }
+
+  Future<void> _openExternalNavigation(LatLng destination) async {
+    final uri = Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      'destination': '${destination.latitude},${destination.longitude}',
+      'travelmode': 'driving',
+      'dir_action': 'navigate',
+    });
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched) {
+      _showError('Không thể mở ứng dụng chỉ đường Google Maps.');
     }
   }
 
@@ -400,7 +322,7 @@ class _ProviderOrderExecutionScreenState
           'GPS chưa đủ chính xác. Vui lòng ra nơi thoáng và thử lại.',
         );
       }
-      final success = await ref
+      await ref
           .read(providerOrderExecutionNotifierProvider(widget.orderId).notifier)
           .markArrived(
             latitude: position.latitude,
@@ -408,28 +330,34 @@ class _ProviderOrderExecutionScreenState
             accuracyMeters: position.accuracy,
             capturedAt: position.timestamp,
           );
-      if (success) _showNotification('Đã xác nhận bạn đến nơi.');
     } catch (error) {
-      _showNotification(
+      _showError(
         error is StateError
             ? error.message
             : 'Không lấy được GPS mới. Vui lòng thử lại.',
-        isError: true,
       );
     }
   }
 
   Future<void> _onStartOrderPressed(bool hasBefore) async {
     if (!hasBefore) {
-      final uploaded = await _pickAndUploadEvidence('BEFORE_WORK');
-      if (!uploaded) return;
+      await _pickAndUploadEvidence('BEFORE_WORK');
+      return;
     }
-    final success = await ref
+    await ref
         .read(providerOrderExecutionNotifierProvider(widget.orderId).notifier)
         .startOrder();
-    if (success) {
-      _showNotification('Đã bắt đầu thực hiện dịch vụ.');
+  }
+
+  Future<void> _onFinishServicePressed(
+    bool hasAfterWork,
+    ProviderOrderExecutionNotifier notifier,
+  ) async {
+    if (!hasAfterWork) {
+      final uploaded = await _pickAndUploadEvidence('AFTER_WORK');
+      if (!uploaded || !mounted) return;
     }
+    notifier.setInProgressSubStep(2);
   }
 
   Future<void> _onReportUnpaidPressed() async {
@@ -440,22 +368,11 @@ class _ProviderOrderExecutionScreenState
         .openPaymentDispute(reason);
     if (!mounted) return;
     ref.invalidate(providerOrdersListProvider);
-    if (success) {
-      final status = ref
-          .read(providerOrderExecutionNotifierProvider(widget.orderId))
-          .status;
-      _showNotification(
-        status == 'COMPLETED'
-            ? 'Đơn đã được xác minh và hoàn thành.'
-            : status == 'DISPUTED'
-            ? 'Đơn chưa thanh toán đang chờ xử lý.'
-            : 'Đã gửi báo cáo; đang chờ hỗ trợ xác minh thanh toán.',
-      );
-    } else {
+    if (!success) {
       final error = ref
           .read(providerOrderExecutionNotifierProvider(widget.orderId))
           .errorMessage;
-      _showNotification(
+      _showError(
         error ?? 'Chưa gửi được báo cáo. Vui lòng tải lại trạng thái.',
       );
     }
@@ -471,6 +388,23 @@ class _ProviderOrderExecutionScreenState
           .read(providerOrderExecutionNotifierProvider(widget.orderId).notifier)
           .fetchDetail(silent: true, queueIfBusy: true);
     });
+
+    ref.listen<ProviderOrderExecutionState>(
+      providerOrderExecutionNotifierProvider(widget.orderId),
+      (prev, next) {
+        if (next.order != null &&
+            next.errorMessage != null &&
+            next.errorMessage != prev?.errorMessage) {
+          final msg = next.errorMessage!;
+          ref
+              .read(
+                providerOrderExecutionNotifierProvider(widget.orderId).notifier,
+              )
+              .clearError();
+          _showError(msg);
+        }
+      },
+    );
 
     final state = ref.watch(
       providerOrderExecutionNotifierProvider(widget.orderId),
@@ -552,14 +486,29 @@ class _ProviderOrderExecutionScreenState
     final hasBeforeWorkEvidence = evidenceList.any(
       (e) => e['type'] == 'BEFORE_WORK',
     );
+    final hasAfterWorkEvidence = evidenceList.any(
+      (e) => e['type'] == 'AFTER_WORK',
+    );
     final cancellationReq =
         order['cancellationRequest'] as Map<String, dynamic>?;
     final cancellationStatus = cancellationReq?['status']?.toString();
 
-    final liveTracking = ref
-        .watch(providerLocationCoordinatorProvider)
-        .tracking;
+    final locationCoordinator = ref.watch(providerLocationCoordinatorProvider);
+    final liveTracking = locationCoordinator.tracking;
     final customerLatLng = _extractCustomerLatLng(order);
+    final providerPos =
+        locationCoordinator.currentPosition ??
+        (liveTracking?.hasFreshPosition == true
+            ? liveTracking!.position
+            : null);
+    final straightLineMeters = providerPos != null && customerLatLng != null
+        ? const Distance()
+              .as(LengthUnit.Meter, providerPos, customerLatLng)
+              .round()
+        : null;
+    final canMarkArrived =
+        customerLatLng == null ||
+        (straightLineMeters != null && straightLineMeters <= 300);
     final destinationLabel = _extractDestinationLabel(order);
     final routePoints = liveTracking?.hasFreshPosition == true
         ? liveTracking!.routePoints
@@ -571,148 +520,244 @@ class _ProviderOrderExecutionScreenState
         ? liveTracking!.distanceMeters
         : null;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FF),
-      appBar: ProviderOrderAppBar(
-        safetyAction: canRaiseSafety(status)
-            ? OrderSafetyButton(scope: safetyScope)
-            : ((order['statusHistory'] as List? ?? []).whereType<Map>().any(
-                    (entry) => entry['toStatus'] == 'SAFETY_HOLD',
-                  )
-                  ? OrderSafetyHistoryButton(
-                      scope: safetyScope,
-                      refreshOrder: () => notifier.fetchDetail(silent: true),
+    final tourId = switch (status) {
+      'ACCEPTED' =>
+        order['bookingType'] == 'SCHEDULED'
+            ? 'provider_order_scheduled'
+            : 'provider_order_accepted',
+      'ARRIVED' => 'provider_order_arrived',
+      'IN_PROGRESS' =>
+        state.inProgressSubStep == 2
+            ? 'provider_order_settlement'
+            : 'provider_order_work',
+      'COMPLETED' => 'provider_order_complete',
+      _ => 'provider_workflow',
+    };
+    return GuidanceTrigger(
+      tourId: tourId,
+      enabled:
+          [
+            'ACCEPTED',
+            'ARRIVED',
+            'IN_PROGRESS',
+            'COMPLETED',
+          ].contains(status) &&
+          !state.isActionLoading &&
+          cancellationStatus == null,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8F9FF),
+        appBar: ProviderOrderAppBar(
+          safetyAction: canRaiseSafety(status, role: safetyScope.role)
+              ? OrderSafetyButton(scope: safetyScope)
+              : ((order['statusHistory'] as List? ?? []).whereType<Map>().any(
+                      (entry) => entry['toStatus'] == 'SAFETY_HOLD',
                     )
-                  : null),
-        orderId: widget.orderId,
-        status: status,
-        onReportIncident:
-            status == 'ACCEPTED' ||
-                status == 'EN_ROUTE' ||
-                status == 'ARRIVED' ||
-                status == 'IN_PROGRESS'
-            ? (cancellationReq != null
-                  ? null
-                  : () => _showCancellationRequestDialog(order))
-            : null,
-      ),
-      body: Column(
-        children: [
-          PaymentDisputeUpdates(
-            scope: paymentScope,
-            refreshOrder: refreshPayment,
+                    ? OrderSafetyHistoryButton(
+                        scope: safetyScope,
+                        refreshOrder: () => notifier.fetchDetail(silent: true),
+                      )
+                    : null),
+        ),
+        body: GuidanceAnchor(
+          id: 'provider_order_body',
+          child: Column(
+            children: [
+              PaymentDisputeUpdates(
+                scope: paymentScope,
+                refreshOrder: refreshPayment,
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  color: AppColors.primaryContainer,
+                  onRefresh: () => notifier.fetchDetail(silent: true),
+                  child:
+                      (status == 'EN_ROUTE' ||
+                          (status == 'ACCEPTED' &&
+                              order['bookingType'] != 'SCHEDULED'))
+                      ? _buildTravelView(
+                          order: order,
+                          status: status,
+                          customerLatLng: customerLatLng,
+                          destinationLabel: destinationLabel,
+                          routePoints: routePoints,
+                          durationSeconds: durationSeconds,
+                          distanceMeters: distanceMeters,
+                          cancellationReq: cancellationReq,
+                          cancellationStatus: cancellationStatus,
+                        )
+                      : (status == 'ARRIVED' || status == 'IN_PROGRESS')
+                      ? _buildWorkExecutionView(
+                          order: order,
+                          status: status,
+                          cancellationReq: cancellationReq,
+                          cancellationStatus: cancellationStatus,
+                          state: state,
+                          notifier: notifier,
+                        )
+                      : _buildStandardPhasedView(
+                          order: order,
+                          status: status,
+                          cancellationReq: cancellationReq,
+                          cancellationStatus: cancellationStatus,
+                          notifier: notifier,
+                        ),
+                ),
+              ),
+            ],
           ),
-          ProviderOrderStatusProgress(status: status),
-          Expanded(
-            child: RefreshIndicator(
-              color: AppColors.primaryContainer,
-              onRefresh: () => notifier.fetchDetail(silent: true),
-              child: status == 'EN_ROUTE'
-                  ? _buildEnRouteView(
-                      order: order,
-                      status: status,
-                      customerLatLng: customerLatLng,
-                      destinationLabel: destinationLabel,
-                      routePoints: routePoints,
-                      durationSeconds: durationSeconds,
-                      distanceMeters: distanceMeters,
-                      cancellationReq: cancellationReq,
-                      cancellationStatus: cancellationStatus,
-                    )
-                  : status == 'IN_PROGRESS'
-                  ? _buildInProgressView(
-                      order: order,
-                      state: state,
-                      notifier: notifier,
-                    )
-                  : _buildStandardPhasedView(
-                      order: order,
-                      status: status,
-                      customerLatLng: customerLatLng,
-                      destinationLabel: destinationLabel,
-                      routePoints: routePoints,
-                      durationSeconds: durationSeconds,
-                      distanceMeters: distanceMeters,
-                      cancellationReq: cancellationReq,
-                      cancellationStatus: cancellationStatus,
-                      notifier: notifier,
-                    ),
-            ),
-          ),
-        ],
+        ),
+        bottomNavigationBar:
+            (status == 'IN_PROGRESS' && state.inProgressSubStep == 2)
+            ? null
+            : GuidanceAnchor(
+                id: 'provider_order_action',
+                child: ProviderOrderBottomBar(
+                  status: status,
+                  bookingType: order['bookingType']?.toString() ?? 'ASAP',
+                  departureAvailableAt: DateTime.tryParse(
+                    order['departureAvailableAt']?.toString() ?? '',
+                  ),
+                  scheduledAt: DateTime.tryParse(
+                    order['scheduledAt']?.toString() ?? '',
+                  ),
+                  hasBefore: hasBeforeWorkEvidence,
+                  hasAfter: hasAfterWorkEvidence,
+                  cancellationStatus: cancellationStatus,
+                  isActionLoading: state.isActionLoading,
+                  canMarkArrived: canMarkArrived,
+                  distanceMetersToCustomer: straightLineMeters,
+                  onReject: _showRejectDialog,
+                  onAccept: () => notifier.acceptOrder(),
+                  onStartTravel: () => notifier.markEnRoute(),
+                  onCancelOrder: cancellationReq == null
+                      ? () => _showCancellationRequestDialog(order)
+                      : null,
+                  onMarkArrived: _onMarkArrivedPressed,
+                  onStartOrder: () =>
+                      _onStartOrderPressed(hasBeforeWorkEvidence),
+                  onFinishService: () =>
+                      _onFinishServicePressed(hasAfterWorkEvidence, notifier),
+                ),
+              ),
       ),
-      bottomNavigationBar: status == 'IN_PROGRESS'
-          ? null
-          : ProviderOrderBottomBar(
-              status: status,
-              hasBefore: hasBeforeWorkEvidence,
-              cancellationStatus: cancellationStatus,
-              isActionLoading: state.isActionLoading,
-              onReject: _showRejectDialog,
-              onAccept: () async {
-                final success = await notifier.acceptOrder();
-                if (success) {
-                  _showNotification('Đã nhận đơn.');
-                }
-              },
-              onStartTravel: () async {
-                final success = await notifier.markEnRoute();
-                if (success) {
-                  _showNotification('Đã bắt đầu di chuyển tới khách.');
-                }
-              },
-              onMarkArrived: _onMarkArrivedPressed,
-              onStartOrder: () => _onStartOrderPressed(hasBeforeWorkEvidence),
-            ),
     );
   }
 
-  Widget _buildInProgressView({
+  Widget _buildOrderBanners({
     required Map<String, dynamic> order,
+    required String status,
+    required Map<String, dynamic>? cancellationReq,
+    required String? cancellationStatus,
+    required bool isActionLoading,
+    required ProviderOrderExecutionNotifier notifier,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OrderRescheduleCard(
+          scope: RescheduleScope(widget.orderId, RescheduleRole.provider),
+          snapshot: RescheduleOrder.fromJson(order),
+          onContact: (order['contactPhone'] as String?)?.isNotEmpty == true
+              ? () => _makeCall(order['contactPhone'] as String)
+              : null,
+          onCancel: status == 'ACCEPTED' && cancellationReq == null
+              ? () => _showAcceptedCancellationDialog()
+              : null,
+          mutationBlocked: isActionLoading,
+          refreshOrder: () async {
+            await notifier.fetchDetail(silent: true, queueIfBusy: true);
+            if (mounted) ref.invalidate(providerOrdersListProvider);
+          },
+        ),
+        if (cancellationReq != null && status != 'CANCELLED') ...[
+          ProviderOrderCancellationBanner(
+            cancellationReq: cancellationReq,
+            status: status,
+            cancellationStatus: cancellationStatus,
+            mapCancellationReason: _mapCancellationReason,
+          ),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildWorkExecutionView({
+    required Map<String, dynamic> order,
+    required String status,
+    required Map<String, dynamic>? cancellationReq,
+    required String? cancellationStatus,
     required ProviderOrderExecutionState state,
     required ProviderOrderExecutionNotifier notifier,
   }) {
     final extras = ref.watch(
       orderAddOnsProvider(AddOnScope(widget.orderId, AddOnRole.provider)),
     );
-    final addOnsSection = ProviderOrderAddOns(order: order);
-    if (state.inProgressSubStep == 0) {
-      return ProviderOrderServiceTimerView(
-        order: order,
-        addOnsSection: addOnsSection,
-        onFinishService: () => notifier.setInProgressSubStep(1),
-      );
-    } else if (state.inProgressSubStep == 1) {
-      return ProviderOrderEvidenceInspection(
-        order: order,
-        addOnsSection: addOnsSection,
-        isActionLoading: state.isActionLoading,
-        onUploadEvidence: _pickAndUploadEvidence,
-        onBackToTimer: () => notifier.setInProgressSubStep(0),
-        onProceedToSettlement: () => notifier.setInProgressSubStep(2),
-      );
-    } else {
+    final evidenceList = (order['evidence'] as List<dynamic>?) ?? const [];
+    final afterWorkList = evidenceList
+        .whereType<Map>()
+        .where((e) => e['type'] == 'AFTER_WORK')
+        .toList();
+    final isPaused = order['workPausedAt'] != null;
+
+    if (status == 'IN_PROGRESS' && state.inProgressSubStep == 2) {
       return ProviderOrderSettlementCard(
         order: order,
-        addOnsSection: addOnsSection,
-        completionBlocked:
-            extras.busy ||
-            extras.needsRefresh ||
-            notifier.addOnsBlockCompletion,
+        completionBlocked: extras.busy || notifier.addOnsBlockCompletion,
         cashReceivedChecked: state.cashReceivedChecked,
         onCashCheckChanged: (val) => notifier.setCashReceivedChecked(val),
         isActionLoading: state.isActionLoading,
-        onBackToEvidence: () => notifier.setInProgressSubStep(1),
+        onBackToWork: () => notifier.setInProgressSubStep(0),
+        onCaptureAfterMore: afterWorkList.length < 5
+            ? () => _pickAndUploadEvidence('AFTER_WORK')
+            : null,
         onConfirmComplete: () async {
           final success = await notifier.completeOrder(cashReceived: true);
-          if (success) _showNotification('Đơn đã hoàn thành.');
+          if (success && mounted) {
+            ref.invalidate(providerOrdersListProvider);
+            ref.invalidate(providerDashboardProvider);
+            context.go('/provider/home');
+          }
         },
         onReportUnpaid: _onReportUnpaidPressed,
       );
     }
+
+    return ProviderOrderServiceTimerView(
+      order: order,
+      topBanner: _buildOrderBanners(
+        order: order,
+        status: status,
+        cancellationReq: cancellationReq,
+        cancellationStatus: cancellationStatus,
+        isActionLoading: state.isActionLoading,
+        notifier: notifier,
+      ),
+      addOnsSection: ProviderOrderAddOns(order: order),
+      customerSection: ProviderOrderCustomerCard(
+        order: order,
+        onCall: _makeCall,
+        onRecordContactAttempt: status == 'ARRIVED'
+            ? () => notifier.recordContactAttempt()
+            : null,
+      ),
+      isActionLoading: state.isActionLoading,
+      onCaptureBefore: status == 'ARRIVED'
+          ? () => _pickAndUploadEvidence('BEFORE_WORK')
+          : null,
+      onTogglePause: status == 'IN_PROGRESS'
+          ? () {
+              if (isPaused) {
+                notifier.resumeWork();
+              } else {
+                notifier.pauseWork();
+              }
+            }
+          : null,
+    );
   }
 
-  Widget _buildEnRouteView({
+  Widget _buildTravelView({
     required Map<String, dynamic> order,
     required String status,
     required LatLng? customerLatLng,
@@ -735,7 +780,7 @@ class _ProviderOrderExecutionScreenState
             durationSeconds: durationSeconds,
             distanceMeters: distanceMeters,
             destinationLabel: destinationLabel,
-            height: 320,
+            height: 300,
           )
         else
           const _MissingDestinationNotice(),
@@ -767,10 +812,43 @@ class _ProviderOrderExecutionScreenState
                   const SizedBox(height: 12),
                 ],
 
+                if (order['bookingType'] == 'SCHEDULED')
+                  OrderRescheduleCard(
+                    scope: RescheduleScope(
+                      widget.orderId,
+                      RescheduleRole.provider,
+                    ),
+                    snapshot: RescheduleOrder.fromJson(order),
+                    mutationBlocked: ref
+                        .watch(
+                          providerOrderExecutionNotifierProvider(
+                            widget.orderId,
+                          ),
+                        )
+                        .isActionLoading,
+                    refreshOrder: () => ref
+                        .read(
+                          providerOrderExecutionNotifierProvider(widget.orderId)
+                              .notifier,
+                        )
+                        .fetchDetail(silent: true, queueIfBusy: true),
+                    onContact:
+                        (order['contactPhone'] as String?)?.isNotEmpty == true
+                        ? () => _makeCall(order['contactPhone'] as String)
+                        : null,
+                    onCancel: cancellationReq == null
+                        ? () => _showCancellationRequestDialog(order)
+                        : null,
+                  ),
                 ProviderOrderCustomerCard(order: order, onCall: _makeCall),
                 const SizedBox(height: 12),
 
-                ProviderOrderDestinationCard(order: order),
+                ProviderOrderDestinationCard(
+                  order: order,
+                  onNavigate: customerLatLng != null
+                      ? () => _openExternalNavigation(customerLatLng)
+                      : null,
+                ),
                 const SizedBox(height: 12),
 
                 const SizedBox(height: 52),
@@ -785,127 +863,35 @@ class _ProviderOrderExecutionScreenState
   Widget _buildStandardPhasedView({
     required Map<String, dynamic> order,
     required String status,
-    required LatLng? customerLatLng,
-    required String destinationLabel,
-    required List<LatLng> routePoints,
-    required int? durationSeconds,
-    required int? distanceMeters,
     required Map<String, dynamic>? cancellationReq,
     required String? cancellationStatus,
     required ProviderOrderExecutionNotifier notifier,
   }) {
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      children: [
-        ProviderOrderAddOns(order: order),
-        if (status == 'COMPLETED' && order['paymentDisputeOpenedAt'] != null)
-          PaymentDisputeSummary(
-            order: PaymentDisputeOrder.fromJson(order),
-            role: PaymentDisputeRole.provider,
-          ),
-        OrderRescheduleCard(
-          scope: RescheduleScope(widget.orderId, RescheduleRole.provider),
-          snapshot: RescheduleOrder.fromJson(order),
-          mutationBlocked: ref
-              .watch(providerOrderExecutionNotifierProvider(widget.orderId))
-              .isActionLoading,
-          refreshOrder: () async {
-            await notifier.fetchDetail(silent: true, queueIfBusy: true);
-            if (mounted) ref.invalidate(providerOrdersListProvider);
-          },
-        ),
-        if (cancellationReq != null && status != 'CANCELLED') ...[
-          ProviderOrderCancellationBanner(
-            cancellationReq: cancellationReq,
+    final isActionLoading = ref
+        .watch(providerOrderExecutionNotifierProvider(widget.orderId))
+        .isActionLoading;
+
+    return ProviderOrderDetailView(
+      order: order,
+      onCall: _makeCall,
+      topBanners: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (status == 'COMPLETED' && order['paymentDisputeOpenedAt'] != null)
+            PaymentDisputeSummary(
+              order: PaymentDisputeOrder.fromJson(order),
+              role: PaymentDisputeRole.provider,
+            ),
+          _buildOrderBanners(
+            order: order,
             status: status,
+            cancellationReq: cancellationReq,
             cancellationStatus: cancellationStatus,
-            mapCancellationReason: _mapCancellationReason,
+            isActionLoading: isActionLoading,
+            notifier: notifier,
           ),
-          const SizedBox(height: 12),
         ],
-
-        if (status == 'ACCEPTED') ...[
-          if (customerLatLng != null)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: ProviderOrderTrackingMap(
-                mapController: _mapController,
-                customerLatLng: customerLatLng,
-                providerLatLng: _providerLatLng,
-                routePoints: routePoints,
-                durationSeconds: durationSeconds,
-                distanceMeters: distanceMeters,
-                destinationLabel: destinationLabel,
-                height: 200,
-              ),
-            )
-          else
-            const ClipRRect(
-              borderRadius: BorderRadius.all(Radius.circular(12)),
-              child: _MissingDestinationNotice(),
-            ),
-          const SizedBox(height: 12),
-        ],
-
-        if (status == 'COMPLETED') ...[
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0FDF4),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFBBF7D0)),
-            ),
-            child: const Row(
-              children: [
-                Icon(
-                  Icons.check_circle_rounded,
-                  size: 32,
-                  color: Color(0xFF16A34A),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Đơn hàng đã hoàn thành',
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF166534),
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Giao dịch và phí nền tảng đã được hệ thống ghi nhận.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF15803D),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        ProviderOrderCustomerCard(
-          order: order,
-          onCall: _makeCall,
-          onRecordContactAttempt: status == 'ARRIVED'
-              ? () => notifier.recordContactAttempt()
-              : null,
-        ),
-        const SizedBox(height: 12),
-
-        ProviderOrderDestinationCard(order: order),
-        const SizedBox(height: 12),
-
-        const SizedBox(height: 80),
-      ],
+      ),
     );
   }
 }

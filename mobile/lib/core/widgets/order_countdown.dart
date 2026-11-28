@@ -53,7 +53,8 @@ class _OrderCountdownState extends State<OrderCountdown> {
 
   void _tick() {
     final next = _timeLeft();
-    if (next.inSeconds != _remaining.inSeconds) {
+    if (next.inSeconds != _remaining.inSeconds ||
+        (next == Duration.zero && _remaining != Duration.zero)) {
       setState(() => _remaining = next);
     }
     if (next == Duration.zero && !_notifiedExpired) {

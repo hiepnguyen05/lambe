@@ -18,12 +18,8 @@ class ProviderWalletRepositoryImpl implements ProviderWalletRepository {
   @override
   Future<List<WalletTransactionEntity>> getTransactions({
     int limit = 50,
-    int offset = 0,
   }) async {
-    final dataList = await _remoteDataSource.getTransactions(
-      limit: limit,
-      offset: offset,
-    );
+    final dataList = await _remoteDataSource.getTransactions(limit: limit);
     return dataList
         .map(
           (json) =>

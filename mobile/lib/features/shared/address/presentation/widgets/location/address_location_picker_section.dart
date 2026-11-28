@@ -34,45 +34,45 @@ class AddressLocationPickerSection extends StatelessWidget {
         // Nút Định vị
         SizedBox(
           width: double.infinity,
-          child: ElevatedButton.icon(
+          child: FilledButton.icon(
             onPressed: isLocating ? null : onGetCurrentLocation,
             icon: isLocating
                 ? const SizedBox(
-                    width: 20,
-                    height: 20,
+                    width: 18,
+                    height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: Color(0xFF0F766E),
                     ),
                   )
-                : const Icon(Icons.my_location, size: 20),
+                : const Icon(Icons.my_location_rounded, size: 18),
             label: const Text(
               'Lấy vị trí hiện tại',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
             ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F766E),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              elevation: 2,
-              shadowColor: const Color(0xFF0F766E).withValues(alpha: 0.4),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFF0FDFA),
+              foregroundColor: const Color(0xFF0F766E),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: Color(0xFF99F6E4)),
               ),
             ),
           ),
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         const Text(
           'Vị trí trên bản đồ',
           style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
             color: Color(0xFF0B1C30),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         AddressMapPicker(
           latitude: latitude,
           longitude: longitude,
@@ -80,18 +80,19 @@ class AddressLocationPickerSection extends StatelessWidget {
           onMapTap: onMapTap,
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 14),
         Material(
-          color: Colors.white,
+          color: const Color(0xFFF8FAFC),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: Color(0xFFBDC9C6)),
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: Color(0xFFE2E8F0)),
           ),
           child: SwitchListTile(
             title: const Text(
               'Đặt làm địa chỉ mặc định',
               style: TextStyle(
-                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
                 color: Color(0xFF0B1C30),
               ),
             ),
@@ -99,7 +100,7 @@ class AddressLocationPickerSection extends StatelessWidget {
             activeThumbColor: const Color(0xFF0F766E),
             activeTrackColor: const Color(0xFF0F766E).withValues(alpha: 0.3),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(12),
             ),
             onChanged: onDefaultChanged,
           ),

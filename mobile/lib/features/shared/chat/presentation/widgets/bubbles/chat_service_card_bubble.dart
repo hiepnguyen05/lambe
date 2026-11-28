@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 import '../../../domain/entities/chat_message_entity.dart';
 import 'chat_message_delivery.dart';
 
@@ -22,11 +22,7 @@ class ChatServiceCardBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final payload = message.serviceCardPayload;
-    final currencyFormatter = NumberFormat.currency(
-      locale: 'vi_VN',
-      symbol: 'đ',
-      decimalDigits: 0,
-    );
+    final currencyFormatter = CurrencyUtils.vndCurrency;
 
     final serviceName = payload?.serviceName ?? 'Dịch vụ làm đẹp';
     final priceStr = payload != null

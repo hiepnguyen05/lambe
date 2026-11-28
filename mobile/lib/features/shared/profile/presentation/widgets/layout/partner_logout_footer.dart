@@ -63,7 +63,7 @@ class PartnerLogoutFooter extends StatelessWidget {
         Column(
           children: [
             Text(
-              'Phiên bản Lambe Partner v2.4.0 (Build 382)',
+              'Phiên bản Lambe ${const String.fromEnvironment('APP_VERSION', defaultValue: 'v1.0.0+1')}',
               style: theme.textTheme.labelSmall?.copyWith(
                 color: AppColors.outline,
                 fontSize: 11,

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 import 'package:mobile/features/provider/services/domain/provider_offering.dart';
 
 void showServicePickerModal({
@@ -10,11 +10,6 @@ void showServicePickerModal({
   required bool disabled,
   required void Function(String id, bool selected) change,
 }) {
-  String formatPrice(int price) {
-    return NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0)
-        .format(price);
-  }
-
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -24,7 +19,7 @@ void showServicePickerModal({
       selected: selected,
       disabled: disabled,
       change: change,
-      formatPrice: formatPrice,
+      formatPrice: CurrencyUtils.formatVnd,
     ),
   );
 }
@@ -43,10 +38,7 @@ class FeedComposerServiceSection extends StatelessWidget {
     required this.change,
   });
 
-  String _formatPrice(int price) {
-    return NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0)
-        .format(price);
-  }
+  String _formatPrice(int price) => CurrencyUtils.formatVnd(price);
 
   void _openSelectionSheet(BuildContext context) {
     showServicePickerModal(

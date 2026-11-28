@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import 'package:mobile/core/utils/currency_utils.dart';
 import 'package:mobile/core/widgets/app_dialog.dart';
 
 import '../../di/provider_workspace_providers.dart';
@@ -61,11 +62,7 @@ class ProviderVouchersScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(providerVouchersNotifierProvider);
-    final currency = NumberFormat.currency(
-      locale: 'vi_VN',
-      symbol: 'đ',
-      decimalDigits: 0,
-    );
+    final currency = CurrencyUtils.vndCurrency;
     final dateFormat = DateFormat('dd/MM/yyyy');
 
     return Scaffold(
@@ -90,14 +87,6 @@ class ProviderVouchersScreen extends ConsumerWidget {
           ),
           onPressed: () => context.pop(),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF0F766E)),
-            onPressed: () => ref
-                .read(providerVouchersNotifierProvider.notifier)
-                .loadVouchers(),
-          ),
-        ],
       ),
       body: RefreshIndicator(
         color: const Color(0xFF0F766E),

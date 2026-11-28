@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 import 'package:mobile/features/shared/auth/di/auth_providers.dart';
 
 import '../../domain/feed_comment.dart';
@@ -265,20 +266,17 @@ class _FeedCommentThreadState extends ConsumerState<FeedCommentThread> {
                                   .read(feedRepositoryProvider)
                                   .reportComment(comment.id, reason, _cancel);
                               if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Đã gửi báo cáo bình luận.'),
-                                  ),
+                                await AppDialog.success(
+                                  context,
+                                  message: 'Đã gửi báo cáo bình luận.',
                                 );
                               }
                             } catch (_) {
                               if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
+                                await AppDialog.error(
+                                  context,
+                                  message:
                                       'Chưa gửi được báo cáo. Hãy thử lại.',
-                                    ),
-                                  ),
                                 );
                               }
                             }

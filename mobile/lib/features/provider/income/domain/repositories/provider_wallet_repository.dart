@@ -5,10 +5,7 @@ import '../entities/wallet_transaction_entity.dart';
 abstract class ProviderWalletRepository {
   Future<WalletEntity> getWalletBalance();
 
-  Future<List<WalletTransactionEntity>> getTransactions({
-    int limit = 50,
-    int offset = 0,
-  });
+  Future<List<WalletTransactionEntity>> getTransactions({int limit = 50});
 
   /// Tạo yêu cầu nạp tiền qua MoMo
   Future<TopUpResponseEntity> createMomoTopUp(

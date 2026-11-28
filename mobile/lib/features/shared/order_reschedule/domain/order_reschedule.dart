@@ -14,6 +14,7 @@ class RescheduleScope extends Equatable {
 }
 
 class RescheduleProposal extends Equatable {
+  final RescheduleRole requestedBy;
   final String id;
   final String status;
   final DateTime startAt;
@@ -23,6 +24,7 @@ class RescheduleProposal extends Equatable {
   final DateTime? respondedAt;
   const RescheduleProposal({
     required this.id,
+    this.requestedBy = RescheduleRole.customer,
     required this.status,
     required this.startAt,
     required this.endAt,
@@ -33,16 +35,39 @@ class RescheduleProposal extends Equatable {
   bool isPending(DateTime now) => status == 'PENDING' && expiresAt.isAfter(now);
   String label(DateTime now) => switch (status) {
     'ACCEPTED' => 'Đã chấp nhận giờ mới',
-    'REJECTED' => 'Yêu cầu đã từ chối hoặc hết hiệu lực',
-    _ => isPending(now) ? 'Đang chờ thợ phản hồi' : 'Yêu cầu đã hết hạn',
+    'REJECTED' =>
+      respondedAt != null && !respondedAt!.isBefore(expiresAt)
+          ? 'Yêu cầu đã hết hạn'
+          : 'Yêu cầu đã bị từ chối',
+    'EXPIRED' => 'Yêu cầu đã hết hạn',
+    'CANCELLED' => 'Yêu cầu không còn hiệu lực',
+    _ =>
+      isPending(now)
+          ? requestedBy == RescheduleRole.provider
+                ? 'Đang chờ khách phản hồi'
+                : 'Đang chờ thợ phản hồi'
+          : 'Yêu cầu đã hết hạn',
   };
   factory RescheduleProposal.fromJson(Map<String, dynamic> json) {
     if (json['id'] is! String ||
-        !const {'PENDING', 'ACCEPTED', 'REJECTED'}.contains(json['status'])) {
+        !const {
+          'PENDING',
+          'ACCEPTED',
+          'REJECTED',
+          'EXPIRED',
+          'CANCELLED',
+        }.contains(json['status']) ||
+        !const {
+          'CUSTOMER',
+          'PROVIDER',
+        }.contains(json['requestedByRole'] ?? 'CUSTOMER')) {
       throw const FormatException('Yêu cầu đổi lịch không hợp lệ.');
     }
     return RescheduleProposal(
       id: json['id'] as String,
+      requestedBy: json['requestedByRole'] == 'PROVIDER'
+          ? RescheduleRole.provider
+          : RescheduleRole.customer,
       status: json['status'] as String,
       startAt: instant(json['proposedStartAt']),
       endAt: instant(json['proposedEndAt']),
@@ -57,6 +82,7 @@ class RescheduleProposal extends Equatable {
   List<Object?> get props => [
     id,
     status,
+    requestedBy,
     startAt,
     endAt,
     expiresAt,
@@ -66,6 +92,7 @@ class RescheduleProposal extends Equatable {
 }
 
 class RescheduleOrder extends Equatable {
+  final DateTime? overdueAt;
   final String id;
   final String status;
   final String bookingType;
@@ -79,6 +106,7 @@ class RescheduleOrder extends Equatable {
     this.startAt,
     this.updatedAt,
     this.proposal,
+    this.overdueAt,
   });
   bool get eligible => status == 'ACCEPTED' && bookingType == 'SCHEDULED';
   DateTime get revision {
@@ -98,6 +126,9 @@ class RescheduleOrder extends Equatable {
     bookingType: json['bookingType'] as String,
     startAt: json['scheduledAt'] == null ? null : instant(json['scheduledAt']),
     updatedAt: json['updatedAt'] == null ? null : instant(json['updatedAt']),
+    overdueAt: json['scheduleOverdueAt'] == null
+        ? null
+        : instant(json['scheduleOverdueAt']),
     proposal: json['rescheduleRequest'] == null
         ? null
         : RescheduleProposal.fromJson(
@@ -112,6 +143,7 @@ class RescheduleOrder extends Equatable {
     startAt,
     updatedAt,
     proposal,
+    overdueAt,
   ];
 }
 

@@ -49,10 +49,17 @@ class OnboardingState {
 class OnboardingNotifier extends StateNotifier<OnboardingState> {
   final OnboardingRepository _repository;
   final void Function(String status) _updateSessionStatus;
+  final void Function()? onPreferencesChanged;
 
-  OnboardingNotifier(this._repository, this._updateSessionStatus)
-    : super(const OnboardingState()) {
-    _loadData();
+  OnboardingNotifier(
+    this._repository,
+    this._updateSessionStatus, {
+    bool autoLoad = true,
+    this.onPreferencesChanged,
+  }) : super(const OnboardingState()) {
+    if (autoLoad) {
+      _loadData();
+    }
   }
 
   Future<void> _loadData() async {
@@ -62,6 +69,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
         _repository.getOptions(),
         _repository.getCurrentPreferences(),
       ]);
+      if (!mounted) return;
       final options = results[0] as OnboardingOptionsEntity;
       final preferences = results[1] as OnboardingPreferences;
       state = state.copyWith(
@@ -73,6 +81,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
         pricePreference: preferences.pricePreference,
       );
     } catch (error) {
+      if (!mounted) return;
       state = state.copyWith(isLoading: false, error: error.toString());
     }
   }
@@ -112,9 +121,12 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       await _repository.saveOnboardingData(_currentPreferences());
+      if (!mounted) return false;
+      onPreferencesChanged?.call();
       state = state.copyWith(isLoading: false);
       return true;
     } catch (error) {
+      if (!mounted) return false;
       state = state.copyWith(isLoading: false, error: error.toString());
       return false;
     }
@@ -128,10 +140,13 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
         await _repository.saveOnboardingData(preferences);
       }
       await _repository.completeOnboarding();
+      if (!mounted) return false;
       _updateSessionStatus('COMPLETED');
+      onPreferencesChanged?.call();
       state = state.copyWith(isLoading: false);
       return true;
     } catch (error) {
+      if (!mounted) return false;
       state = state.copyWith(isLoading: false, error: error.toString());
       return false;
     }
@@ -141,10 +156,13 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       await _repository.skipOnboarding();
+      if (!mounted) return false;
       _updateSessionStatus('SKIPPED');
+      onPreferencesChanged?.call();
       state = state.copyWith(isLoading: false);
       return true;
     } catch (error) {
+      if (!mounted) return false;
       state = state.copyWith(isLoading: false, error: error.toString());
       return false;
     }

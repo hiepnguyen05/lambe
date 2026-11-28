@@ -2,6 +2,43 @@ import 'package:equatable/equatable.dart';
 import 'package:mobile/core/error/app_failure.dart';
 import 'package:mobile/features/customer/booking/domain/entities/booking_draft_entity.dart';
 
+Map<String, dynamic> _validatedLocationPayload({
+  String? customerAddressId,
+  double? latitude,
+  double? longitude,
+  required int radiusKm,
+  required int limit,
+}) {
+  final saved = customerAddressId?.trim();
+  if (saved == null || saved.isEmpty) {
+    if (latitude == null ||
+        longitude == null ||
+        !latitude.isFinite ||
+        !longitude.isFinite ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180) {
+      throw const ValidationFailure(
+        'Vui lòng chọn địa chỉ hoặc lấy vị trí hiện tại.',
+      );
+    }
+  }
+  if (radiusKm < 1 || radiusKm > 50 || limit < 1 || limit > 50) {
+    throw const ValidationFailure('Phạm vi tìm kiếm không hợp lệ.');
+  }
+  return {
+    if (saved != null && saved.isNotEmpty)
+      'customerAddressId': saved
+    else ...{
+      'latitude': latitude,
+      'longitude': longitude,
+    },
+    'radiusKm': radiusKm,
+    'limit': limit,
+  };
+}
+
 class ProviderSearchRequest extends Equatable {
   final String serviceId;
   final BookingType bookingType;
@@ -32,37 +69,18 @@ class ProviderSearchRequest extends Equatable {
     if (bookingType == BookingType.scheduled && scheduledAt == null) {
       throw const ValidationFailure('Vui lòng chọn ngày giờ đặt trước.');
     }
-    final saved = customerAddressId?.trim();
-    if (saved == null || saved.isEmpty) {
-      if (latitude == null ||
-          longitude == null ||
-          !latitude!.isFinite ||
-          !longitude!.isFinite ||
-          latitude! < -90 ||
-          latitude! > 90 ||
-          longitude! < -180 ||
-          longitude! > 180) {
-        throw const ValidationFailure(
-          'Vui lòng chọn địa chỉ hoặc lấy vị trí hiện tại.',
-        );
-      }
-    }
-    if (radiusKm < 1 || radiusKm > 50 || limit < 1 || limit > 50) {
-      throw const ValidationFailure('Phạm vi tìm kiếm không hợp lệ.');
-    }
     return {
       'serviceId': serviceId,
       'bookingType': bookingType.toApiValue(),
       if (bookingType == BookingType.scheduled)
         'scheduledAt': scheduledAt!.toUtc().toIso8601String(),
-      if (saved != null && saved.isNotEmpty)
-        'customerAddressId': saved
-      else ...{
-        'latitude': latitude,
-        'longitude': longitude,
-      },
-      'radiusKm': radiusKm,
-      'limit': limit,
+      ..._validatedLocationPayload(
+        customerAddressId: customerAddressId,
+        latitude: latitude,
+        longitude: longitude,
+        radiusKm: radiusKm,
+        limit: limit,
+      ),
     };
   }
 
@@ -71,6 +89,39 @@ class ProviderSearchRequest extends Equatable {
     serviceId,
     bookingType,
     scheduledAt,
+    customerAddressId,
+    latitude,
+    longitude,
+    radiusKm,
+    limit,
+  ];
+}
+
+class NearbyHomeRequest extends Equatable {
+  final String? customerAddressId;
+  final double? latitude;
+  final double? longitude;
+  final int radiusKm;
+  final int limit;
+
+  const NearbyHomeRequest({
+    this.customerAddressId,
+    this.latitude,
+    this.longitude,
+    this.radiusKm = 30,
+    this.limit = 10,
+  });
+
+  Map<String, dynamic> toJson() => _validatedLocationPayload(
+    customerAddressId: customerAddressId,
+    latitude: latitude,
+    longitude: longitude,
+    radiusKm: radiusKm,
+    limit: limit,
+  );
+
+  @override
+  List<Object?> get props => [
     customerAddressId,
     latitude,
     longitude,

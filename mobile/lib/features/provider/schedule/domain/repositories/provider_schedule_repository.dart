@@ -4,6 +4,7 @@ import '../entities/provider_working_hour_entity.dart';
 
 abstract class ProviderScheduleRepository {
   Future<ProviderSetupEntity> getSetup();
+  Future<void> updateServiceArea(ProviderSetupEntity setup);
   Future<void> updateWorkingHours(List<ProviderWorkingHourEntity> workingHours);
   Future<List<ProviderCalendarBlockEntity>> getCalendar({
     required DateTime from,

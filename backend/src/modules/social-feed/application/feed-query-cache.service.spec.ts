@@ -3,7 +3,6 @@ import { PrismaService } from '../../../infrastructure/persistence/postgres/pris
 import { FeedQueryService } from './feed-query.service';
 import { FeedCacheService } from './feed-cache.service';
 import { FeedAccessService } from './organization/feed-access.service';
-import { FeedTimelineService } from './feed-timeline.service';
 import { FeedLiveReadService } from './feed-live-read.service';
 
 describe('Feed reads with public object cache', () => {
@@ -51,9 +50,6 @@ describe('Feed reads with public object cache', () => {
     db as unknown as PrismaService,
     {} as FeedAccessService,
     cache as unknown as FeedCacheService,
-    {
-      read: (_query: unknown, load: () => Promise<unknown>) => load(),
-    } as FeedTimelineService,
     {
       load: (ids: string[]) =>
         Promise.resolve(ids.map((id) => ({ ...live, id }))),
@@ -122,5 +118,26 @@ describe('Feed reads with public object cache', () => {
     expect(result.data).toHaveLength(1);
     expect(result.data[0].id).toBe('post');
     expect(db.feedPost.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves nextCursor and avoids loading the lookahead row when liveRead filters an item', async () => {
+    const load = jest.fn().mockResolvedValueOnce([live]);
+    const filteredService = new FeedQueryService(
+      db as unknown as PrismaService,
+      {} as FeedAccessService,
+      cache as unknown as FeedCacheService,
+      { load } as unknown as FeedLiveReadService,
+    );
+    db.feedPost.findMany.mockResolvedValue([
+      live,
+      { ...live, id: 'post-2' },
+      { ...live, id: 'lookahead' },
+    ]);
+
+    const result = await filteredService.list({ limit: 2 });
+
+    expect(load).toHaveBeenCalledWith(['post', 'post-2']);
+    expect(result.data).toHaveLength(1);
+    expect(result.nextCursor).toBe('post-2');
   });
 });

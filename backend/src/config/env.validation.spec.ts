@@ -26,7 +26,6 @@ describe('validateEnvironment', () => {
   it.each([
     'REDIS_ENABLED',
     'FEED_CACHE_ENABLED',
-    'FEED_CACHE_INDEX_ENABLED',
     'FEED_RECOMMENDATIONS_ENABLED',
     'CLOUDINARY_ENABLED',
     'MAIL_ENABLED',

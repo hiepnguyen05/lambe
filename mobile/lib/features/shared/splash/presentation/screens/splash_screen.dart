@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+
+import 'package:mobile/core/theme/app_theme.dart';
 
 import '../providers/splash_notifier.dart';
 
@@ -84,20 +85,22 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 // Tên thương hiệu LamBe
                 Text(
                   'LamBe',
-                  style: GoogleFonts.plusJakartaSans(
+                  style: const TextStyle(
+                    fontFamily: AppTheme.fontFamilyName,
                     fontSize: 32,
                     fontWeight: FontWeight.w800,
-                    color: const Color(0xFF0F766E),
+                    color: Color(0xFF0F766E),
                     letterSpacing: -0.5,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'Dịch vụ tận tâm • Tiện ích mọi nhà',
-                  style: GoogleFonts.plusJakartaSans(
+                  style: const TextStyle(
+                    fontFamily: AppTheme.fontFamilyName,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: const Color(0xFF64748B),
+                    color: Color(0xFF64748B),
                     letterSpacing: 0.2,
                   ),
                 ),
@@ -119,10 +122,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   child: Text(
                     splashState.statusMessage,
                     key: ValueKey(splashState.statusMessage),
-                    style: GoogleFonts.plusJakartaSans(
+                    style: const TextStyle(
+                      fontFamily: AppTheme.fontFamilyName,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w500,
-                      color: const Color(0xFF94A3B8),
+                      color: Color(0xFF94A3B8),
                     ),
                     textAlign: TextAlign.center,
                   ),

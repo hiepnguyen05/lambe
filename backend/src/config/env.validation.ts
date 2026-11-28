@@ -172,10 +172,6 @@ export function validateEnvironment(
       'FEED_RECOMMENDATIONS_ENABLED',
       toStringValue(config.FEED_RECOMMENDATIONS_ENABLED, 'false'),
     ],
-    [
-      'FEED_CACHE_INDEX_ENABLED',
-      toStringValue(config.FEED_CACHE_INDEX_ENABLED, 'false'),
-    ],
     ['CLOUDINARY_ENABLED', cloudinaryEnabled],
     ['MAIL_ENABLED', mailEnabled],
     ['FIREBASE_ENABLED', firebaseEnabled],
@@ -196,13 +192,6 @@ export function validateEnvironment(
   );
   requirePositiveIntegerInRange(config, 'FEED_CACHE_TIMEOUT_MS', 100, 1000);
   requirePositiveIntegerInRange(config, 'REDIS_COMMAND_TIMEOUT_MS', 1000, 5000);
-  requirePositiveIntegerInRange(
-    config,
-    'FEED_CACHE_INDEX_TTL_SECONDS',
-    300,
-    3600,
-  );
-  requirePositiveIntegerInRange(config, 'FEED_CACHE_LOCK_TTL_SECONDS', 5, 30);
   requirePositiveIntegerInRange(config, 'FEED_CACHE_BATCH_SIZE', 50, 200);
   requirePositiveIntegerInRange(
     config,

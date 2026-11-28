@@ -37,12 +37,16 @@ describe('Categories controllers', () => {
       removeCover: jest.fn().mockResolvedValue({ success: true }),
     };
     const service = { ...queryService, ...commandService, ...imageService };
+    const useCase = (execute: jest.Mock) => ({ execute });
 
     return {
       service,
       adminController: new AdminCategoriesController(
         queryService as never,
-        commandService as never,
+        useCase(commandService.create) as never,
+        useCase(commandService.update) as never,
+        useCase(commandService.updateStatus) as never,
+        useCase(commandService.reorder) as never,
         imageService as never,
       ),
       publicController: new PublicCategoriesController(queryService as never),

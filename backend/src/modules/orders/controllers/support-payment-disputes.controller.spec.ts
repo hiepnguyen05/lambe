@@ -43,4 +43,27 @@ describe('SupportPaymentDisputesController', () => {
     ).toThrow(BadRequestException);
     expect(list).not.toHaveBeenCalled();
   });
+
+  it('forwards closeUnpaid to the dispute service', async () => {
+    const closeUnpaid = jest.fn().mockResolvedValue({
+      success: true,
+      data: { id: 'order-id', status: ServiceOrderStatus.CANCELLED },
+    });
+    const disputeController = new SupportPaymentDisputesController(
+      { list } as never,
+      { closeUnpaid } as never,
+    );
+    await disputeController.closeUnpaid(
+      { accountId: 'staff-id' } as never,
+      { id: 'order-id' },
+      { note: 'Khách không thanh toán sau đối chiếu.' },
+      {},
+    );
+    expect(closeUnpaid).toHaveBeenCalledWith(
+      'staff-id',
+      'order-id',
+      { note: 'Khách không thanh toán sau đối chiếu.' },
+      {},
+    );
+  });
 });

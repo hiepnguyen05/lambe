@@ -130,9 +130,8 @@ class _FeedCommentsScreenState extends ConsumerState<FeedCommentsScreen> {
                             color: AppColors.surfaceContainerLow,
                             borderRadius: BorderRadius.circular(22),
                             border: Border.all(
-                              color: AppColors.surfaceContainerHighest.withValues(
-                                alpha: 0.6,
-                              ),
+                              color: AppColors.surfaceContainerHighest
+                                  .withValues(alpha: 0.6),
                               width: 0.8,
                             ),
                           ),
@@ -145,8 +144,7 @@ class _FeedCommentsScreenState extends ConsumerState<FeedCommentsScreen> {
                               required currentLength,
                               required isFocused,
                               maxLength,
-                            }) =>
-                                null,
+                            }) => null,
                             minLines: 1,
                             maxLines: 4,
                             textCapitalization: TextCapitalization.sentences,
@@ -192,11 +190,6 @@ class _FeedCommentsScreenState extends ConsumerState<FeedCommentsScreen> {
                                 if (success && context.mounted) {
                                   _text.clear();
                                   setState(() => _reply = null);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Đã gửi bình luận.'),
-                                    ),
-                                  );
                                 }
                               },
                         icon: state.sending

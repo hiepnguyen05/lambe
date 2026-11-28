@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, PickType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -40,6 +40,24 @@ export class ProviderWorkingHourDto {
   @Min(1)
   @Max(1440)
   endMinute: number;
+}
+
+export class ProviderRadiusDto {
+  @ApiProperty({ example: 10, minimum: 1, maximum: 50 })
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  serviceRadiusKm: number;
+}
+
+export class ProviderWorkingHoursDto {
+  @ApiProperty({ type: [ProviderWorkingHourDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(21)
+  @ValidateNested({ each: true })
+  @Type(() => ProviderWorkingHourDto)
+  workingHours: ProviderWorkingHourDto[];
 }
 
 export class ProviderSetupDto {
@@ -88,3 +106,10 @@ export class ProviderSetupDto {
   @IsUUID('4', { each: true })
   enabledServiceIds: string[];
 }
+
+export class ProviderServiceAreaDto extends PickType(ProviderSetupDto, [
+  'serviceAreaName',
+  'serviceAreaLatitude',
+  'serviceAreaLongitude',
+  'serviceRadiusKm',
+] as const) {}

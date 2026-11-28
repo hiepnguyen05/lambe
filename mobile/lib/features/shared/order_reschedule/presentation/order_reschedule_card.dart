@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 import 'package:mobile/features/shared/order_safety/application/order_safety_controller.dart';
 import 'package:mobile/features/shared/order_safety/domain/order_safety.dart';
 import 'package:mobile/features/shared/order_notifications/presentation/order_notifications_provider.dart';
@@ -16,12 +17,16 @@ class OrderRescheduleCard extends ConsumerStatefulWidget {
   final RescheduleOrder snapshot;
   final Future<void> Function() refreshOrder;
   final bool mutationBlocked;
+  final VoidCallback? onContact;
+  final VoidCallback? onCancel;
   const OrderRescheduleCard({
     super.key,
     required this.scope,
     required this.snapshot,
     required this.refreshOrder,
     this.mutationBlocked = false,
+    this.onContact,
+    this.onCancel,
   });
   @override
   ConsumerState<OrderRescheduleCard> createState() =>
@@ -49,8 +54,14 @@ class _OrderRescheduleCardState extends ConsumerState<OrderRescheduleCard>
     if (_foreground != foreground) setState(() => _foreground = foreground);
   }
 
-  void _watchExpiry(RescheduleProposal? proposal) {
-    final deadline = proposal?.status == 'PENDING' ? proposal?.expiresAt : null;
+  void _watchExpiry(RescheduleProposal? proposal, DateTime? overdueAt) {
+    final future =
+        [if (proposal?.status == 'PENDING') proposal?.expiresAt, overdueAt]
+            .whereType<DateTime>()
+            .where((time) => time.isAfter(DateTime.now()))
+            .toList()
+          ..sort();
+    final deadline = future.isEmpty ? null : future.first;
     if (deadline == _expiresAt) return;
     _expiry?.cancel();
     _expiresAt = deadline;
@@ -66,10 +77,9 @@ class _OrderRescheduleCardState extends ConsumerState<OrderRescheduleCard>
       await widget.refreshOrder();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Chưa đồng bộ được đơn. Vui lòng tải lại.'),
-          ),
+        await AppDialog.error(
+          context,
+          message: 'Chưa đồng bộ được đơn. Vui lòng tải lại.',
         );
       }
     }
@@ -104,13 +114,12 @@ class _OrderRescheduleCardState extends ConsumerState<OrderRescheduleCard>
     if (!mounted || time == null) return;
     final error = validateRescheduleTime(time, DateTime.now(), order.startAt);
     if (error != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error)));
+      await AppDialog.warning(context, message: error);
       return;
     }
     if (!await _confirm(
           'Gửi đề xuất đổi lịch?',
-          '${rescheduleTimeLabel(time)} (giờ Việt Nam). Lịch chỉ đổi sau khi thợ chấp nhận.',
+          '${rescheduleTimeLabel(time)} (giờ Việt Nam). Lịch chỉ đổi sau khi ${widget.scope.role == RescheduleRole.provider ? 'khách' : 'thợ'} chấp nhận.',
         ) ||
         !mounted) {
       return;
@@ -144,8 +153,15 @@ class _OrderRescheduleCardState extends ConsumerState<OrderRescheduleCard>
         ? remote
         : widget.snapshot;
     final proposal = order.proposal;
-    _watchExpiry(proposal);
-    if (!order.eligible && proposal == null) return const SizedBox.shrink();
+    final overdue =
+        order.bookingType == 'SCHEDULED' &&
+        ['ACCEPTED', 'EN_ROUTE', 'ARRIVED'].contains(order.status) &&
+        order.overdueAt != null &&
+        !order.overdueAt!.isAfter(DateTime.now());
+    _watchExpiry(proposal, order.overdueAt);
+    if (!order.eligible && proposal == null && !overdue) {
+      return const SizedBox.shrink();
+    }
     if (_foreground && ModalRoute.of(context)?.isCurrent == true) {
       ref.listen(orderNotificationEventsProvider, (_, value) {
         if (!_foreground || ModalRoute.of(context)?.isCurrent != true) return;
@@ -189,15 +205,31 @@ class _OrderRescheduleCardState extends ConsumerState<OrderRescheduleCard>
           children: [
             Row(
               children: [
-                const Icon(Icons.event_repeat_outlined),
+                Icon(
+                  overdue
+                      ? Icons.schedule_rounded
+                      : Icons.event_repeat_outlined,
+                  color: overdue ? Theme.of(context).colorScheme.error : null,
+                ),
                 const SizedBox(width: 8),
-                Text(
-                  'Đổi lịch hẹn',
-                  style: Theme.of(context).textTheme.titleMedium,
+                Flexible(
+                  child: Text(
+                    overdue ? 'Lịch hẹn đã quá giờ' : 'Đổi lịch hẹn',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 10),
+            if (overdue)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  order.eligible
+                      ? 'Lịch hẹn chưa được bắt đầu đúng giờ. Hai bên cần liên hệ để thống nhất tiếp tục, đổi giờ hoặc hủy lịch hẹn.'
+                      : 'Tiến trình đang chậm hơn dự kiến. Hãy liên hệ bên còn lại; trường hợp cần xử lý sẽ được bộ phận hỗ trợ kiểm tra.',
+                ),
+              ),
             if (order.startAt != null)
               Text('Lịch hiện tại: ${rescheduleTimeLabel(order.startAt!)}'),
             const Text('Giờ Việt Nam (UTC+07:00)'),
@@ -208,6 +240,24 @@ class _OrderRescheduleCardState extends ConsumerState<OrderRescheduleCard>
                 now: DateTime.now(),
               ),
             ],
+            if (overdue)
+              Wrap(
+                spacing: 12,
+                children: [
+                  if (widget.onContact != null)
+                    TextButton.icon(
+                      onPressed: disabled ? null : widget.onContact,
+                      icon: const Icon(Icons.call_outlined),
+                      label: const Text('Liên hệ'),
+                    ),
+                  if (widget.onCancel != null)
+                    TextButton.icon(
+                      onPressed: disabled ? null : widget.onCancel,
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('Hủy lịch hẹn'),
+                    ),
+                ],
+              ),
             SizedBox(
               height: 4,
               child: state.busy ? const LinearProgressIndicator() : null,
@@ -231,9 +281,7 @@ class _OrderRescheduleCardState extends ConsumerState<OrderRescheduleCard>
                       },
                 child: const Text('Tải lại trạng thái'),
               ),
-            if (order.eligible &&
-                !pending &&
-                widget.scope.role == RescheduleRole.customer)
+            if (order.eligible && !pending)
               OutlinedButton.icon(
                 onPressed: disabled ? null : () => _request(order),
                 icon: const Icon(Icons.edit_calendar_outlined),
@@ -241,18 +289,16 @@ class _OrderRescheduleCardState extends ConsumerState<OrderRescheduleCard>
               ),
             if (order.eligible &&
                 pending &&
-                widget.scope.role == RescheduleRole.provider)
+                proposal!.requestedBy != widget.scope.role)
               Wrap(
                 spacing: 12,
                 children: [
                   OutlinedButton(
-                    onPressed: disabled
-                        ? null
-                        : () => _decide(proposal!, false),
+                    onPressed: disabled ? null : () => _decide(proposal, false),
                     child: const Text('Từ chối'),
                   ),
                   FilledButton(
-                    onPressed: disabled ? null : () => _decide(proposal!, true),
+                    onPressed: disabled ? null : () => _decide(proposal, true),
                     child: const Text('Chấp nhận giờ mới'),
                   ),
                 ],

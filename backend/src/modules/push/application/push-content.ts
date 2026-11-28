@@ -61,6 +61,14 @@ const PUSH_CONTENT = {
     title: 'Dịch vụ đã bắt đầu',
     body: 'Đơn hàng của bạn đang được thực hiện.',
   },
+  ORDER_WORK_PAUSED: {
+    title: 'Dịch vụ đang tạm dừng',
+    body: 'Chuyên viên đã tạm dừng thực hiện dịch vụ.',
+  },
+  ORDER_WORK_RESUMED: {
+    title: 'Dịch vụ tiếp tục thực hiện',
+    body: 'Chuyên viên đã tiếp tục thực hiện dịch vụ.',
+  },
   ORDER_COMPLETED: {
     title: 'Dịch vụ hoàn tất',
     body: 'Bạn có thể xem lại và đánh giá đơn hàng.',
@@ -100,6 +108,14 @@ const PUSH_CONTENT = {
   ORDER_RESCHEDULE_REJECTED: {
     title: 'Giờ hẹn mới chưa được chấp nhận',
     body: 'Mở ứng dụng để xem lịch hẹn.',
+  },
+  ORDER_RESCHEDULE_EXPIRED: {
+    title: 'Đề xuất đổi giờ đã hết hạn',
+    body: 'Lịch hẹn cũ vẫn được giữ. Mở đơn để thống nhất phương án xử lý.',
+  },
+  ORDER_RESCHEDULE_CANCELLED: {
+    title: 'Đề xuất đổi giờ không còn hiệu lực',
+    body: 'Đơn đã chuyển trạng thái. Mở đơn để xem tiến trình mới nhất.',
   },
   ORDER_ADD_ON_REQUESTED: {
     title: 'Có đề nghị thêm dịch vụ',

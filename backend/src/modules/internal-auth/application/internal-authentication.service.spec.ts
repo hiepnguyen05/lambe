@@ -157,11 +157,41 @@ describe('InternalAuthenticationService', () => {
         {},
       ),
     ).resolves.toMatchObject({ response: { success: true } });
-    expect(prisma.internalAccount.update).toHaveBeenNthCalledWith(1, {
-      where: { id: 'account-id' },
+    expect(prisma.internalAccount.updateMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        id: 'account-id',
+        status: 'LOCKED',
+        lockedUntil: { lte: expect.any(Date) as Date },
+      },
       data: { status: 'ACTIVE', failedLoginCount: 0, lockedUntil: null },
-      include: expect.any(Object) as object,
     });
+  });
+
+  it('reloads account state instead of clobbering concurrent changes when expired lock update loses race', async () => {
+    const { authenticationService, prisma } = createInternalAuthTestContext();
+    const lockedExpired = {
+      ...createInternalAccount(),
+      status: 'LOCKED' as const,
+      lockedUntil: new Date(Date.now() - 1_000),
+    };
+    const disabledByAdmin = {
+      ...lockedExpired,
+      status: 'DISABLED' as const,
+      lockedUntil: null,
+    };
+    prisma.internalAccount.findUnique
+      .mockResolvedValueOnce(lockedExpired)
+      .mockResolvedValueOnce(disabledByAdmin);
+    prisma.internalAccount.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await expect(
+      authenticationService.login(
+        { username: 'admin', password: INTERNAL_TEST_PASSWORD },
+        {},
+      ),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prisma.internalAccount.update).not.toHaveBeenCalled();
+    expect(prisma.internalSession.create).not.toHaveBeenCalled();
   });
 
   it('rejects an internal account without credentials', async () => {

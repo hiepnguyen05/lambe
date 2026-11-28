@@ -4,6 +4,7 @@ import { PrismaService } from '../../../../infrastructure/persistence/postgres/p
 import { lockBookingResource } from '../persistence/booking-resource.lock';
 import {
   DAY,
+  DEPARTURE_LEAD_MINUTES,
   MINUTE,
   OVERRUN_MINUTES,
   type BusyInterval,
@@ -95,7 +96,7 @@ export class BookingCalendarService {
     members?: ReadonlyMap<string, string>,
   ) {
     if (!providerIds.length) return new Map<string, BusyInterval[]>();
-    const rows = await tx.providerCalendarBlock.findMany({
+    const blocksPromise = tx.providerCalendarBlock.findMany({
       where: {
         providerId: { in: providerIds },
         ...(members
@@ -137,6 +138,45 @@ export class BookingCalendarService {
       select: blockSelect,
       orderBy: { startAt: 'asc' },
     });
+    const proposalsPromise = tx.orderRescheduleRequest.findMany({
+      where: {
+        status: 'PENDING',
+        expiresAt: { gt: now },
+        proposedStartAt: { lt: new Date(end.getTime() + DAY) },
+        proposedEndAt: { gt: new Date(start.getTime() - DAY) },
+        order: {
+          providerId: { in: providerIds },
+          ...(members
+            ? {
+                OR: [
+                  { assignedMemberId: { in: [...members.keys()] } },
+                  { assignedMemberId: null },
+                ],
+              }
+            : {}),
+          status: 'ACCEPTED',
+          ...(excludeOrderId ? { id: { not: excludeOrderId } } : {}),
+        },
+      },
+      select: {
+        proposedStartAt: true,
+        proposedEndAt: true,
+        order: {
+          select: {
+            providerId: true,
+            assignedMemberId: true,
+            addressLatitude: true,
+            addressLongitude: true,
+          },
+        },
+      },
+    });
+    // A quote can use two pooled connections. Inside a booking transaction,
+    // Prisma retains its single-connection transaction semantics.
+    const [rows, proposals] = await Promise.all([
+      blocksPromise,
+      proposalsPromise,
+    ]);
     const grouped = new Map<string, BusyInterval[]>();
     for (const row of rows) {
       const executing =
@@ -177,39 +217,6 @@ export class BookingCalendarService {
         grouped.set(key, list);
       }
     }
-    const proposals = await tx.orderRescheduleRequest.findMany({
-      where: {
-        status: 'PENDING',
-        expiresAt: { gt: now },
-        proposedStartAt: { lt: new Date(end.getTime() + DAY) },
-        proposedEndAt: { gt: new Date(start.getTime() - DAY) },
-        order: {
-          providerId: { in: providerIds },
-          ...(members
-            ? {
-                OR: [
-                  { assignedMemberId: { in: [...members.keys()] } },
-                  { assignedMemberId: null },
-                ],
-              }
-            : {}),
-          status: 'ACCEPTED',
-          ...(excludeOrderId ? { id: { not: excludeOrderId } } : {}),
-        },
-      },
-      select: {
-        proposedStartAt: true,
-        proposedEndAt: true,
-        order: {
-          select: {
-            providerId: true,
-            assignedMemberId: true,
-            addressLatitude: true,
-            addressLongitude: true,
-          },
-        },
-      },
-    });
     for (const proposal of proposals) {
       const providerId = proposal.order.providerId;
       const keys = members
@@ -247,7 +254,10 @@ export class BookingCalendarService {
     expectedStartAt: Date,
     memberId?: string | null,
   ) {
-    if (expectedStartAt.getTime() - Date.now() > 60 * MINUTE) {
+    if (
+      expectedStartAt.getTime() - Date.now() >
+      DEPARTURE_LEAD_MINUTES * MINUTE
+    ) {
       throw new ConflictException({
         code: 'TOO_EARLY_TO_DEPART',
         message: 'Chỉ có thể khởi hành trong vòng 60 phút trước lịch hẹn.',

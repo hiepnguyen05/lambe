@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  CheckCircle2,
   Eye,
   EyeOff,
   Heart,
@@ -17,6 +18,42 @@ interface FeedPostsTableProps {
   onSelectRow: (id: string) => void;
   onViewPost: (post: AdminFeedPostItem) => void;
   onToggleStatus: (postId: string, currentStatus: string) => void;
+}
+
+function renderModerationBadge(post: AdminFeedPostItem) {
+  if (post.moderationStatus === 'PENDING') {
+    return (
+      <span className="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-800">
+        Chờ kiểm duyệt
+      </span>
+    );
+  }
+  if (post.moderationStatus === 'REJECTED') {
+    return (
+      <span className="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700">
+        Bị từ chối
+      </span>
+    );
+  }
+  if (post.organizationReviewStatus === 'PENDING') {
+    return (
+      <span className="inline-flex items-center rounded-lg border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-700">
+        Chờ tổ chức duyệt
+      </span>
+    );
+  }
+  if (post.organizationReviewStatus === 'REJECTED') {
+    return (
+      <span className="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700">
+        Tổ chức từ chối
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+      Đã duyệt
+    </span>
+  );
 }
 
 export function FeedPostsTable({
@@ -46,7 +83,7 @@ export function FeedPostsTable({
               <th className="py-3.5 px-4">Dịch vụ đính kèm</th>
               <th className="py-3.5 px-4 text-center">Tương tác</th>
               <th className="py-3.5 px-4 text-center">Báo cáo</th>
-              <th className="py-3.5 px-4 text-center">Trạng thái</th>
+              <th className="py-3.5 px-4 text-center">Kiểm duyệt & Hiển thị</th>
               <th className="py-3.5 px-4">Ngày đăng</th>
               <th className="py-3.5 px-5 text-right">Tác vụ</th>
             </tr>
@@ -55,6 +92,9 @@ export function FeedPostsTable({
             {posts.map((post) => {
               const firstMedia = post.media[0];
               const isSelected = selectedRowIds.includes(post.id);
+              const isPendingReview = post.moderationStatus === 'PENDING';
+              const isApproved =
+                post.moderationStatus == null || post.moderationStatus === 'APPROVED';
 
               return (
                 <tr
@@ -116,8 +156,9 @@ export function FeedPostsTable({
                         <p className="line-clamp-2 text-xs font-semibold text-slate-900 group-hover:text-teal-800 transition">
                           {post.caption || <span className="italic text-slate-400">Không có chú thích</span>}
                         </p>
-                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-slate-400 font-mono">
                           <span>ID: #{post.id.slice(0, 8)}</span>
+                          <span>v{post.revisionNumber}</span>
                           {post.hasCustomerConsent && (
                             <span className="text-emerald-600 font-sans font-medium">✓ Đã đồng thuận</span>
                           )}
@@ -146,6 +187,11 @@ export function FeedPostsTable({
                         </div>
                         <div className="text-[11px] text-slate-400">
                           {post.authorMember?.displayName || 'Chủ tài khoản'}
+                          {post.provider.feedPostingBlocked && (
+                            <span className="ml-1.5 rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">
+                              Khóa đăng
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -197,17 +243,22 @@ export function FeedPostsTable({
                     )}
                   </td>
 
-                  {/* Status */}
+                  {/* Status & Moderation Status */}
                   <td className="py-3.5 px-4 text-center">
-                    {post.status === 'PUBLISHED' ? (
-                      <span className="inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200">
-                        {post.moderationStatus === 'PENDING' ? 'Chờ kiểm duyệt' : post.moderationStatus === 'REJECTED' ? 'Bị từ chối' : post.organizationReviewStatus === 'PENDING' ? 'Chờ tổ chức duyệt' : post.organizationReviewStatus === 'REJECTED' ? 'Tổ chức từ chối' : 'Đã duyệt'}
+                    <div className="flex flex-col items-center gap-1">
+                      {renderModerationBadge(post)}
+                      <span
+                        className={`text-[10px] font-semibold ${
+                          post.status === 'HIDDEN' ? 'text-rose-600' : 'text-slate-500'
+                        }`}
+                      >
+                        {post.status === 'HIDDEN'
+                          ? 'Đang ẩn'
+                          : post.recommendationStatus === 'INELIGIBLE'
+                            ? 'Hạn chế gợi ý'
+                            : 'Hiển thị'}
                       </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-lg bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700 border border-rose-200">
-                        Đã ẩn
-                      </span>
-                    )}
+                    </div>
                   </td>
 
                   {/* Created Date */}
@@ -221,34 +272,47 @@ export function FeedPostsTable({
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => onViewPost(post)}
-                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
-                      >
-                        Xem
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onToggleStatus(post.id, post.status)}
-                        className={`rounded-lg border px-2.5 py-1 text-xs font-bold transition ${
-                          post.status === 'HIDDEN'
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                            : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
-                        }`}
-                      >
-                        {post.status === 'HIDDEN' ? (
-                          <>
-                            <Eye className="inline h-3 w-3 mr-1" />
-                            <span>Hiện lại</span>
-                          </>
-                        ) : (
-                          <>
-                            <EyeOff className="inline h-3 w-3 mr-1" />
-                            <span>Ẩn bài</span>
-                          </>
-                        )}
-                      </button>
+                      {isPendingReview ? (
+                        <button
+                          type="button"
+                          onClick={() => onViewPost(post)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-bold text-teal-800 hover:bg-teal-100 transition"
+                        >
+                          <CheckCircle2 className="h-3 w-3" />
+                          <span>Kiểm duyệt</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => onViewPost(post)}
+                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
+                        >
+                          Chi tiết
+                        </button>
+                      )}
+                      {isApproved && (
+                        <button
+                          type="button"
+                          onClick={() => onToggleStatus(post.id, post.status)}
+                          className={`rounded-lg border px-2.5 py-1 text-xs font-bold transition ${
+                            post.status === 'HIDDEN'
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                              : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                          }`}
+                        >
+                          {post.status === 'HIDDEN' ? (
+                            <>
+                              <Eye className="inline h-3 w-3 mr-1" />
+                              <span>Hiện lại</span>
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff className="inline h-3 w-3 mr-1" />
+                              <span>Ẩn bài</span>
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -260,4 +324,3 @@ export function FeedPostsTable({
     </div>
   );
 }
-

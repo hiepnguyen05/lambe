@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 
 import '../../application/chat_attachment_service.dart';
 
+import 'package:mobile/core/routing/app_mode.dart';
+import 'package:mobile/core/routing/app_mode_provider.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/widgets/app_dialog.dart';
 import 'package:mobile/features/shared/auth/di/auth_providers.dart';
@@ -362,7 +364,12 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
   Widget build(BuildContext context) {
     final roomState = ref.watch(chatRoomNotifierProvider(_params));
     final notifier = ref.read(chatRoomNotifierProvider(_params).notifier);
-    final currentUserId = ref.watch(authNotifierProvider).valueOrNull?.id ?? '';
+    final currentUser = ref.watch(authNotifierProvider).valueOrNull;
+    final currentUserId = currentUser?.id ?? '';
+    final appMode = currentUser == null
+        ? null
+        : ref.watch(appModeProvider(currentUser.id)).valueOrNull;
+    final isProviderMode = appMode == AppMode.provider;
     final peer = roomState.peer ?? widget.peer;
     final peerName = peer?.displayName ?? 'Chuyên viên Lambe';
 
@@ -534,8 +541,26 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
                               isMine: isMine,
                               onRetry: onRetry,
                               onSelectService: () {
-                                // Chuyển tới dịch vụ / đặt lịch
-                                context.push('/services');
+                                if (isProviderMode) {
+                                  final serviceId = msg.providerServiceId;
+                                  if (serviceId != null &&
+                                      serviceId.isNotEmpty) {
+                                    context.push('/provider/services/$serviceId');
+                                  } else {
+                                    context.push('/provider/services');
+                                  }
+                                } else {
+                                  final targetProviderId =
+                                      roomState.providerId ?? widget.providerId;
+                                  if (targetProviderId != null &&
+                                      targetProviderId.isNotEmpty) {
+                                    context.push(
+                                      '/providers/$targetProviderId/public',
+                                    );
+                                  } else {
+                                    context.push('/services');
+                                  }
+                                }
                               },
                             );
                             break;
@@ -543,9 +568,12 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen>
                             bubble = ChatOrderEventBubble(
                               message: msg,
                               onViewOrder: () {
-                                if (msg.orderId != null &&
-                                    msg.orderId!.isNotEmpty) {
-                                  context.push('/appointments');
+                                final orderId = msg.orderId;
+                                if (orderId != null && orderId.isNotEmpty) {
+                                  final targetRoute = isProviderMode
+                                      ? '/provider/orders/$orderId'
+                                      : '/appointments/$orderId';
+                                  context.push(targetRoute);
                                 }
                               },
                             );

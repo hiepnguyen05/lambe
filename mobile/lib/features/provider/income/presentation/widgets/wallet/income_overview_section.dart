@@ -1,19 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
+import 'package:mobile/features/provider/workspace/application/provider_earnings_summary.dart';
 
 class IncomeOverviewSection extends StatelessWidget {
   final double netIncome;
   final double grossIncome;
   final double commissionDeducted;
+  final double platformSubsidy;
   final int completedOrders;
   final bool isLoading;
+  final IncomePeriod selectedPeriod;
+  final ValueChanged<IncomePeriod>? onPeriodChanged;
 
   const IncomeOverviewSection({
     super.key,
     this.netIncome = 0.0,
     this.grossIncome = 0.0,
     this.commissionDeducted = 0.0,
+    this.platformSubsidy = 0.0,
     this.completedOrders = 0,
     this.isLoading = false,
+    this.selectedPeriod = IncomePeriod.today,
+    this.onPeriodChanged,
   });
 
   @override
@@ -24,7 +32,6 @@ class IncomeOverviewSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Section Header
         Text(
           'Tổng quan thu nhập',
           style: theme.textTheme.titleMedium?.copyWith(
@@ -34,7 +41,7 @@ class IncomeOverviewSection extends StatelessWidget {
         ),
         const SizedBox(height: 10),
 
-        // Segmented Filter Tabs (Responsive)
+        // Segmented Filter Tabs
         Container(
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
@@ -43,15 +50,35 @@ class IncomeOverviewSection extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Expanded(child: _buildTab('Hôm nay', true, context)),
-              Expanded(child: _buildTab('Tuần này', false, context)),
-              Expanded(child: _buildTab('Tháng này', false, context)),
+              Expanded(
+                child: _buildTab(
+                  'Hôm nay',
+                  IncomePeriod.today,
+                  selectedPeriod == IncomePeriod.today,
+                  context,
+                ),
+              ),
+              Expanded(
+                child: _buildTab(
+                  'Tuần này',
+                  IncomePeriod.week,
+                  selectedPeriod == IncomePeriod.week,
+                  context,
+                ),
+              ),
+              Expanded(
+                child: _buildTab(
+                  'Tháng này',
+                  IncomePeriod.month,
+                  selectedPeriod == IncomePeriod.month,
+                  context,
+                ),
+              ),
             ],
           ),
         ),
         const SizedBox(height: 14),
 
-        // Stats Grid
         // Card Thu Thực Tế (Net Income)
         Container(
           padding: const EdgeInsets.all(16),
@@ -109,7 +136,7 @@ class IncomeOverviewSection extends StatelessWidget {
                                 ),
                               ),
                             )
-                          else
+                          else ...[
                             Text(
                               '${_formatCurrency(netIncome)} đ',
                               style: theme.textTheme.titleMedium?.copyWith(
@@ -119,6 +146,17 @@ class IncomeOverviewSection extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (platformSubsidy > 0)
+                              Text(
+                                'Đã gồm +${_formatCurrency(platformSubsidy)} đ trợ giá sàn',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: colorScheme.primary,
+                                  fontSize: 11,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
                         ],
                       ),
                     ),
@@ -176,24 +214,33 @@ class IncomeOverviewSection extends StatelessWidget {
     );
   }
 
-  Widget _buildTab(String text, bool isActive, BuildContext context) {
+  Widget _buildTab(
+    String text,
+    IncomePeriod period,
+    bool isActive,
+    BuildContext context,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: isActive ? colorScheme.primary : Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: isActive
-              ? colorScheme.onPrimary
-              : colorScheme.onSurfaceVariant,
-          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onPeriodChanged != null ? () => onPeriodChanged!(period) : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isActive ? colorScheme.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: isActive
+                ? colorScheme.onPrimary
+                : colorScheme.onSurfaceVariant,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+          ),
         ),
       ),
     );
@@ -269,11 +316,6 @@ class IncomeOverviewSection extends StatelessWidget {
     );
   }
 
-  String _formatCurrency(double amount) {
-    if (amount == 0) return '0';
-    return amount.toInt().toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]}.',
-    );
-  }
+  String _formatCurrency(double amount) =>
+      CurrencyUtils.vndDecimal.format(amount.round());
 }

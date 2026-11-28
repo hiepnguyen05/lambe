@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 
 import '../../../domain/entities/wallet_entity.dart';
 
@@ -298,10 +299,6 @@ class WalletBalanceCard extends StatelessWidget {
     );
   }
 
-  String _formatCurrency(double amount) {
-    return amount.toInt().toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]}.',
-    );
-  }
+  String _formatCurrency(double amount) =>
+      CurrencyUtils.vndDecimal.format(amount.toInt());
 }

@@ -108,6 +108,27 @@ export class OrderReviewService {
     return this.findReviews({ providerId, memberId }, query);
   }
 
+  async providerSummaries(providerIds: readonly string[]) {
+    const uniqueIds = [...new Set(providerIds)];
+    const summaries = new Map<string, ReviewSummary>(
+      uniqueIds.map((id) => [id, { count: 0, averageRating: null }]),
+    );
+    if (uniqueIds.length === 0) return summaries;
+    const groups = await this.prisma.orderReview.groupBy({
+      by: ['providerId'],
+      where: { providerId: { in: uniqueIds } },
+      _count: { id: true },
+      _avg: { rating: true },
+    });
+    for (const group of groups) {
+      summaries.set(group.providerId, {
+        count: group._count.id,
+        averageRating: group._avg.rating,
+      });
+    }
+    return summaries;
+  }
+
   async memberSummaries(memberIds: readonly string[]) {
     const uniqueIds = [...new Set(memberIds)];
     const summaries = new Map<string, ReviewSummary>(

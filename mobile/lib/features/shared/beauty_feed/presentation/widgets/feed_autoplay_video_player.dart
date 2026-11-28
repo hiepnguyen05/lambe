@@ -8,12 +8,14 @@ class FeedAutoplayVideoPlayer extends StatefulWidget {
   final String url;
   final double? duration;
   final VoidCallback? onFullscreen;
+  final bool isSlideActive;
 
   const FeedAutoplayVideoPlayer({
     super.key,
     required this.url,
     this.duration,
     this.onFullscreen,
+    this.isSlideActive = true,
   });
 
   @override
@@ -25,7 +27,9 @@ class _FeedAutoplayVideoPlayerState extends State<FeedAutoplayVideoPlayer>
     with WidgetsBindingObserver {
   VideoPlayerController? _controller;
   ScrollPosition? _scrollPosition;
+  ScrollPosition? _horizontalScrollPosition;
   bool _initialized = false;
+  bool _isInitializing = false;
   bool _isPlaying = false;
   bool _userWantsPlay = true;
   bool _isMuted = false;
@@ -36,7 +40,9 @@ class _FeedAutoplayVideoPlayerState extends State<FeedAutoplayVideoPlayer>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initPlayer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _checkVisibility();
+    });
   }
 
   @override
@@ -50,46 +56,61 @@ class _FeedAutoplayVideoPlayerState extends State<FeedAutoplayVideoPlayer>
         unawaited(oldController.dispose());
       }
       _initialized = false;
+      _isInitializing = false;
       _isPlaying = false;
       _hasError = false;
-      _initPlayer();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _checkVisibility();
+      });
+    } else if (oldWidget.isSlideActive != widget.isSlideActive) {
+      _checkVisibility();
     }
   }
 
-  ScrollPosition? _findVerticalScrollPosition() {
-    ScrollPosition? position;
+  ({ScrollPosition? vertical, ScrollPosition? horizontal}) _findScrollPositions() {
+    ScrollPosition? vertical;
+    ScrollPosition? horizontal;
     context.visitAncestorElements((element) {
-      final widget = element.widget;
-      if (widget is Scrollable) {
-        final axis = widget.axisDirection;
-        if (axis == AxisDirection.down || axis == AxisDirection.up) {
-          final state = (element as StatefulElement).state;
-          if (state is ScrollableState) {
-            position = state.position;
-            return false;
+      final w = element.widget;
+      if (w is Scrollable) {
+        final axis = w.axisDirection;
+        final state = (element as StatefulElement).state;
+        if (state is ScrollableState) {
+          if (vertical == null &&
+              (axis == AxisDirection.down || axis == AxisDirection.up)) {
+            vertical = state.position;
+          } else if (horizontal == null &&
+              (axis == AxisDirection.left || axis == AxisDirection.right)) {
+            horizontal = state.position;
           }
+          if (vertical != null && horizontal != null) return false;
         }
       }
       return true;
     });
-    return position;
+    return (vertical: vertical, horizontal: horizontal);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final newPosition = _findVerticalScrollPosition();
-    if (_scrollPosition != newPosition) {
+    final positions = _findScrollPositions();
+    if (_scrollPosition != positions.vertical) {
       _scrollPosition?.removeListener(_checkVisibility);
-      _scrollPosition = newPosition;
+      _scrollPosition = positions.vertical;
       _scrollPosition?.addListener(_checkVisibility);
+    }
+    if (_horizontalScrollPosition != positions.horizontal) {
+      _horizontalScrollPosition?.removeListener(_checkVisibility);
+      _horizontalScrollPosition = positions.horizontal;
+      _horizontalScrollPosition?.addListener(_checkVisibility);
     }
 
     _checkVisibility();
   }
 
   bool _computeIsVisible() {
-    if (!mounted || _isFullscreenOpen) return false;
+    if (!mounted || _isFullscreenOpen || !widget.isSlideActive) return false;
 
     // Check if TickerMode is enabled (false when tab is switched away)
     if (!TickerMode.valuesOf(context).enabled) return false;
@@ -107,30 +128,50 @@ class _FeedAutoplayVideoPlayerState extends State<FeedAutoplayVideoPlayer>
 
     try {
       final origin = renderObject.localToGlobal(Offset.zero);
+      final boxWidth = renderObject.size.width;
       final boxHeight = renderObject.size.height;
-      final screenHeight = MediaQuery.sizeOf(context).height;
+      final screenSize = MediaQuery.sizeOf(context);
+      final screenWidth = screenSize.width;
+      final screenHeight = screenSize.height;
 
-      if (boxHeight <= 0 || screenHeight <= 0) return false;
+      if (boxHeight <= 0 ||
+          boxWidth <= 0 ||
+          screenHeight <= 0 ||
+          screenWidth <= 0) {
+        return false;
+      }
 
-      // Calculate how much of the video is visible inside the screen [0, screenHeight]
+      // Check both vertical (feed scroll) and horizontal (PageView carousel) viewport overlap
       final visibleTop = origin.dy.clamp(0.0, screenHeight);
       final visibleBottom = (origin.dy + boxHeight).clamp(0.0, screenHeight);
       final visibleHeight = (visibleBottom - visibleTop).clamp(0.0, boxHeight);
 
-      // Video is considered visible if at least 25% of its height OR at least 120 pixels are on screen
-      final isVisibleOnScreen =
-          visibleHeight >= 120 || visibleHeight >= (boxHeight * 0.25);
+      final visibleLeft = origin.dx.clamp(0.0, screenWidth);
+      final visibleRight = (origin.dx + boxWidth).clamp(0.0, screenWidth);
+      final visibleWidth = (visibleRight - visibleLeft).clamp(0.0, boxWidth);
 
-      return isVisibleOnScreen;
+      final isVerticallyVisible =
+          visibleHeight >= 120 || visibleHeight >= (boxHeight * 0.25);
+      final isHorizontallyVisible =
+          visibleWidth >= 120 || visibleWidth >= (boxWidth * 0.25);
+
+      return isVerticallyVisible && isHorizontallyVisible;
     } catch (_) {
       return false;
     }
   }
 
   void _checkVisibility() {
-    if (!mounted || _controller == null || !_initialized) return;
+    if (!mounted) return;
 
     final isVisible = _computeIsVisible();
+
+    if (isVisible && _controller == null && !_isInitializing && !_hasError) {
+      unawaited(_initPlayer());
+      return;
+    }
+
+    if (_controller == null || !_initialized) return;
 
     if (!isVisible) {
       if (_controller!.value.isPlaying) {
@@ -146,7 +187,8 @@ class _FeedAutoplayVideoPlayerState extends State<FeedAutoplayVideoPlayer>
   }
 
   Future<void> _initPlayer() async {
-    if (!mounted) return;
+    if (!mounted || _isInitializing) return;
+    _isInitializing = true;
     setState(() {
       _hasError = false;
       _initialized = false;
@@ -179,6 +221,8 @@ class _FeedAutoplayVideoPlayerState extends State<FeedAutoplayVideoPlayer>
           _initialized = false;
         });
       }
+    } finally {
+      _isInitializing = false;
     }
   }
 
@@ -254,6 +298,7 @@ class _FeedAutoplayVideoPlayerState extends State<FeedAutoplayVideoPlayer>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _scrollPosition?.removeListener(_checkVisibility);
+    _horizontalScrollPosition?.removeListener(_checkVisibility);
     final controller = _controller;
     _controller = null;
     if (controller != null) {

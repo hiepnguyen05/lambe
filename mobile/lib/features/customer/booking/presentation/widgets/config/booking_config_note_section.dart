@@ -42,16 +42,16 @@ class _BookingConfigNoteSectionState
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF0F172A).withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -77,7 +77,7 @@ class _BookingConfigNoteSectionState
               const Text(
                 'Ghi chú cho chuyên viên',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 15.5,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF0B1C30),
                   letterSpacing: -0.2,
@@ -87,31 +87,36 @@ class _BookingConfigNoteSectionState
               const Text(
                 '(Tùy chọn)',
                 style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 12,
                   color: Color(0xFF94A3B8),
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           TextField(
             controller: _controller,
-            maxLines: 3,
-            maxLength: 500,
+            maxLines: 2,
+            maxLength: 300,
             onChanged: (val) {
               ref.read(bookingDraftProvider.notifier).setCustomerNote(val);
             },
+            style: const TextStyle(
+              fontSize: 13.5,
+              color: Color(0xFF0B1C30),
+            ),
             decoration: InputDecoration(
-              hintText: 'Ví dụ: Nhà trong ngõ hẻm khó tìm, tóc dày cần làm kỹ, vui lòng mang thêm khăn...',
+              counterText: '',
+              hintText: 'Lưu ý cho chuyên viên (chỉ đường, dặn dò trước khi đến...)',
               hintStyle: const TextStyle(
                 fontSize: 13,
                 color: Color(0xFF94A3B8),
-                height: 1.4,
+                height: 1.35,
               ),
               filled: true,
               fillColor: const Color(0xFFF8FAFC),
-              contentPadding: const EdgeInsets.all(14),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: Color(0xFFE2E8F0)),

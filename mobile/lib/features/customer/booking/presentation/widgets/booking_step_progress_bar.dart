@@ -7,7 +7,7 @@ class BookingStepProgressBar extends StatelessWidget
   const BookingStepProgressBar({super.key, required this.currentStep});
 
   @override
-  Size get preferredSize => const Size.fromHeight(64);
+  Size get preferredSize => const Size.fromHeight(48);
 
   @override
   Widget build(BuildContext context) {
@@ -17,27 +17,27 @@ class BookingStepProgressBar extends StatelessWidget
     const inactiveTextColor = Color(0xFF94A3B8);
 
     return Container(
-      height: 64,
+      height: 48,
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(
           bottom: BorderSide(color: Color(0xFFF1F5F9), width: 1.2),
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 3),
       child: Stack(
         alignment: Alignment.center,
         children: [
           // 1. Background Connecting Lines
           Positioned(
-            top: 11,
+            top: 8,
             left: 28,
             right: 28,
             child: Row(
               children: [
                 Expanded(
                   child: Container(
-                    height: 2.5,
+                    height: 2,
                     decoration: BoxDecoration(
                       color: currentStep >= 2 ? completedColor : inactiveColor,
                       borderRadius: BorderRadius.circular(2),
@@ -46,7 +46,7 @@ class BookingStepProgressBar extends StatelessWidget
                 ),
                 Expanded(
                   child: Container(
-                    height: 2.5,
+                    height: 2,
                     decoration: BoxDecoration(
                       color: currentStep >= 3 ? completedColor : inactiveColor,
                       borderRadius: BorderRadius.circular(2),
@@ -102,41 +102,33 @@ class BookingStepProgressBar extends StatelessWidget
     Color badgeBg;
     Widget badgeContent;
     BoxBorder? border;
-    List<BoxShadow>? shadows;
 
     if (isCompleted) {
       badgeBg = primaryColor;
-      border = Border.all(color: Colors.white, width: 2);
+      border = Border.all(color: Colors.white, width: 1.5);
       badgeContent = const Icon(
         Icons.check_rounded,
-        size: 13,
+        size: 11,
         color: Colors.white,
       );
     } else if (isCurrent) {
       badgeBg = primaryColor;
-      border = Border.all(color: Colors.white, width: 1.8);
-      shadows = [
-        BoxShadow(
-          color: primaryColor.withValues(alpha: 0.3),
-          blurRadius: 6,
-          offset: const Offset(0, 2),
-        ),
-      ];
+      border = Border.all(color: Colors.white, width: 1.5);
       badgeContent = Text(
         '$step',
         style: const TextStyle(
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: FontWeight.w800,
           color: Colors.white,
         ),
       );
     } else {
       badgeBg = const Color(0xFFF8FAFC);
-      border = Border.all(color: inactiveColor, width: 1.2);
+      border = Border.all(color: inactiveColor, width: 1);
       badgeContent = Text(
         '$step',
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: FontWeight.w600,
           color: inactiveTextColor,
         ),
@@ -147,22 +139,21 @@ class BookingStepProgressBar extends StatelessWidget
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 24,
-          height: 24,
+          width: 18,
+          height: 18,
           decoration: BoxDecoration(
             color: badgeBg,
             shape: BoxShape.circle,
             border: border,
-            boxShadow: shadows,
           ),
           alignment: Alignment.center,
           child: badgeContent,
         ),
-        const SizedBox(height: 3),
+        const SizedBox(height: 2),
         Text(
           label,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 10.5,
             fontWeight: isCurrent
                 ? FontWeight.w700
                 : (isCompleted ? FontWeight.w600 : FontWeight.w500),

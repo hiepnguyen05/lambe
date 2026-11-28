@@ -2,12 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mobile/core/utils/uuid_utils.dart';
 
-final secureStorageProvider = Provider<SecureStorageService>((ref) {
-  return SecureStorageService(
-    const FlutterSecureStorage(
-      aOptions: AndroidOptions(encryptedSharedPreferences: true),
-    ),
+final flutterSecureStorageProvider = Provider<FlutterSecureStorage>((ref) {
+  return const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
+});
+
+final secureStorageProvider = Provider<SecureStorageService>((ref) {
+  return SecureStorageService(ref.watch(flutterSecureStorageProvider));
 });
 
 class SecureStorageService {

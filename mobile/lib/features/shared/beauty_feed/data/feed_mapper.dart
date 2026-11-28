@@ -88,11 +88,17 @@ FeedPost feedPostFromJson(Map<String, dynamic> json, {bool managed = false}) {
     services: (json['services'] as List)
         .map((v) {
           final row = feedMap(v), service = feedMap(row['service']);
+          final category = service['category'];
+          final categorySlug = category is Map
+              ? category['slug'] as String?
+              : service['categorySlug'] as String?;
           return FeedService(
             id: feedString(row['id']),
             serviceId: feedString(service['id']),
             name: feedString(service['name']),
             status: feedString(row['status']),
+            categoryId: service['categoryId'] as String?,
+            categorySlug: categorySlug,
             price: _count(row['priceAmount']),
             duration: row['durationMinutes'] as int?,
           );

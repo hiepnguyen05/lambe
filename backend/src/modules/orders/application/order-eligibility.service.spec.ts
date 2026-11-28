@@ -135,6 +135,24 @@ describe('booking eligibility', () => {
       NotFoundException,
     );
   });
+  it('starts independent address and offering reads together for a booking quote', async () => {
+    const { service, prisma } = context();
+    let resolveAddress:
+      | ((value: { id: string; latitude: number; longitude: number }) => void)
+      | undefined;
+    prisma.customerAddress.findFirst.mockReturnValue(
+      new Promise((resolve) => {
+        resolveAddress = resolve;
+      }),
+    );
+    const loading = service.load('customer', dto);
+    expect(prisma.providerService.findFirst).toHaveBeenCalledTimes(1);
+    resolveAddress?.({ id: 'address', ...point });
+    await expect(loading).resolves.toHaveProperty(
+      'providerService.id',
+      'service',
+    );
+  });
   it('does not offer appointments when funds are insufficient', async () => {
     const { service, provider } = context();
     provider.wallet.heldAmount = 100000;

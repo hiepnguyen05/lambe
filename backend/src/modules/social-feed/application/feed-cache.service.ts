@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { raceWithTimeout } from '../../../common/async/race-with-timeout';
 import {
   CACHE_STORE,
   type CacheStore,
@@ -203,27 +204,21 @@ export class FeedCacheService {
   }
 
   private async bounded<T>(operation: Promise<T>, fallback: T): Promise<T> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const at = performance.now();
     try {
-      return await Promise.race([
+      return await raceWithTimeout(
         operation,
-        new Promise<T>((resolve) => {
-          timer = setTimeout(
-            () => {
-              this.metrics.timeouts++;
-              resolve(fallback);
-            },
-            this.config.get<number>('cache.feedTimeoutMs', 100),
-          );
-        }),
-      ]);
+        this.config.get<number>('cache.feedTimeoutMs', 100),
+        () => {
+          this.metrics.timeouts++;
+          return fallback;
+        },
+      );
     } catch {
       this.metrics.errors++;
       return fallback;
     } finally {
       this.metrics.operationMs += performance.now() - at;
-      if (timer) clearTimeout(timer);
     }
   }
 }

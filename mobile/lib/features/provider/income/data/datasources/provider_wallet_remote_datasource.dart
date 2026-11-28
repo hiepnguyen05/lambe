@@ -2,11 +2,12 @@ import 'package:dio/dio.dart';
 
 import 'package:mobile/core/constants/api_endpoints.dart';
 import 'package:mobile/core/network/api_response_parser.dart';
+import 'package:mobile/core/network/network_exceptions.dart';
 
 abstract class ProviderWalletRemoteDataSource {
   Future<Map<String, dynamic>> getWalletBalance();
 
-  Future<List<dynamic>> getTransactions({int limit = 50, int offset = 0});
+  Future<List<dynamic>> getTransactions({int limit = 50});
 
   Future<Map<String, dynamic>> createMomoTopUp(
     double amount, {
@@ -26,20 +27,35 @@ class DioProviderWalletRemoteDataSource
 
   @override
   Future<Map<String, dynamic>> getWalletBalance() async {
-    final response = await _dio.get(ApiEndpoints.providerWallet);
-    return ApiResponseParser.dataMap(response);
+    try {
+      final response = await _dio.get(ApiEndpoints.providerWallet);
+      return ApiResponseParser.dataMap(response);
+    } on DioException catch (e) {
+      throw Exception(
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể tải thông tin ví.',
+        ),
+      );
+    }
   }
 
   @override
-  Future<List<dynamic>> getTransactions({
-    int limit = 50,
-    int offset = 0,
-  }) async {
-    final response = await _dio.get(
-      ApiEndpoints.providerWalletTransactions,
-      queryParameters: {'limit': limit, 'offset': offset},
-    );
-    return ApiResponseParser.dataList(response);
+  Future<List<dynamic>> getTransactions({int limit = 50}) async {
+    try {
+      final response = await _dio.get(
+        ApiEndpoints.providerWalletTransactions,
+        queryParameters: {'limit': limit},
+      );
+      return ApiResponseParser.dataList(response);
+    } on DioException catch (e) {
+      throw Exception(
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể tải lịch sử giao dịch ví.',
+        ),
+      );
+    }
   }
 
   @override
@@ -47,28 +63,55 @@ class DioProviderWalletRemoteDataSource
     double amount, {
     String? redirectUrl,
   }) async {
-    final response = await _dio.post(
-      ApiEndpoints.providerMomoTopup,
-      data: {
-        'amount': amount,
-        if (redirectUrl != null) 'redirectUrl': redirectUrl,
-      },
-    );
-    return ApiResponseParser.dataMap(response);
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.providerMomoTopup,
+        data: {
+          'amount': amount,
+          if (redirectUrl != null) 'redirectUrl': redirectUrl,
+        },
+      );
+      return ApiResponseParser.dataMap(response);
+    } on DioException catch (e) {
+      throw Exception(
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể tạo giao dịch nạp MoMo.',
+        ),
+      );
+    }
   }
 
   @override
   Future<Map<String, dynamic>> createSepayTopUp(double amount) async {
-    final response = await _dio.post(
-      ApiEndpoints.providerSepayTopup,
-      data: {'amount': amount},
-    );
-    return ApiResponseParser.dataMap(response);
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.providerSepayTopup,
+        data: {'amount': amount},
+      );
+      return ApiResponseParser.dataMap(response);
+    } on DioException catch (e) {
+      throw Exception(
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể tạo giao dịch nạp SePay.',
+        ),
+      );
+    }
   }
 
   @override
   Future<Map<String, dynamic>> getTopUpDetail(String id) async {
-    final response = await _dio.get(ApiEndpoints.providerTopUpDetail(id));
-    return ApiResponseParser.dataMap(response);
+    try {
+      final response = await _dio.get(ApiEndpoints.providerTopUpDetail(id));
+      return ApiResponseParser.dataMap(response);
+    } on DioException catch (e) {
+      throw Exception(
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể kiểm tra trạng thái nạp tiền.',
+        ),
+      );
+    }
   }
 }

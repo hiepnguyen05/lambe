@@ -7,7 +7,10 @@ import { Prisma, ServiceOrderStatus, WalletHoldStatus } from '@prisma/client';
 import type { RequestMetadata } from '../../../../common/http/types/request-metadata.type';
 import { AuditService } from '../../../../infrastructure/audit/audit.service';
 import { PrismaService } from '../../../../infrastructure/persistence/postgres/prisma.service';
-import type { DecidePaymentDisputeDto } from '../../dto/order.dto';
+import type {
+  CloseUnpaidPaymentDisputeDto,
+  DecidePaymentDisputeDto,
+} from '../../dto/order.dto';
 import {
   orderInclude,
   presentForProvider,
@@ -193,16 +196,7 @@ export class OrderPaymentDisputeService {
     request: RequestMetadata,
   ) {
     const result = await this.prisma.$transaction(async (tx) => {
-      const current = await this.lockAndLoad(tx, orderId);
-      if (
-        current.status !== ServiceOrderStatus.PAYMENT_DISPUTE &&
-        current.status !== ServiceOrderStatus.DISPUTED
-      )
-        throw new ConflictException(
-          'Đơn không có tranh chấp thanh toán đang xử lý.',
-        );
-      if (current.walletHold?.status !== WalletHoldStatus.ACTIVE)
-        throw new ConflictException('Khoản hoa hồng tạm giữ không hợp lệ.');
+      const current = await this.lockActivePaymentDispute(tx, orderId);
       if (
         dto.decision === 'CONFIRM_UNPAID' &&
         current.status === ServiceOrderStatus.DISPUTED
@@ -263,6 +257,78 @@ export class OrderPaymentDisputeService {
       return { id: orderId, status: toStatus };
     });
     return { success: true, data: result };
+  }
+
+  async closeUnpaid(
+    accountId: string,
+    orderId: string,
+    dto: CloseUnpaidPaymentDisputeDto,
+    request: RequestMetadata,
+  ) {
+    const result = await this.prisma.$transaction(async (tx) => {
+      const current = await this.lockActivePaymentDispute(tx, orderId);
+      await this.wallet.release(tx, current, 'PAYMENT_DISPUTE_CLOSED_UNPAID');
+      await tx.voucherRedemption.updateMany({
+        where: { orderId, status: 'RESERVED' },
+        data: { status: 'RELEASED' },
+      });
+      await tx.serviceOrder.update({
+        where: { id: orderId },
+        data: {
+          status: ServiceOrderStatus.CANCELLED,
+          cancelledAt: new Date(),
+          paymentDisputeDecidedAt: new Date(),
+          paymentDisputeDecisionNote: dto.note,
+          statusHistory: {
+            create: {
+              fromStatus: current.status,
+              toStatus: ServiceOrderStatus.CANCELLED,
+              reason: 'PAYMENT_DISPUTE_CLOSED_UNPAID',
+            },
+          },
+        },
+      });
+      await tx.orderNotification.createMany({
+        data: [current.customerId, orderServingUserId(current)].map(
+          (userId) => ({
+            userId,
+            orderId,
+            event: 'PAYMENT_DISPUTE_CLOSED_UNPAID',
+          }),
+        ),
+      });
+      await this.audit.record(
+        {
+          actorInternalAccountId: accountId,
+          action: 'ORDER_PAYMENT_DISPUTE_CLOSED_UNPAID',
+          resourceType: 'ServiceOrder',
+          resourceId: orderId,
+          result: 'SUCCESS',
+          metadata: { note: dto.note },
+        },
+        request,
+        tx,
+      );
+      return { id: orderId, status: ServiceOrderStatus.CANCELLED };
+    });
+    return { success: true, data: result };
+  }
+
+  private async lockActivePaymentDispute(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+  ) {
+    const current = await this.lockAndLoad(tx, orderId);
+    if (
+      current.status !== ServiceOrderStatus.PAYMENT_DISPUTE &&
+      current.status !== ServiceOrderStatus.DISPUTED
+    )
+      throw new ConflictException(
+        'Đơn không có tranh chấp thanh toán đang xử lý.',
+      );
+    if (current.walletHold?.status !== WalletHoldStatus.ACTIVE)
+      throw new ConflictException('Khoản hoa hồng tạm giữ không hợp lệ.');
+    return current;
   }
 
   private async lockAndLoad(

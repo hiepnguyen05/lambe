@@ -18,9 +18,6 @@ export const ROUTES = {
     INTERNAL_ACCOUNTS: '/admin/internal-accounts',
     AUDIT_LOGS: '/admin/audit-logs',
   },
-  PROVIDER: {
-    REGISTER: '/provider/register',
-  }
 };
 
 export function isAdminRoute(pathname: string): boolean {

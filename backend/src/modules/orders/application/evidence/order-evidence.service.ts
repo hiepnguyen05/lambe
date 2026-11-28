@@ -132,7 +132,16 @@ export class OrderEvidenceService {
           select: { id: true, type: true, capturedAt: true },
         });
       });
-      return { success: true, data: evidence };
+      return {
+        success: true,
+        data: {
+          ...evidence,
+          url: this.storage.createPrivateDownloadUrl(
+            uploaded.publicId,
+            uploaded.format,
+          ),
+        },
+      };
     } catch (error) {
       try {
         await this.storage.deleteImage(uploaded.publicId, 'authenticated');
@@ -206,7 +215,13 @@ export class OrderEvidenceService {
   ) {
     if (!allowedStatuses[type].includes(status))
       throw new ConflictException('Trạng thái đơn chưa cho phép tải ảnh này.');
-    if (existing.includes(type))
-      throw new ConflictException('Đơn đã có ảnh bằng chứng cho bước này.');
+    const maxCount = type === OrderEvidenceType.ARRIVAL ? 1 : 5;
+    const existingCount = existing.filter((item) => item === type).length;
+    if (existingCount >= maxCount)
+      throw new ConflictException(
+        maxCount === 1
+          ? 'Đơn đã có ảnh bằng chứng cho bước này.'
+          : 'Đã đạt số lượng ảnh tối đa cho bước này.',
+      );
   }
 }

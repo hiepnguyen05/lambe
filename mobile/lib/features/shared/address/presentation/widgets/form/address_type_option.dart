@@ -23,41 +23,42 @@ class AddressTypeOption extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
           decoration: BoxDecoration(
             color: isSelected
-                ? const Color(0xFF0F766E)
-                : const Color(0xFFF3F4F6),
-            borderRadius: BorderRadius.circular(100),
+                ? const Color(0xFFF0FDFA)
+                : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected ? const Color(0xFF0F766E) : Colors.transparent,
-              width: 1,
+              color: isSelected
+                  ? const Color(0xFF0F766E)
+                  : const Color(0xFFE2E8F0),
+              width: isSelected ? 1.5 : 1,
             ),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: const Color(0xFF0F766E).withValues(alpha: 0.25),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ]
-                : [],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 icon,
-                color: isSelected ? Colors.white : const Color(0xFF6B7280),
-                size: 18,
+                color: isSelected
+                    ? const Color(0xFF0F766E)
+                    : const Color(0xFF64748B),
+                size: 17,
               ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isSelected ? Colors.white : const Color(0xFF4B5563),
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                  fontSize: 14,
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isSelected
+                        ? const Color(0xFF0F766E)
+                        : const Color(0xFF475569),
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ],

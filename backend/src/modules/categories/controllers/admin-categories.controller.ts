@@ -44,9 +44,12 @@ import { InternalRoles } from '../../internal-auth/decorators/internal-roles.dec
 import { InternalJwtAuthGuard } from '../../internal-auth/guards/internal-jwt-auth.guard';
 import { InternalRolesGuard } from '../../internal-auth/guards/internal-roles.guard';
 import type { AuthenticatedInternalAccount } from '../../internal-auth/types/authenticated-internal-account.type';
-import { CategoriesCommandService } from '../application/categories-command.service';
 import { CategoryImageService } from '../application/category-image.service';
 import { CategoriesQueryService } from '../application/categories-query.service';
+import { ChangeCategoryStatusService } from '../application/change-category-status.service';
+import { CreateCategoryService } from '../application/create-category.service';
+import { ReorderCategoriesService } from '../application/reorder-categories.service';
+import { UpdateCategoryService } from '../application/update-category.service';
 import { CategoryQueryDto } from '../dto/category-query.dto';
 import { CreateCategoryDto } from '../dto/create-category.dto';
 import { ReorderCategoriesDto } from '../dto/reorder-categories.dto';
@@ -61,7 +64,10 @@ import { UpdateCategoryDto } from '../dto/update-category.dto';
 export class AdminCategoriesController {
   constructor(
     private readonly categoriesQuery: CategoriesQueryService,
-    private readonly categoriesCommand: CategoriesCommandService,
+    private readonly createCategory: CreateCategoryService,
+    private readonly updateCategory: UpdateCategoryService,
+    private readonly changeCategoryStatus: ChangeCategoryStatusService,
+    private readonly reorderCategories: ReorderCategoriesService,
     private readonly categoryImage: CategoryImageService,
   ) {}
 
@@ -103,11 +109,7 @@ export class AdminCategoriesController {
     @CurrentInternalAccount() account: AuthenticatedInternalAccount,
     @CurrentRequestMetadata() requestMetadata: RequestMetadata,
   ) {
-    return this.categoriesCommand.create(
-      dto,
-      account.accountId,
-      requestMetadata,
-    );
+    return this.createCategory.execute(dto, account.accountId, requestMetadata);
   }
 
   @Patch('reorder')
@@ -123,7 +125,7 @@ export class AdminCategoriesController {
     @CurrentInternalAccount() account: AuthenticatedInternalAccount,
     @CurrentRequestMetadata() requestMetadata: RequestMetadata,
   ) {
-    return this.categoriesCommand.reorder(
+    return this.reorderCategories.execute(
       dto,
       account.accountId,
       requestMetadata,
@@ -147,7 +149,7 @@ export class AdminCategoriesController {
     @CurrentInternalAccount() account: AuthenticatedInternalAccount,
     @CurrentRequestMetadata() requestMetadata: RequestMetadata,
   ) {
-    return this.categoriesCommand.updateStatus(
+    return this.changeCategoryStatus.execute(
       id,
       dto,
       account.accountId,
@@ -171,7 +173,7 @@ export class AdminCategoriesController {
     @CurrentInternalAccount() account: AuthenticatedInternalAccount,
     @CurrentRequestMetadata() requestMetadata: RequestMetadata,
   ) {
-    return this.categoriesCommand.update(
+    return this.updateCategory.execute(
       id,
       dto,
       account.accountId,

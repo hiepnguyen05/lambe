@@ -50,6 +50,10 @@ class FeedRepository {
         if (cursor != null) 'cursor': cursor,
         if (scope.providerId != null) 'providerId': scope.providerId,
         if (scope.serviceId != null) 'serviceId': scope.serviceId,
+        if (scope.categorySlug != null && scope.categorySlug!.trim().isNotEmpty)
+          'categorySlug': scope.categorySlug!.trim(),
+        if (scope.search != null && scope.search!.trim().isNotEmpty)
+          'search': scope.search!.trim(),
       },
       cancelToken: cancel,
     );

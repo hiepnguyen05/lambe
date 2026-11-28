@@ -96,26 +96,17 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
       backgroundColor: AppColors.surface,
       appBar: AppBar(
         backgroundColor: AppColors.surfaceContainerLowest,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
         title: const Text(
           'Tin nhắn',
           style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
             color: AppColors.onBackground,
           ),
         ),
-        centerTitle: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
-            onPressed: () {
-              ref
-                  .read(chatInboxNotifierProvider(widget.view).notifier)
-                  .refresh();
-            },
-          ),
-        ],
       ),
       body: Column(
         children: [

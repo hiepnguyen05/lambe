@@ -7,9 +7,11 @@ import './provider_wallet_state.dart';
 class ProviderWalletNotifier extends StateNotifier<ProviderWalletState> {
   final ProviderWalletRepository _repository;
 
-  ProviderWalletNotifier(this._repository)
+  ProviderWalletNotifier(this._repository, {bool autoLoad = true})
     : super(const ProviderWalletState()) {
-    loadWalletData();
+    if (autoLoad) {
+      loadWalletData();
+    }
   }
 
   Future<void> loadWalletData() async {
@@ -17,8 +19,9 @@ class ProviderWalletNotifier extends StateNotifier<ProviderWalletState> {
     try {
       final responses = await Future.wait([
         _repository.getWalletBalance(),
-        _repository.getTransactions(limit: 10),
+        _repository.getTransactions(limit: 50),
       ]);
+      if (!mounted) return;
 
       final wallet = responses[0] as dynamic;
       final transactions = responses[1] as dynamic;
@@ -29,6 +32,7 @@ class ProviderWalletNotifier extends StateNotifier<ProviderWalletState> {
         transactions: transactions,
       );
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
         error: 'Không thể tải dữ liệu ví. Lỗi: $e',
@@ -41,7 +45,7 @@ class ProviderWalletNotifier extends StateNotifier<ProviderWalletState> {
       final topUp = await _repository.createMomoTopUp(amount);
       return topUp;
     } catch (e) {
-      state = state.copyWith(error: 'Tạo mã MoMo thất bại: $e');
+      if (mounted) state = state.copyWith(error: 'Tạo mã MoMo thất bại: $e');
       return null;
     }
   }
@@ -51,7 +55,7 @@ class ProviderWalletNotifier extends StateNotifier<ProviderWalletState> {
       final topUp = await _repository.createSepayTopUp(amount);
       return topUp;
     } catch (e) {
-      state = state.copyWith(error: 'Tạo giao dịch SePay thất bại: $e');
+      if (mounted) state = state.copyWith(error: 'Tạo giao dịch SePay thất bại: $e');
       return null;
     }
   }
@@ -59,8 +63,16 @@ class ProviderWalletNotifier extends StateNotifier<ProviderWalletState> {
   Future<TopUpResponseEntity?> checkTopUpStatus(String id) async {
     try {
       final topUp = await _repository.getTopUpDetail(id);
+      if (mounted && state.error != null) {
+        state = state.copyWith(error: null);
+      }
       return topUp;
     } catch (e) {
+      if (mounted) {
+        state = state.copyWith(
+          error: e.toString().replaceFirst('Exception: ', ''),
+        );
+      }
       return null;
     }
   }

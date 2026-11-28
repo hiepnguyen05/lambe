@@ -37,7 +37,7 @@ export class InternalAuditQueryService {
       result: query.result,
       createdAt: from || to ? { gte: from, lte: to } : undefined,
     };
-    const [rows, total] = await this.prisma.$transaction([
+    const [rows, total] = await Promise.all([
       this.prisma.auditLog.findMany({
         where,
         select: auditSelect,

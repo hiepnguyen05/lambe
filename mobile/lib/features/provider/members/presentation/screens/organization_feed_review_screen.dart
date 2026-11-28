@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 import '../providers/organization_feed_review_notifier.dart';
 
 class OrganizationFeedReviewScreen extends ConsumerWidget {
@@ -31,14 +32,6 @@ class OrganizationFeedReviewScreen extends ConsumerWidget {
           icon: const Icon(Icons.arrow_back, color: Color(0xFF0B1C30)),
           onPressed: () => context.pop(),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Color(0xFF0B1C30)),
-            onPressed: () => ref
-                .read(organizationFeedReviewProvider.notifier)
-                .loadPendingPosts(),
-          ),
-        ],
       ),
       body: state.isLoading
           ? const Center(
@@ -230,14 +223,10 @@ class OrganizationFeedReviewScreen extends ConsumerWidget {
                                                   decision: 'APPROVE',
                                                 );
                                             if (ok && context.mounted) {
-                                              ScaffoldMessenger.of(context)
-                                                  .showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                      'Đã phê duyệt xuất bản bài viết!'),
-                                                  backgroundColor:
-                                                      Color(0xFF0F766E),
-                                                ),
+                                              await AppDialog.success(
+                                                context,
+                                                message:
+                                                    'Đã phê duyệt xuất bản bài viết!',
                                               );
                                             }
                                           },
@@ -306,11 +295,9 @@ class OrganizationFeedReviewScreen extends ConsumerWidget {
             onPressed: () async {
               final note = noteCtrl.text.trim();
               if (note.length < 5) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Lý do phải có ít nhất 5 ký tự.'),
-                    backgroundColor: Color(0xFFDC2626),
-                  ),
+                await AppDialog.warning(
+                  ctx,
+                  message: 'Lý do phải có ít nhất 5 ký tự.',
                 );
                 return;
               }

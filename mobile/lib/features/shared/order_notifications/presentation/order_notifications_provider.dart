@@ -19,7 +19,7 @@ final orderNotificationsProvider = FutureProvider.autoDispose
     );
 
 final orderNotificationEventsProvider =
-    StreamProvider.autoDispose<OrderNotification>((ref) {
+    StreamProvider<OrderNotification>((ref) {
       final userId = ref.watch(
         authNotifierProvider.select((auth) => auth.valueOrNull?.id),
       );

@@ -94,7 +94,8 @@ async function main() {
         resolve(backend, 'node_modules/jest/bin/jest.js'),
         [
           '--config',
-          './test/jest-booking.json',
+          './test/jest-integration.json',
+          'booking.integration-spec.ts',
           '--runInBand',
           '--silent',
           '--json',

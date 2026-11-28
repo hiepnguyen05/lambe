@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mobile/core/network/dio_client.dart';
+import 'package:mobile/features/shared/auth/di/auth_providers.dart';
 
 import '../application/address_notifier.dart';
 import '../data/datasources/dio_address_remote_datasource.dart';
@@ -18,5 +19,11 @@ final addressNotifierProvider =
     StateNotifierProvider<AddressNotifier, AsyncValue<List<AddressEntity>>>((
       ref,
     ) {
-      return AddressNotifier(ref.watch(addressRepositoryProvider));
+      final userId = ref.watch(
+        authNotifierProvider.select((s) => s.valueOrNull?.id),
+      );
+      return AddressNotifier(
+        ref.watch(addressRepositoryProvider),
+        autoLoad: userId != null,
+      );
     });

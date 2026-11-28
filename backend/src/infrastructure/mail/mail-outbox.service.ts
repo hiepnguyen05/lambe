@@ -40,6 +40,29 @@ export class MailOutboxService {
     });
   }
 
+  async enqueueMany(
+    items: Array<{
+      input: SendMailInput;
+      deduplicationKey: string;
+      expiresAt?: Date;
+    }>,
+    transaction: Prisma.TransactionClient,
+  ): Promise<number> {
+    if (!items.length) return 0;
+    const result = await transaction.mailOutbox.createMany({
+      data: items.map(({ input, deduplicationKey, expiresAt }) => ({
+        deduplicationKey,
+        recipient: input.to,
+        subject: input.subject,
+        text: input.text,
+        html: input.html,
+        expiresAt,
+      })),
+      skipDuplicates: true,
+    });
+    return result.count;
+  }
+
   @Interval(30_000)
   async deliverPending(source = 'scheduled'): Promise<void> {
     if (this.processing) return;

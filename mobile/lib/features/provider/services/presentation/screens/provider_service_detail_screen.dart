@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 
 import '../../di/provider_services_providers.dart';
 import '../../domain/provider_offering.dart';
@@ -42,8 +43,9 @@ class ProviderServiceDetailScreen extends ConsumerWidget {
       if (confirmed != true || !context.mounted) return;
       final success = await controller.setActive(!offering!.active);
       if (success && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã cập nhật trạng thái dịch vụ.')),
+        await AppDialog.success(
+          context,
+          message: 'Đã cập nhật trạng thái dịch vụ.',
         );
       }
     }

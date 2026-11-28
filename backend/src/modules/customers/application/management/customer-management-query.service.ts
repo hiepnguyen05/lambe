@@ -27,7 +27,7 @@ export class CustomerManagementQueryService {
 
   async findAll(query: CustomerQueryDto) {
     const where = this.buildWhere(query);
-    const [customers, total] = await this.prisma.$transaction([
+    const [customers, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -79,7 +79,7 @@ export class CustomerManagementQueryService {
         { resourceType: 'User', resourceId: customerId },
       ],
     };
-    const [activity, total] = await this.prisma.$transaction([
+    const [activity, total] = await Promise.all([
       this.prisma.auditLog.findMany({
         where,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],

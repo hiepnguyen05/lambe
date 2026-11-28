@@ -2,6 +2,8 @@
 
 Cập nhật: 20/11/2026
 
+> Ghi chú 25/11/2026: timeline page index/sorted set và API rebuild đã được gỡ bỏ vì số đo không chứng minh được lợi ích đủ lớn so với độ phức tạp vận hành. Các phần mô tả index bên dưới được giữ làm lịch sử quyết định; cấu hình và cách vận hành hiện hành nằm trong [runbook](feed-cache-runbook.md).
+
 ## Tiến độ triển khai ngày 20/11/2026
 
 Đã triển khai object cache, timeline page index, outbox có trigger DB, worker retry, cảnh báo email, dashboard Admin, cache/prefetch mobile và nền tảng gợi ý theo quy tắc có cờ bật riêng. Cache mặc định tắt. Đã diễn tập migration trên DB thử sạch, kiểm thử PostgreSQL/Redis thật và đo HTTP cục bộ. Chưa triển khai staging/production hay nghiệm thu trên thiết bị thật.

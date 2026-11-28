@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 import '../providers/worker_collections_notifier.dart';
 import '../providers/worker_workspace_notifier.dart';
 
@@ -31,8 +32,7 @@ class WorkerCashCollectionsScreen extends ConsumerWidget {
     }
 
     final state = ref.watch(workerCollectionsProvider(membership.id));
-    final currencyFormatter =
-        NumberFormat.currency(locale: 'vi_VN', symbol: 'đ', decimalDigits: 0);
+    final currencyFormatter = CurrencyUtils.vndCurrency;
     final dtFormat = DateFormat('dd/MM/yyyy HH:mm');
 
     return Scaffold(
@@ -53,14 +53,6 @@ class WorkerCashCollectionsScreen extends ConsumerWidget {
           icon: const Icon(Icons.arrow_back, color: Color(0xFF0B1C30)),
           onPressed: () => context.pop(),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Color(0xFF0B1C30)),
-            onPressed: () => ref
-                .read(workerCollectionsProvider(membership.id).notifier)
-                .loadCollections(),
-          ),
-        ],
       ),
       body: state.isLoading
           ? const Center(

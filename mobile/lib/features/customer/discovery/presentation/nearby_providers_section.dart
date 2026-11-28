@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/core/error/app_failure.dart';
 import 'package:mobile/core/location/user_location_provider.dart';
+import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/widgets/app_specialist_card.dart';
-import 'package:mobile/features/customer/catalog/presentation/providers/services_list_provider.dart';
+import 'package:mobile/features/customer/booking/domain/entities/booking_provider_candidate_entity.dart';
 
 import '../data/provider_discovery_repository.dart';
 import '../domain/provider_search_request.dart';
@@ -13,14 +14,23 @@ import '../domain/provider_search_request.dart';
 class NearbyProvidersSection extends ConsumerStatefulWidget {
   final String? customerAddressId;
   final String? categorySlug;
+  final String? serviceId;
   final int radiusKm;
   final double? minRating;
+  final String? title;
+  final int? maxItems;
+  final bool showViewAll;
+
   const NearbyProvidersSection({
     super.key,
     this.customerAddressId,
     this.categorySlug,
+    this.serviceId,
     this.radiusKm = 30,
     this.minRating,
+    this.title,
+    this.maxItems,
+    this.showViewAll = false,
   });
 
   @override
@@ -30,7 +40,6 @@ class NearbyProvidersSection extends ConsumerStatefulWidget {
 
 class _NearbyProvidersSectionState
     extends ConsumerState<NearbyProvidersSection> {
-  String? _serviceId;
   bool _locating = false;
 
   Future<void> _locate() async {
@@ -45,85 +54,228 @@ class _NearbyProvidersSectionState
   @override
   Widget build(BuildContext context) {
     final location = ref.watch(userLocationProvider);
-    final catalog = ref.watch(allCatalogServicesProvider);
+    final selectedServiceId = widget.serviceId;
+    final asyncRows = _needsLocationPrompt(location)
+        ? null
+        : selectedServiceId != null
+        ? ref.watch(
+            nearbyProvidersProvider(
+              ProviderSearchRequest(
+                serviceId: selectedServiceId,
+                customerAddressId: widget.customerAddressId,
+                latitude: location.latitude,
+                longitude: location.longitude,
+                radiusKm: widget.radiusKm,
+              ),
+            ),
+          )
+        : ref.watch(
+            nearbyHomeProvidersProvider(
+              NearbyHomeRequest(
+                customerAddressId: widget.customerAddressId,
+                latitude: location.latitude,
+                longitude: location.longitude,
+                radiusKm: widget.radiusKm,
+                limit: 10,
+              ),
+            ),
+          );
+    final filteredAll = asyncRows?.valueOrNull == null
+        ? const <BookingProviderCandidateEntity>[]
+        : _filterRows(asyncRows!.valueOrNull!);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Chuyên viên đang hoạt động gần bạn',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        catalog.when(
-          loading: () => const LinearProgressIndicator(),
-          error: (_, __) => _message(
-            'Chưa tải được dịch vụ.',
-            () => ref.invalidate(allCatalogServicesProvider),
-            'Thử lại',
-          ),
-          data: (services) {
-            final choices = services
-                .where(
-                  (s) =>
-                      widget.categorySlug == null ||
-                      s.category.slug == widget.categorySlug,
-                )
-                .toList();
-            if (choices.isEmpty) {
-              return const Text('Chưa có dịch vụ trong danh mục này.');
-            }
-            final selected = choices.any((s) => s.id == _serviceId)
-                ? _serviceId
-                : null;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                DropdownButtonFormField<String>(
-                  key: ValueKey(selected),
-                  initialValue: selected,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Dịch vụ muốn tìm chuyên viên',
-                  ),
-                  items: choices
-                      .map(
-                        (s) => DropdownMenuItem(
-                          value: s.id,
-                          child: Text(s.name, overflow: TextOverflow.ellipsis),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (id) => setState(() => _serviceId = id),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.title ?? 'Chuyên viên đang hoạt động gần bạn',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: AppColors.onSurface,
                 ),
-                const SizedBox(height: 8),
-                if (selected == null)
-                  const Text('Chọn một dịch vụ để xem chuyên viên phù hợp.')
-                else if (widget.customerAddressId == null &&
-                    (!location.isLoaded ||
-                        !location.hasPermission ||
-                        !location.serviceEnabled ||
-                        location.error != null))
-                  _message(
-                    _locationMessage(location),
-                    _locating ? null : _locate,
-                    _locating ? 'Đang định vị...' : 'Lấy vị trí hiện tại',
-                  )
-                else
-                  _results(
-                    ProviderSearchRequest(
-                      serviceId: selected,
-                      customerAddressId: widget.customerAddressId,
-                      latitude: location.latitude,
-                      longitude: location.longitude,
-                      radiusKm: widget.radiusKm,
-                    ),
+              ),
+            ),
+            if (widget.showViewAll && filteredAll.isNotEmpty)
+              TextButton(
+                onPressed: () => _openAllSpecialistsSheet(context, filteredAll),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
                   ),
-              ],
-            );
-          },
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Xem tất cả',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ),
+          ],
         ),
+        const SizedBox(height: 12),
+        if (_needsLocationPrompt(location))
+          _message(
+            _locationMessage(location),
+            _locating ? null : _locate,
+            _locating ? 'Đang định vị...' : 'Lấy vị trí hiện tại',
+          )
+        else if (selectedServiceId != null)
+          _buildServiceResults(location, selectedServiceId)
+        else
+          _buildHomeNearbyResults(location),
       ],
     );
+  }
+
+  List<BookingProviderCandidateEntity> _filterRows(
+    List<BookingProviderCandidateEntity> rows,
+  ) {
+    return rows
+        .where(
+          (p) =>
+              widget.minRating == null ||
+              (p.rating != null && p.rating! >= widget.minRating!),
+        )
+        .toList();
+  }
+
+  Widget _buildSpecialistCard(
+    BuildContext context,
+    BookingProviderCandidateEntity p, {
+    VoidCallback? beforeNavigate,
+  }) {
+    final distanceKm = p.estimatedTravelDistanceKm ?? p.distanceKm;
+    void openProfile() {
+      beforeNavigate?.call();
+      this.context.push('/providers/${p.id}/public');
+    }
+
+    return AppSpecialistCard(
+      key: ValueKey('${p.id}:${p.memberId ?? ''}'),
+      id: p.id,
+      name: p.displayName,
+      specialty: p.experienceYears > 0
+          ? '${p.experienceYears} năm kinh nghiệm'
+          : 'Chuyên viên làm đẹp',
+      avatarUrl: p.avatarUrl ?? '',
+      rating: p.rating,
+      reviewCount: p.reviewCount,
+      distance: '~${distanceKm.toStringAsFixed(1)} km',
+      startingPrice: p.priceAmount,
+      isOnline: p.available,
+      actionText: 'Xem hồ sơ',
+      margin: const EdgeInsets.only(bottom: 10),
+      onBookTap: openProfile,
+      onCardTap: openProfile,
+    );
+  }
+
+  void _openAllSpecialistsSheet(
+    BuildContext context,
+    List<BookingProviderCandidateEntity> specialists,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.72,
+        minChildSize: 0.45,
+        maxChildSize: 0.92,
+        builder: (_, scrollController) => Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.outlineVariant,
+                borderRadius: BorderRadius.circular(100),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Chuyên viên gần bạn (${specialists.length})',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                padding: const EdgeInsets.all(16),
+                itemCount: specialists.length,
+                itemBuilder: (_, index) => _buildSpecialistCard(
+                  sheetContext,
+                  specialists[index],
+                  beforeNavigate: () => Navigator.of(sheetContext).pop(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildServiceResults(UserLocationModel location, String serviceId) {
+    final request = ProviderSearchRequest(
+      serviceId: serviceId,
+      customerAddressId: widget.customerAddressId,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      radiusKm: widget.radiusKm,
+    );
+    return _renderAsyncResults(
+      ref.watch(nearbyProvidersProvider(request)),
+      () => ref.invalidate(nearbyProvidersProvider(request)),
+    );
+  }
+
+  Widget _buildHomeNearbyResults(UserLocationModel location) {
+    final request = NearbyHomeRequest(
+      customerAddressId: widget.customerAddressId,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      radiusKm: widget.radiusKm,
+      limit: 10,
+    );
+    return _renderAsyncResults(
+      ref.watch(nearbyHomeProvidersProvider(request)),
+      () => ref.invalidate(nearbyHomeProvidersProvider(request)),
+    );
+  }
+
+  bool _needsLocationPrompt(UserLocationModel location) {
+    return widget.customerAddressId == null &&
+        (!location.isLoaded ||
+            !location.hasPermission ||
+            !location.serviceEnabled ||
+            location.error != null);
   }
 
   String _locationMessage(UserLocationModel location) {
@@ -137,58 +289,36 @@ class _NearbyProvidersSectionState
     return 'Chưa lấy được vị trí. Vui lòng thử lại hoặc chọn địa chỉ đã lưu.';
   }
 
-  Widget _results(ProviderSearchRequest request) {
-    return ref
-        .watch(nearbyProvidersProvider(request))
-        .when(
-          loading: () => const LinearProgressIndicator(),
-          error: (error, _) => _message(
-            error is AppFailure
-                ? error.message
-                : 'Chưa tìm được chuyên viên. Vui lòng thử lại.',
-            () => ref.invalidate(nearbyProvidersProvider(request)),
-            'Thử lại',
-          ),
-          data: (rows) {
-            final available = rows
-                .where(
-                  (p) =>
-                      p.available &&
-                      (widget.minRating == null ||
-                          (p.rating != null && p.rating! >= widget.minRating!)),
-                )
-                .toList();
-            if (available.isEmpty) {
-              return const Text(
-                'Chưa có chuyên viên phù hợp đang hoạt động. Bạn có thể đặt lịch trước.',
-              );
-            }
-            return Column(
-              children: available
-                  .map(
-                    (p) => AppSpecialistCard(
-                      key: ValueKey('${p.id}:${p.memberId ?? ''}'),
-                      id: p.id,
-                      name: p.displayName,
-                      specialty: 'Dịch vụ đã chọn',
-                      avatarUrl: p.avatarUrl ?? '',
-                      rating: p.rating,
-                      reviewCount: p.reviewCount,
-                      distance:
-                          '${p.distanceKm.toStringAsFixed(1)} km (đường thẳng)',
-                      startingPrice: p.priceAmount,
-                      isOnline: true,
-                      actionText: 'Xem hồ sơ',
-                      onBookTap: () =>
-                          context.push('/providers/${p.id}/public'),
-                      onCardTap: () =>
-                          context.push('/providers/${p.id}/public'),
-                    ),
-                  )
-                  .toList(),
-            );
-          },
+  Widget _renderAsyncResults(
+    AsyncValue<List<BookingProviderCandidateEntity>> asyncRows,
+    VoidCallback onRetry,
+  ) {
+    return asyncRows.when(
+      loading: () => const LinearProgressIndicator(),
+      error: (error, _) => _message(
+        error is AppFailure
+            ? error.message
+            : 'Chưa tìm được chuyên viên. Vui lòng thử lại.',
+        onRetry,
+        'Thử lại',
+      ),
+      data: (rows) {
+        final filtered = _filterRows(rows);
+        if (filtered.isEmpty) {
+          return const Text(
+            'Chưa có chuyên viên phù hợp đang hoạt động. Bạn có thể đặt lịch trước.',
+          );
+        }
+        final visible = widget.maxItems != null
+            ? filtered.take(widget.maxItems!).toList()
+            : filtered;
+        return Column(
+          children: visible
+              .map((p) => _buildSpecialistCard(context, p))
+              .toList(),
         );
+      },
+    );
   }
 
   Widget _message(String message, VoidCallback? action, String label) => Column(

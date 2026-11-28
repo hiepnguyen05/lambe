@@ -1,5 +1,4 @@
 import { ServiceCategoryStatus } from '@prisma/client';
-import { CategoriesCommandService } from '../application/categories-command.service';
 import { CategoriesQueryService } from '../application/categories-query.service';
 import { CategoryCacheService } from '../application/category-cache.service';
 import { CategoryImageService } from '../application/category-image.service';
@@ -118,30 +117,34 @@ export function createCategoriesTestContext() {
     prisma as never,
     categoryCache,
   );
-  const commandService = new CategoriesCommandService(
-    new CreateCategoryService(
-      prisma as never,
-      auditService as never,
-      uniqueness,
-      categoryCache,
-    ),
-    new UpdateCategoryService(
-      prisma as never,
-      auditService as never,
-      uniqueness,
-      categoryCache,
-    ),
-    new ChangeCategoryStatusService(
-      prisma as never,
-      auditService as never,
-      categoryCache,
-    ),
-    new ReorderCategoriesService(
-      prisma as never,
-      auditService as never,
-      categoryCache,
-    ),
+  const createCategory = new CreateCategoryService(
+    prisma as never,
+    auditService as never,
+    uniqueness,
+    categoryCache,
   );
+  const updateCategory = new UpdateCategoryService(
+    prisma as never,
+    auditService as never,
+    uniqueness,
+    categoryCache,
+  );
+  const changeCategoryStatus = new ChangeCategoryStatusService(
+    prisma as never,
+    auditService as never,
+    categoryCache,
+  );
+  const reorderCategories = new ReorderCategoriesService(
+    prisma as never,
+    auditService as never,
+    categoryCache,
+  );
+  const commandService = {
+    create: createCategory.execute.bind(createCategory),
+    update: updateCategory.execute.bind(updateCategory),
+    updateStatus: changeCategoryStatus.execute.bind(changeCategoryStatus),
+    reorder: reorderCategories.execute.bind(reorderCategories),
+  };
   const categoryImageService = new CategoryImageService(
     prisma as never,
     auditService as never,

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mobile/features/shared/address/domain/entities/address_entity.dart';
+import 'package:mobile/features/shared/auth/di/auth_providers.dart';
 import 'package:mobile/features/customer/catalog/domain/entities/service_item_entity.dart';
 
 import '../../domain/entities/booking_draft_entity.dart';
@@ -218,5 +219,6 @@ class BookingDraftNotifier extends StateNotifier<BookingDraftEntity?> {
 
 final bookingDraftProvider =
     StateNotifierProvider<BookingDraftNotifier, BookingDraftEntity?>((ref) {
+      ref.watch(authNotifierProvider.select((s) => s.valueOrNull?.id));
       return BookingDraftNotifier();
     });

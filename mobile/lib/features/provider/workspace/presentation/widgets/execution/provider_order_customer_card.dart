@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 import 'package:mobile/features/shared/chat/domain/entities/chat_peer_entity.dart';
 
 class ProviderOrderCustomerCard extends StatelessWidget {
@@ -17,15 +17,8 @@ class ProviderOrderCustomerCard extends StatelessWidget {
     this.onRecordContactAttempt,
   });
 
-  String _formatCurrency(num? amount) {
-    if (amount == null) return '0đ';
-    final formatter = NumberFormat.currency(
-      locale: 'vi_VN',
-      symbol: 'đ',
-      decimalDigits: 0,
-    );
-    return formatter.format(amount);
-  }
+  String _formatCurrency(num? amount) =>
+      amount == null ? '0đ' : CurrencyUtils.formatVnd(amount);
 
   void _openChat(
     BuildContext context,
@@ -121,9 +114,9 @@ class ProviderOrderCustomerCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      phone.isNotEmpty ? phone : 'Chưa có số điện thoại',
-                      style: const TextStyle(
+                    const Text(
+                      'Khách hàng',
+                      style: TextStyle(
                         fontSize: 12.5,
                         color: Color(0xFF64748B),
                         fontWeight: FontWeight.w500,

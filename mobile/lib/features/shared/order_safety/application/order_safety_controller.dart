@@ -52,7 +52,10 @@ class OrderSafetyController extends StateNotifier<SafetyState> {
     }
   }
 
-  Future<void> raise() async {
+  Future<void> raise({
+    SafetyReason? reason,
+    String? detail,
+  }) async {
     if (state.busy ||
         (state.incident?.ownReport == true && state.incident!.isOpen)) {
       return;
@@ -80,13 +83,28 @@ class OrderSafetyController extends StateNotifier<SafetyState> {
         }
       }
       submitted = true;
-      final incident = await repository.raise(scope, cancel);
+      final incident = await repository.raise(
+        scope,
+        cancel,
+        reason: reason,
+        detail: detail,
+      );
       if (mounted) {
+        final trimmed = detail?.trim();
         state = SafetyState(
           incident: SafetyIncident(
             id: incident.id,
             status: incident.status,
             ownReport: true,
+            reports: incident.reports.isNotEmpty
+                ? incident.reports
+                : [
+                    SafetyReportSummary(
+                      id: '',
+                      reason: reason ?? SafetyReason.threat,
+                      detail: trimmed?.isNotEmpty == true ? trimmed : null,
+                    ),
+                  ],
             evidenceIds: incident.evidenceIds,
           ),
         );

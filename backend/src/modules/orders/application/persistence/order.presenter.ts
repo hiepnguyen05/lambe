@@ -1,4 +1,9 @@
 import { Prisma, ServiceOrderStatus, WalletHoldStatus } from '@prisma/client';
+import { scheduledOrderOverdueAt } from '../../domain/order-time.policy';
+import {
+  DEPARTURE_LEAD_MINUTES,
+  MINUTE,
+} from '../../domain/booking-calendar.policy';
 import {
   presentReview,
   publicReviewSelect,
@@ -25,7 +30,18 @@ export const orderViewInclude = {
   },
   customer: { select: { id: true, fullName: true, phone: true } },
   providerService: {
-    select: { id: true, serviceId: true },
+    select: {
+      id: true,
+      serviceId: true,
+      service: {
+        select: {
+          id: true,
+          iconUrl: true,
+          coverImageUrl: true,
+          category: { select: { code: true, iconUrl: true } },
+        },
+      },
+    },
   },
   statusHistory: { orderBy: { createdAt: 'asc' as const } },
   evidence: {
@@ -53,6 +69,7 @@ export const orderViewInclude = {
   rescheduleRequests: {
     select: {
       id: true,
+      requestedByRole: true,
       status: true,
       proposedStartAt: true,
       proposedEndAt: true,
@@ -84,6 +101,13 @@ export const orderViewInclude = {
   },
 } satisfies Prisma.ServiceOrderInclude;
 
+export const createdOrderInclude = {
+  provider: orderViewInclude.provider,
+  customer: orderViewInclude.customer,
+  providerService: orderViewInclude.providerService,
+  statusHistory: orderViewInclude.statusHistory,
+} satisfies Prisma.ServiceOrderInclude;
+
 export const orderInclude = {
   ...orderViewInclude,
   provider: {
@@ -97,15 +121,38 @@ export const providerOrderViewInclude = {
   walletHold: { select: { amount: true, status: true } },
 } satisfies Prisma.ServiceOrderInclude;
 
+// Pending orders cannot yet have work evidence, reviews, add-ons or reschedules.
+export const pendingOrderInclude = {
+  ...createdOrderInclude,
+  walletHold: providerOrderViewInclude.walletHold,
+} satisfies Prisma.ServiceOrderInclude;
+
+type CreatedOrderRecord = Prisma.ServiceOrderGetPayload<{
+  include: typeof createdOrderInclude;
+}>;
+
 type OrderViewRecord = Prisma.ServiceOrderGetPayload<{
   include: typeof orderViewInclude;
 }>;
+
+type PresentableOrderRecord = CreatedOrderRecord &
+  Partial<
+    Pick<
+      OrderViewRecord,
+      | 'rescheduleRequests'
+      | 'addOns'
+      | 'evidence'
+      | 'cancellationRequest'
+      | 'review'
+      | 'contactAttempts'
+    >
+  >;
 
 export type OrderRecord = Prisma.ServiceOrderGetPayload<{
   include: typeof orderInclude;
 }>;
 
-export function presentForCustomer(order: OrderViewRecord) {
+export function presentForCustomer(order: PresentableOrderRecord) {
   return {
     ...presentPublicOrder(order),
     customerAddressId: order.customerAddressId,
@@ -125,7 +172,7 @@ export function presentForCustomer(order: OrderViewRecord) {
 }
 
 export function presentForProvider(
-  order: OrderViewRecord & {
+  order: PresentableOrderRecord & {
     walletHold?: { amount: number; status: WalletHoldStatus } | null;
   },
 ) {
@@ -165,7 +212,7 @@ export function presentForProvider(
   };
 }
 
-function presentPublicOrder(order: OrderViewRecord) {
+function presentPublicOrder(order: PresentableOrderRecord) {
   return {
     id: order.id,
     bookingGroupId: order.bookingGroupId,
@@ -186,11 +233,24 @@ function presentPublicOrder(order: OrderViewRecord) {
     conversationId: order.conversationId,
     bookingType: order.bookingType,
     scheduledAt: order.scheduledAt,
+    departureAvailableAt:
+      order.bookingType === 'SCHEDULED' && order.scheduledAt
+        ? new Date(
+            order.scheduledAt.getTime() - DEPARTURE_LEAD_MINUTES * MINUTE,
+          )
+        : null,
     expectedStartAt: order.expectedStartAt,
+    scheduleOverdueAt: scheduledOrderOverdueAt(order),
     expectedEndAt: order.expectedEndAt,
     status: order.status,
     paymentMethod: order.paymentMethod,
     serviceName: order.serviceName,
+    serviceIconUrl:
+      order.providerService?.service?.iconUrl ??
+      order.providerService?.service?.coverImageUrl ??
+      order.providerService?.service?.category?.iconUrl ??
+      order.providerService?.service?.category?.code ??
+      null,
     servicePriceAmount: order.servicePriceAmount,
     travelFeeAmount: order.travelFeeAmount,
     travelDistanceKm: order.travelDistanceKm,
@@ -217,8 +277,8 @@ function presentPublicOrder(order: OrderViewRecord) {
     addressNote: order.addressNote,
     customerNote: order.customerNote,
     providerResponseDeadlineAt: order.providerResponseDeadlineAt,
-    rescheduleRequest: order.rescheduleRequests[0] ?? null,
-    addOns: order.addOns,
+    rescheduleRequest: order.rescheduleRequests?.[0] ?? null,
+    addOns: order.addOns ?? [],
     acceptedAt: order.acceptedAt,
     enRouteAt: order.enRouteAt,
     arrivedAt: order.arrivedAt,
@@ -228,6 +288,8 @@ function presentPublicOrder(order: OrderViewRecord) {
     paymentDisputeOpenedAt: order.paymentDisputeOpenedAt,
     paymentDisputeDecidedAt: order.paymentDisputeDecidedAt,
     startedAt: order.startedAt,
+    workPausedAt: order.workPausedAt ?? null,
+    totalPausedSeconds: order.totalPausedSeconds ?? 0,
     completedAt: order.completedAt,
     rejectedAt: order.rejectedAt,
     rejectionReason: order.rejectionReason,
@@ -235,14 +297,14 @@ function presentPublicOrder(order: OrderViewRecord) {
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
     providerService: order.providerService,
-    evidence: order.evidence,
-    cancellationRequest: order.cancellationRequest,
+    evidence: order.evidence ?? [],
+    cancellationRequest: order.cancellationRequest ?? null,
     review: order.review ? presentReview(order.review) : null,
-    contactAttempts: order.contactAttempts,
+    contactAttempts: order.contactAttempts ?? [],
   };
 }
 
-function presentProvider(provider: OrderViewRecord['provider']) {
+function presentProvider(provider: PresentableOrderRecord['provider']) {
   return {
     id: provider.id,
     displayName: provider.displayName,
@@ -251,7 +313,7 @@ function presentProvider(provider: OrderViewRecord['provider']) {
   };
 }
 
-function presentHistory(order: OrderViewRecord) {
+function presentHistory(order: PresentableOrderRecord) {
   return order.statusHistory.map((history) => ({
     id: history.id,
     fromStatus: history.fromStatus,

@@ -7,9 +7,11 @@ import './provider_schedule_state.dart';
 class ProviderScheduleNotifier extends StateNotifier<ProviderScheduleState> {
   final ProviderScheduleRepository _repository;
 
-  ProviderScheduleNotifier(this._repository)
+  ProviderScheduleNotifier(this._repository, {bool autoLoad = true})
     : super(ProviderScheduleState(selectedCalendarDate: DateTime.now())) {
-    loadAll();
+    if (autoLoad) {
+      loadAll();
+    }
   }
 
   static const List<int> orderedDays = [1, 2, 3, 4, 5, 6, 0];
@@ -22,9 +24,11 @@ class ProviderScheduleNotifier extends StateNotifier<ProviderScheduleState> {
     state = state.copyWith(setup: const AsyncLoading());
     try {
       final setup = await _repository.getSetup();
+      if (!mounted) return;
       final draft = _buildDraftFromSetup(setup.workingHours);
       state = state.copyWith(setup: AsyncData(setup), draftWorkingHours: draft);
     } catch (e, st) {
+      if (!mounted) return;
       state = state.copyWith(
         setup: AsyncError(e, st),
         errorMessage: 'Không thể tải lịch làm việc: ${e.toString()}',
@@ -43,8 +47,10 @@ class ProviderScheduleNotifier extends StateNotifier<ProviderScheduleState> {
         from: startDate,
         to: endDate,
       );
+      if (!mounted) return;
       state = state.copyWith(calendarBlocks: AsyncData(blocks));
     } catch (e, st) {
+      if (!mounted) return;
       state = state.copyWith(calendarBlocks: AsyncError(e, st));
     }
   }
@@ -186,8 +192,10 @@ class ProviderScheduleNotifier extends StateNotifier<ProviderScheduleState> {
     );
     try {
       await _repository.updateWorkingHours(activeHours);
+      if (!mounted) return false;
       // Reload setup from server
       final updatedSetup = await _repository.getSetup();
+      if (!mounted) return false;
       state = state.copyWith(
         setup: AsyncData(updatedSetup),
         draftWorkingHours: _buildDraftFromSetup(updatedSetup.workingHours),
@@ -196,6 +204,7 @@ class ProviderScheduleNotifier extends StateNotifier<ProviderScheduleState> {
       );
       return true;
     } catch (e) {
+      if (!mounted) return false;
       state = state.copyWith(
         isSaving: false,
         errorMessage: 'Lưu thất bại: ${e.toString()}',
@@ -234,13 +243,16 @@ class ProviderScheduleNotifier extends StateNotifier<ProviderScheduleState> {
         to: to,
         reason: reason.trim(),
       );
+      if (!mounted) return false;
       await loadCalendar();
+      if (!mounted) return false;
       state = state.copyWith(
         isSaving: false,
         successMessage: 'Đã tạo lịch nghỉ thành công!',
       );
       return true;
     } catch (e) {
+      if (!mounted) return false;
       state = state.copyWith(
         isSaving: false,
         errorMessage: 'Không thể tạo lịch nghỉ: ${e.toString()}',
@@ -257,13 +269,16 @@ class ProviderScheduleNotifier extends StateNotifier<ProviderScheduleState> {
     );
     try {
       await _repository.deleteTimeOff(id);
+      if (!mounted) return false;
       await loadCalendar();
+      if (!mounted) return false;
       state = state.copyWith(
         isSaving: false,
         successMessage: 'Đã mở lại lịch làm việc!',
       );
       return true;
     } catch (e) {
+      if (!mounted) return false;
       state = state.copyWith(
         isSaving: false,
         errorMessage: 'Không thể mở lại lịch: ${e.toString()}',

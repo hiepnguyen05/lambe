@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 
 import '../../application/service_operation.dart';
 import '../../di/provider_services_providers.dart';
@@ -30,8 +31,7 @@ class ServiceChangeDocuments extends ConsumerWidget {
           );
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(serviceError(error))));
+        await AppDialog.error(context, message: serviceError(error));
       }
     }
   }

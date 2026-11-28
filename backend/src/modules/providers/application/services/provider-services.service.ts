@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   Prisma,
@@ -15,8 +16,13 @@ import {
   ServiceCategoryStatus,
   ServiceStatus,
 } from '@prisma/client';
+import { discoveryProviderSummaryCacheKey } from '../../../../common/cache/discovery-cache.keys';
 import type { RequestMetadata } from '../../../../common/http/types/request-metadata.type';
 import { AuditService } from '../../../../infrastructure/audit/audit.service';
+import {
+  CACHE_STORE,
+  type CacheStore,
+} from '../../../../infrastructure/cache/cache-store';
 import {
   PROVIDER_LOCATION_STORE,
   type ProviderLocationStore,
@@ -49,6 +55,7 @@ export class ProviderServicesService {
     private readonly notifications: ProviderServiceChangeNotificationService,
     @Inject(PROVIDER_LOCATION_STORE)
     private readonly locations: ProviderLocationStore,
+    @Optional() @Inject(CACHE_STORE) private readonly cache?: CacheStore,
   ) {}
 
   async listMine(userId: string) {
@@ -148,6 +155,9 @@ export class ProviderServicesService {
       return { item: updated, providerId: provider.id, offline };
     });
     if (result.offline) await this.removeLocation(result.providerId);
+    await this.cache
+      ?.delete(discoveryProviderSummaryCacheKey(result.providerId))
+      .catch(() => undefined);
     return {
       success: true,
       message: active ? 'Đã bật dịch vụ.' : 'Đã tạm ngừng dịch vụ.',
@@ -205,6 +215,9 @@ export class ProviderServicesService {
       return { item: updated, offline };
     });
     if (result.offline) await this.removeLocation(providerId);
+    await this.cache
+      ?.delete(discoveryProviderSummaryCacheKey(providerId))
+      .catch(() => undefined);
     return { success: true, data: this.present(result.item) };
   }
 

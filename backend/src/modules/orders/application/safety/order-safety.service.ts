@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   OrderSafetyIncidentStatus,
@@ -18,6 +19,7 @@ import type {
   CloseOrderSafetyDto,
   RaiseOrderSafetyDto,
 } from '../../dto/order-safety.dto';
+import { OrderNotificationRelayService } from '../notifications/order-notification-relay.service';
 import { OrderWalletService } from '../payments/order-wallet.service';
 import { orderInclude } from '../persistence/order.presenter';
 import { BookingCalendarService } from '../scheduling/booking-calendar.service';
@@ -42,6 +44,7 @@ export class OrderSafetyService {
     private readonly calendar: BookingCalendarService,
     private readonly wallet: OrderWalletService,
     private readonly audit: AuditService,
+    @Optional() private readonly notificationRelay?: OrderNotificationRelayService,
   ) {}
 
   async raise(
@@ -50,6 +53,7 @@ export class OrderSafetyService {
     dto: RaiseOrderSafetyDto,
     metadata: RequestMetadata,
   ) {
+    let recipients: string[] = [];
     const result = await this.prisma.$transaction(async (tx) => {
       const owned = await tx.serviceOrder.findFirst({
         where: {
@@ -153,14 +157,13 @@ export class OrderSafetyService {
         where: { orderId, status: 'PENDING_CUSTOMER' },
         data: { status: 'SUPPORT_REVIEW' },
       });
+      recipients = [order.customerId, orderServingUserId(order)];
       await tx.orderNotification.createMany({
-        data: [order.customerId, orderServingUserId(order)].map(
-          (recipientId) => ({
-            userId: recipientId,
-            orderId,
-            event: 'ORDER_SAFETY_HOLD',
-          }),
-        ),
+        data: recipients.map((recipientId) => ({
+          userId: recipientId,
+          orderId,
+          event: 'ORDER_SAFETY_HOLD',
+        })),
       });
       await this.audit.record(
         {
@@ -175,6 +178,9 @@ export class OrderSafetyService {
       );
       return incident;
     });
+    for (const recipientId of new Set(recipients)) {
+      void this.notificationRelay?.publishNow(recipientId);
+    }
     this.logger.warn(`Safety incident opened or updated: ${result.id}`);
     return {
       success: true,
@@ -289,6 +295,7 @@ export class OrderSafetyService {
     dto: CloseOrderSafetyDto,
     metadata: RequestMetadata,
   ) {
+    let recipients: string[] = [];
     const closed = await this.prisma.$transaction(async (tx) => {
       const target = await tx.orderSafetyIncident.findUnique({
         where: { id: incidentId },
@@ -357,8 +364,9 @@ export class OrderSafetyService {
           resolutionNote: dto.resolutionNote,
         },
       });
+      recipients = [order.customerId, orderServingUserId(order)];
       await tx.orderNotification.createMany({
-        data: [order.customerId, orderServingUserId(order)].map((userId) => ({
+        data: recipients.map((userId) => ({
           userId,
           orderId: order.id,
           event: 'ORDER_SAFETY_CLOSED',
@@ -377,6 +385,9 @@ export class OrderSafetyService {
       );
       return result;
     });
+    for (const recipientId of new Set(recipients)) {
+      void this.notificationRelay?.publishNow(recipientId);
+    }
     return {
       success: true,
       data: {

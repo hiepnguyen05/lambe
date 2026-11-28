@@ -86,7 +86,7 @@ class ProviderLocationCoordinator extends ChangeNotifier {
       if (_disposed || !_foreground || generation != _generation) {
         throw StateError('Phiên vị trí đã thay đổi.');
       }
-      if (!_valid(value)) {
+      if (!_valid(value, seconds: 55)) {
         throw StateError('GPS chưa đủ mới/chính xác. Vui lòng thử lại.');
       }
       _receive(value);
@@ -99,15 +99,16 @@ class ProviderLocationCoordinator extends ChangeNotifier {
   Future<void> confirmedOnline(bool value, {Position? seed}) async {
     if (_disposed) return;
     final changed = _online != value || !_known || _subscription == null;
+    final validSeed = seed != null && _valid(seed);
     _online = value;
     _known = true;
     _issue = null;
-    if (seed != null && _valid(seed)) {
+    if (validSeed) {
       _latest = seed;
       _heartbeatAttempt = now();
     }
     _notify();
-    if (changed) await _restart();
+    if (changed) await _restart(keepLatest: validSeed);
   }
 
   Future<void> reconcileAvailability() async {
@@ -185,7 +186,7 @@ class ProviderLocationCoordinator extends ChangeNotifier {
     }
   }
 
-  Future<void> _restart() {
+  Future<void> _restart({bool keepLatest = false}) {
     final generation = ++_generation;
     _cancel.cancel();
     _cancel = CancelToken();
@@ -193,7 +194,7 @@ class ProviderLocationCoordinator extends ChangeNotifier {
     _tick = null;
     _statusTimer?.cancel();
     _statusTimer = null;
-    _latest = null;
+    if (!keepLatest) _latest = null;
     if (!_foreground) _tracking = null;
     _notify();
     _sensorChange = _sensorChange
@@ -224,6 +225,7 @@ class ProviderLocationCoordinator extends ChangeNotifier {
                 _tick?.cancel();
                 _statusTimer?.cancel();
                 _cancel.cancel();
+                _cancel = CancelToken();
                 _latest = null;
                 _issue = 'Không cập nhật được GPS. Kiểm tra quyền và định vị.';
                 _known = false;

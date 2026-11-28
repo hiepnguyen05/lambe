@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 
 import '../application/order_safety_controller.dart';
 import '../domain/order_safety.dart';
@@ -15,35 +16,20 @@ class OrderSafetyEvidence extends ConsumerStatefulWidget {
 
 class _OrderSafetyEvidenceState extends ConsumerState<OrderSafetyEvidence> {
   Future<void> _pick() async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: const Text('Chụp ảnh'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              title: const Text('Chọn ảnh'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (source == null || !mounted) return;
     try {
-      final file = await ImagePicker().pickImage(source: source);
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1080,
+        maxHeight: 1080,
+        imageQuality: 72,
+      );
       if (file == null || !mounted) return;
       await ref.read(orderSafetyProvider(widget.scope).notifier).upload(file);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Chưa chọn được ảnh. Vui lòng thử lại.'),
-          ),
+        await AppDialog.error(
+          context,
+          message: 'Chưa chụp được ảnh. Vui lòng thử lại.',
         );
       }
     }
@@ -85,10 +71,9 @@ class _OrderSafetyEvidenceState extends ConsumerState<OrderSafetyEvidence> {
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Chưa xem được ảnh riêng tư. Vui lòng thử lại.'),
-          ),
+        await AppDialog.error(
+          context,
+          message: 'Chưa xem được ảnh riêng tư. Vui lòng thử lại.',
         );
       }
     }

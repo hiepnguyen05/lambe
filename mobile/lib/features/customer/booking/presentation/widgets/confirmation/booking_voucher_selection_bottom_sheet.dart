@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 
 import '../../providers/booking_confirmation_providers.dart';
 import '../../../domain/entities/voucher_entity.dart';
@@ -80,11 +81,7 @@ class _BookingVoucherSelectionBottomSheetState
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(
-      locale: 'vi_VN',
-      symbol: 'đ',
-      decimalDigits: 0,
-    );
+    final currencyFormat = CurrencyUtils.vndCurrency;
 
     return Container(
       constraints: BoxConstraints(

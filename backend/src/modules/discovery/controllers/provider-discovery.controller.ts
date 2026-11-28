@@ -24,6 +24,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../../auth/types/authenticated-user.type';
 import { ProviderDiscoveryService } from '../application/provider-discovery.service';
 import {
+  NearbyProvidersDto,
   ProviderSearchDto,
   PublicProviderParamDto,
 } from '../dto/provider-search.dto';
@@ -75,6 +76,23 @@ export class ProviderDiscoveryController {
     @Body() dto: ProviderSearchDto,
   ) {
     return this.discovery.search(user.userId, dto);
+  }
+
+  @Post('discovery/providers/nearby')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('user-token')
+  @ApiOperation({
+    summary:
+      'Tìm chuyên viên gần khách hàng cho Trang chủ (ưu tiên lọc theo onboarding, tự bù top gần nhất)',
+  })
+  @ApiAuthenticationErrors()
+  @ApiValidationError()
+  nearby(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: NearbyProvidersDto,
+  ) {
+    return this.discovery.nearby(user.userId, dto);
   }
 
   @Get('providers/:id/public')

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 
-import 'package:mobile/core/theme/app_colors.dart';
 import '../../../domain/entities/order_quote_entity.dart';
 import './booking_voucher_selection_bottom_sheet.dart';
 
@@ -21,11 +20,7 @@ class BookingVoucherPickerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(
-      locale: 'vi_VN',
-      symbol: 'đ',
-      decimalDigits: 0,
-    );
+    final currencyFormat = CurrencyUtils.vndCurrency;
 
     final hasVoucher =
         selectedVoucherCode != null && selectedVoucherCode!.trim().isNotEmpty;
@@ -35,21 +30,19 @@ class BookingVoucherPickerCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: hasVoucher
-            ? AppColors.primaryFixed.withValues(alpha: 0.15)
-            : AppColors.surfaceContainerLowest,
+        color: hasVoucher ? const Color(0xFFEFF6F5) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: hasVoucher
-              ? AppColors.primary.withValues(alpha: 0.5)
-              : AppColors.surfaceContainerHighest.withValues(alpha: 0.35),
-          width: 1.2,
+              ? const Color(0xFF0F766E)
+              : const Color(0xFFE2E8F0),
+          width: hasVoucher ? 1.5 : 1,
         ),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x0A0F766E),
-            blurRadius: 10,
-            offset: Offset(0, 2),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -67,25 +60,25 @@ class BookingVoucherPickerCard extends StatelessWidget {
           },
           borderRadius: BorderRadius.circular(16),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
                     color: hasVoucher
-                        ? AppColors.primaryFixed.withValues(alpha: 0.35)
-                        : AppColors.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(12),
+                        ? const Color(0xFF0F766E).withValues(alpha: 0.15)
+                        : const Color(0xFFEFF6F5),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
-                    Icons.confirmation_num_rounded,
-                    color: AppColors.primary,
-                    size: 20,
+                    Icons.confirmation_num_outlined,
+                    color: Color(0xFF0F766E),
+                    size: 18,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: hasVoucher
                       ? Column(
@@ -96,14 +89,14 @@ class BookingVoucherPickerCard extends StatelessWidget {
                                 Text(
                                   selectedVoucherCode!,
                                   style: const TextStyle(
-                                    fontSize: 14.5,
+                                    fontSize: 14,
                                     fontWeight: FontWeight.w800,
-                                    color: AppColors.primary,
-                                    letterSpacing: 0.5,
+                                    color: Color(0xFF0F766E),
+                                    letterSpacing: 0.4,
                                   ),
                                 ),
                                 if (issuer != null) ...[
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 6),
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 6,
@@ -111,18 +104,19 @@ class BookingVoucherPickerCard extends StatelessWidget {
                                     ),
                                     decoration: BoxDecoration(
                                       color: isPlatform
-                                          ? AppColors.primaryFixed.withValues(alpha: 0.35)
-                                          : AppColors.surfaceContainerHigh,
+                                          ? const Color(0xFF0F766E)
+                                              .withValues(alpha: 0.15)
+                                          : const Color(0xFFF1F5F9),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Text(
                                       isPlatform ? 'Sàn Lambe' : 'Thợ ưu đãi',
                                       style: TextStyle(
-                                        fontSize: 10.5,
+                                        fontSize: 10,
                                         fontWeight: FontWeight.bold,
                                         color: isPlatform
-                                            ? AppColors.primary
-                                            : AppColors.onSurfaceVariant,
+                                            ? const Color(0xFF0F766E)
+                                            : const Color(0xFF475569),
                                       ),
                                     ),
                                   ),
@@ -135,9 +129,9 @@ class BookingVoucherPickerCard extends StatelessWidget {
                                   ? 'Tiết kiệm ${currencyFormat.format(discountAmount)} trên giá dịch vụ'
                                   : 'Đã áp dụng mã giảm giá',
                               style: const TextStyle(
-                                fontSize: 12,
+                                fontSize: 11.5,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.primary,
+                                color: Color(0xFF0F766E),
                               ),
                             ),
                           ],
@@ -148,39 +142,27 @@ class BookingVoucherPickerCard extends StatelessWidget {
                             Text(
                               'Ưu đãi & Voucher',
                               style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.onSurface,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF0B1C30),
                               ),
                             ),
-                            SizedBox(height: 2),
+                            SizedBox(height: 1),
                             Text(
                               'Chọn hoặc nhập mã giảm giá',
                               style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textMuted,
+                                fontSize: 11.5,
+                                color: Color(0xFF64748B),
                               ),
                             ),
                           ],
                         ),
                 ),
-                if (hasVoucher)
-                  IconButton(
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      size: 18,
-                      color: AppColors.textMuted,
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => onVoucherChanged(null),
-                  )
-                else
-                  const Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 14,
-                    color: AppColors.outline,
-                  ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Color(0xFF94A3B8),
+                  size: 20,
+                ),
               ],
             ),
           ),

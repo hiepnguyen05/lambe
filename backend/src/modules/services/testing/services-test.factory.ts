@@ -9,7 +9,6 @@ import { ReorderServicesService } from '../application/reorder-services.service'
 import { ServiceCacheService } from '../application/service-cache.service';
 import { ServiceImageService } from '../application/service-image.service';
 import { ServiceUniquenessService } from '../application/service-uniqueness.service';
-import { ServicesCommandService } from '../application/services-command.service';
 import { ServicesQueryService } from '../application/services-query.service';
 import { UpdateServiceService } from '../application/update-service.service';
 
@@ -166,30 +165,34 @@ export function createServicesTestContext() {
   const serviceCache = new ServiceCacheService(cache as never);
   const uniqueness = new ServiceUniquenessService();
   const queryService = new ServicesQueryService(prisma as never, serviceCache);
-  const commandService = new ServicesCommandService(
-    new CreateServiceService(
-      prisma as never,
-      auditService as never,
-      uniqueness,
-      serviceCache,
-    ),
-    new UpdateServiceService(
-      prisma as never,
-      auditService as never,
-      uniqueness,
-      serviceCache,
-    ),
-    new ChangeServiceStatusService(
-      prisma as never,
-      auditService as never,
-      serviceCache,
-    ),
-    new ReorderServicesService(
-      prisma as never,
-      auditService as never,
-      serviceCache,
-    ),
+  const createService = new CreateServiceService(
+    prisma as never,
+    auditService as never,
+    uniqueness,
+    serviceCache,
   );
+  const updateService = new UpdateServiceService(
+    prisma as never,
+    auditService as never,
+    uniqueness,
+    serviceCache,
+  );
+  const changeServiceStatus = new ChangeServiceStatusService(
+    prisma as never,
+    auditService as never,
+    serviceCache,
+  );
+  const reorderServices = new ReorderServicesService(
+    prisma as never,
+    auditService as never,
+    serviceCache,
+  );
+  const commandService = {
+    create: createService.execute.bind(createService),
+    update: updateService.execute.bind(updateService),
+    updateStatus: changeServiceStatus.execute.bind(changeServiceStatus),
+    reorder: reorderServices.execute.bind(reorderServices),
+  };
   const imageService = new ServiceImageService(
     prisma as never,
     auditService as never,

@@ -22,7 +22,7 @@ import { InternalRoles } from '../../internal-auth/decorators/internal-roles.dec
 import { InternalJwtAuthGuard } from '../../internal-auth/guards/internal-jwt-auth.guard';
 import { InternalRolesGuard } from '../../internal-auth/guards/internal-roles.guard';
 import type { AuthenticatedInternalAccount } from '../../internal-auth/types/authenticated-internal-account.type';
-import { ServicesCommandService } from '../application/services-command.service';
+import { ReorderServicesService } from '../application/reorder-services.service';
 import { ReorderServicesDto } from '../dto/reorder-services.dto';
 
 @ApiTags('Admin Services')
@@ -31,7 +31,7 @@ import { ReorderServicesDto } from '../dto/reorder-services.dto';
 @UseGuards(InternalJwtAuthGuard, InternalRolesGuard)
 @InternalRoles(InternalRole.ADMIN)
 export class AdminServiceOrderingController {
-  constructor(private readonly servicesCommand: ServicesCommandService) {}
+  constructor(private readonly reorderServices: ReorderServicesService) {}
 
   @Patch('reorder')
   @ApiOperation({ summary: 'Sắp xếp dịch vụ trong một danh mục' })
@@ -49,7 +49,7 @@ export class AdminServiceOrderingController {
     @CurrentInternalAccount() account: AuthenticatedInternalAccount,
     @CurrentRequestMetadata() request: RequestMetadata,
   ) {
-    return this.servicesCommand.reorder(
+    return this.reorderServices.execute(
       categoryId,
       dto,
       account.accountId,

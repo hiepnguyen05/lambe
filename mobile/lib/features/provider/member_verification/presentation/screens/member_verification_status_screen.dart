@@ -37,15 +37,6 @@ class MemberVerificationStatusScreen extends ConsumerWidget {
           icon: const Icon(Icons.arrow_back, color: Color(0xFF0B1C30)),
           onPressed: () => context.pop(),
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Làm mới',
-            icon: const Icon(Icons.refresh, color: AppColors.primary),
-            onPressed: () => ref
-                .read(memberVerificationNotifierProvider(memberId).notifier)
-                .loadProfile(),
-          ),
-        ],
       ),
       body: state.when(
         loading: () => const Center(child: CircularProgressIndicator()),

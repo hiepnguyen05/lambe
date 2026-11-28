@@ -20,7 +20,10 @@ import { InternalJwtAuthGuard } from '../../internal-auth/guards/internal-jwt-au
 import { InternalRolesGuard } from '../../internal-auth/guards/internal-roles.guard';
 import type { AuthenticatedInternalAccount } from '../../internal-auth/types/authenticated-internal-account.type';
 import { AdminOrderQueryService } from '../application/operations/admin-order-query.service';
-import { AdminOrderQueryDto } from '../dto/admin-order-query.dto';
+import {
+  AdminOrderAnalyticsQueryDto,
+  AdminOrderQueryDto,
+} from '../dto/admin-order-query.dto';
 
 const orderExample = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -54,6 +57,39 @@ export class AdminOrdersController {
   })
   list(@Query() query: AdminOrderQueryDto) {
     return this.orders.list(query);
+  }
+
+  @Get('analytics')
+  @ApiOperation({
+    summary: 'Aggregate orders, growth, and alerts for the admin dashboard',
+  })
+  @ApiStandardOk({
+    description: 'Thong ke tong hop don hang va chi so van hanh theo ky.',
+    data: {
+      period: '7d',
+      kpis: {
+        gmv: 24000000,
+        gmvGrowth: 12.5,
+        totalBookings: 120,
+        bookingGrowth: 8.1,
+        completionRate: 88,
+        completionRateDelta: 2,
+        activeProviders: 42,
+        activeProvidersDelta: 5,
+        urgentAlertsCount: 1,
+      },
+      revenueTrend: [],
+      statusDistribution: [],
+      categoryBreakdown: [],
+      growthTrend: [],
+      recentAlerts: [],
+    },
+  })
+  analytics(
+    @Query() query: AdminOrderAnalyticsQueryDto,
+    @CurrentInternalAccount() actor: AuthenticatedInternalAccount,
+  ) {
+    return this.orders.analytics(query.period ?? '7d', actor);
   }
 
   @Get(':id')

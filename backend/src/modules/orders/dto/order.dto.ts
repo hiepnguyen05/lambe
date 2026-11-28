@@ -289,6 +289,17 @@ export class DecidePaymentDisputeDto {
   note: string;
 }
 
+export class CloseUnpaidPaymentDisputeDto {
+  @ApiProperty({
+    example: 'Khách không thanh toán sau khi bộ phận hỗ trợ đối chiếu.',
+  })
+  @Transform(trim)
+  @IsString()
+  @MinLength(10)
+  @MaxLength(500)
+  note: string;
+}
+
 export class OrderQueryDto {
   @ApiPropertyOptional({ enum: ServiceOrderStatus })
   @IsEnum(ServiceOrderStatus)

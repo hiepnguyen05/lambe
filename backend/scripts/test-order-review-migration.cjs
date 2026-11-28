@@ -1,23 +1,14 @@
 // A private schema and one rollback transaction keep every application row untouched.
-const { spawnSync } = require('node:child_process');
-const { readFileSync } = require('node:fs');
-const { join } = require('node:path');
-const { randomUUID } = require('node:crypto');
-const database = new URL(
-  process.env.TEST_DATABASE_URL || 'postgresql://localhost/',
-).pathname.slice(1);
-if (!/^lambe_booking_test_[a-z0-9_]+$/.test(database))
-  throw new Error('An isolated lambe_booking_test_* database is required.');
-const schema = `reviews_rehearsal_${randomUUID().replaceAll('-', '')}`;
-const migration = readFileSync(
-  join(
-    __dirname,
-    '../prisma/migrations/20261029110000_order_member_reviews/migration.sql',
-  ),
-  'utf8',
-)
-  .replace(/^BEGIN;\s*/, '')
-  .replace(/COMMIT;\s*$/, '');
+const {
+  readMigration,
+  runRehearsal,
+  temporarySchema,
+} = require('./migration-rehearsal.cjs');
+const schema = temporarySchema('reviews_rehearsal');
+const migration = readMigration(
+  '../prisma/migrations/20261029110000_order_member_reviews/migration.sql',
+  true,
+);
 const sql = `
 BEGIN;
 CREATE SCHEMA "${schema}";
@@ -72,27 +63,7 @@ BEGIN
 END $verify$;
 ROLLBACK;
 `;
-const result = spawnSync(
-  'docker',
-  [
-    'exec',
-    '-i',
-    'lambe-postgres',
-    'psql',
-    '-U',
-    'postgres',
-    '-d',
-    database,
-    '-v',
-    'ON_ERROR_STOP=1',
-  ],
-  { input: sql, encoding: 'utf8' },
-);
-if (result.error) throw result.error;
-if (result.status !== 0) {
-  process.stderr.write(result.stderr || result.stdout);
-  process.exit(result.status || 1);
-}
-console.log(
+runRehearsal(
+  sql,
   'PASS: exact assignment backfill, legacy/content preserved, no duplicate reviews, immutable attribution, completed-order guard and member retention. Rolled back private schema.',
 );

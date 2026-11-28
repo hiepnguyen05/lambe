@@ -61,40 +61,48 @@ export function AdminDashboard() {
         </p>
       </div>
 
-      {/* Filter & Control Bar */}
-      <DashboardFilterBar
-        period={period}
-        onPeriodChange={setPeriod}
-        onRefresh={refetch}
-        isLoading={isLoading}
-        onExportCsv={handleExportCsv}
-      />
+      {canReadOrders ? (
+        <>
+          {/* Filter & Control Bar */}
+          <DashboardFilterBar
+            period={period}
+            onPeriodChange={setPeriod}
+            onRefresh={refetch}
+            isLoading={isLoading}
+            onExportCsv={handleExportCsv}
+          />
 
-      {/* Warning message if query fails */}
-      {isError && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Một phần dữ liệu thống kê chưa tải được. Hệ thống đang hiển thị dữ liệu cục bộ mới nhất.
+          {/* Warning message if query fails */}
+          {isError && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Một phần dữ liệu thống kê chưa tải được. Hệ thống đang hiển thị dữ liệu cục bộ mới nhất.
+            </div>
+          )}
+
+          {/* Top 5 KPI Metrics */}
+          <DashboardKpiCards kpis={data.kpis} isLoading={isLoading} />
+
+          {/* Main Charts: Revenue Trend & Order Distribution */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            <div className="lg:col-span-8">
+              <RevenueTrendChart data={data.revenueTrend} isLoading={isLoading} />
+            </div>
+            <div className="lg:col-span-4">
+              <OrderStatusDonutChart data={data.statusDistribution} isLoading={isLoading} />
+            </div>
+          </div>
+
+          {/* Secondary Charts: Top Categories & User Growth */}
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <TopCategoriesBarChart data={data.categoryBreakdown} isLoading={isLoading} />
+            <UserGrowthChart data={data.growthTrend} isLoading={isLoading} />
+          </div>
+        </>
+      ) : (
+        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-600 shadow-xs">
+          Tài khoản hiện tại được phân quyền kiểm duyệt chuyên biệt. Vui lòng chọn chức năng phù hợp ở thanh điều hướng bên trái.
         </div>
       )}
-
-      {/* Top 5 KPI Metrics */}
-      <DashboardKpiCards kpis={data.kpis} isLoading={isLoading} />
-
-      {/* Main Charts: Revenue Trend & Order Distribution */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="lg:col-span-8">
-          <RevenueTrendChart data={data.revenueTrend} isLoading={isLoading} />
-        </div>
-        <div className="lg:col-span-4">
-          <OrderStatusDonutChart data={data.statusDistribution} isLoading={isLoading} />
-        </div>
-      </div>
-
-      {/* Secondary Charts: Top Categories & User Growth */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <TopCategoriesBarChart data={data.categoryBreakdown} isLoading={isLoading} />
-        <UserGrowthChart data={data.growthTrend} isLoading={isLoading} />
-      </div>
 
       {/* Operational Alerts & Incident Queue */}
       {canReadAlerts && (

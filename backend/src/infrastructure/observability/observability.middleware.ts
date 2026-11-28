@@ -98,7 +98,8 @@ export class ObservabilityMiddleware implements NestMiddleware {
         aborted,
       };
       if (aborted || response.statusCode >= 500) this.logger.warn(logRecord);
-      else if (Math.random() < 0.01) this.logger.log(logRecord);
+      else if ((!sse && durationMs >= 1000) || Math.random() < 0.01)
+        this.logger.log(logRecord);
       response.off('finish', finish);
       response.off('close', finish);
       response.off('error', onError);

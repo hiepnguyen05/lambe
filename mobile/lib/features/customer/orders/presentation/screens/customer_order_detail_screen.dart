@@ -6,21 +6,25 @@ import 'package:mobile/features/shared/order_safety/domain/order_safety.dart';
 import 'package:mobile/features/shared/order_safety/presentation/order_safety_button.dart';
 import 'package:mobile/features/shared/order_safety/presentation/order_safety_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:mobile/features/shared/guidance/presentation/guidance_trigger.dart';
 import 'package:mobile/features/shared/payment_dispute/domain/payment_dispute_order.dart';
 import 'package:mobile/features/shared/payment_dispute/presentation/payment_dispute_screen.dart';
 import 'package:mobile/features/shared/payment_dispute/presentation/payment_dispute_summary.dart';
 import 'package:mobile/features/shared/payment_dispute/presentation/payment_dispute_updates.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 
 import '../controllers/customer_order_action_coordinator.dart';
 import '../providers/customer_orders_providers.dart';
 import '../../domain/entities/customer_order_entity.dart';
 import '../widgets/cancellation/order_cancellation_decision_card.dart';
 import '../widgets/cancellation/order_cancellation_status_banner.dart';
-import '../widgets/detail/order_status_badge.dart';
+
+import 'package:mobile/core/widgets/order_status_badge.dart';
+
 import '../widgets/detail/customer_order_add_ons.dart';
+import '../widgets/detail/customer_order_evidence_card.dart';
 import '../widgets/detail/customer_order_provider_card.dart';
 import '../widgets/detail/customer_order_info_cards.dart';
 import '../widgets/detail/order_status_timeline.dart';
@@ -86,9 +90,9 @@ class _CustomerOrderDetailScreenState
       customerOrderDetailNotifierProvider(widget.orderId).notifier,
     );
     if (visible) {
-      notifier.resumePolling();
+      notifier.resumePolling(this);
     } else {
-      notifier.pausePolling();
+      notifier.pausePolling(this);
     }
   }
 
@@ -101,30 +105,8 @@ class _CustomerOrderDetailScreenState
       previous,
       next,
     ) {
-      if (previous?.order?.isPending != true ||
-          next.order == null ||
-          next.order!.isPending) {
-        return;
-      }
-      ref.invalidate(customerOrdersListProvider);
-      if (next.order!.isAccepted) {
-        AppDialog.success(
-          context,
-          title: 'Đã nhận đơn',
-          message: 'Chuyên viên đã nhận đơn của bạn.',
-          buttonText: 'Theo dõi đơn',
-          onPressed: () {
-            if (mounted) {
-              context.go('/appointments/${widget.orderId}/tracking');
-            }
-          },
-        );
-      } else if (next.order!.isRejected || next.order!.isExpired) {
-        AppDialog.warning(
-          context,
-          title: 'Đơn chưa được nhận',
-          message: 'Chuyên viên không nhận đơn. Hãy chọn người khác.',
-        );
+      if (previous?.order?.status != next.order?.status && next.order != null) {
+        ref.invalidate(customerOrdersListProvider);
       }
     });
 
@@ -209,179 +191,193 @@ class _CustomerOrderDetailScreenState
         error: state.errorMessage,
       );
     }
-    final currencyFormatter = NumberFormat.currency(
-      locale: 'vi_VN',
-      symbol: 'đ',
-      decimalDigits: 0,
-    );
+    final currencyFormatter = CurrencyUtils.vndCurrency;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FF),
-      appBar: AppBar(
-        title: Text(
-          'Đơn #${order.id.length > 8 ? order.id.substring(0, 8).toUpperCase() : order.id}',
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF0B1C30),
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 20,
-            color: Color(0xFF0B1C30),
-          ),
-          onPressed: () {
-            if (GoRouter.of(context).canPop()) {
-              context.pop();
-            } else {
-              context.go('/appointments');
-            }
-          },
-        ),
-        actions: [
-          if (order.statusHistory.any(
-            (entry) => entry.toStatus == 'SAFETY_HOLD',
-          ))
-            OrderSafetyHistoryButton(
-              scope: safetyScope,
-              refreshOrder: () => ref
-                  .read(
-                    customerOrderDetailNotifierProvider(widget.orderId)
-                        .notifier,
-                  )
-                  .fetchOrder(silent: true),
+    return GuidanceTrigger(
+      tourId: order.isCompleted ? 'customer_review' : 'customer_tracking',
+      enabled:
+          !order.isPending &&
+          !state.isCancelling &&
+          (order.isActive || order.isCompleted),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8F9FF),
+        appBar: AppBar(
+          title: const Text(
+            'Chi tiết đơn hàng',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0B1C30),
             ),
-          if (canRaiseSafety(order.status))
-            OrderSafetyButton(scope: safetyScope),
-          if (order.isActive)
-            IconButton(
-              icon: const Icon(Icons.near_me_rounded, color: Color(0xFF0F766E)),
-              tooltip: 'Theo dõi trực tiếp',
-              onPressed: () =>
-                  context.push('/appointments/${order.id}/tracking'),
-            ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF0F766E)),
-            onPressed: () => ref
-                .read(
-                  customerOrderDetailNotifierProvider(widget.orderId).notifier,
-                )
-                .fetchOrder(),
           ),
-        ],
-      ),
-      body: RefreshIndicator(
-        color: const Color(0xFF0F766E),
-        onRefresh: () => ref
-            .read(customerOrderDetailNotifierProvider(widget.orderId).notifier)
-            .fetchOrder(),
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          children: [
-            PaymentDisputeUpdates(
-              scope: paymentScope,
-              refreshOrder: refreshPayment,
+          centerTitle: true,
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              size: 20,
+              color: Color(0xFF0B1C30),
             ),
-            if (order.paymentDispute?.hasHistory == true)
-              PaymentDisputeSummary(
-                order: order.paymentDispute!,
-                role: PaymentDisputeRole.customer,
-              ),
-            OrderRescheduleCard(
-              scope: RescheduleScope(widget.orderId, RescheduleRole.customer),
-              snapshot: order.rescheduleSnapshot,
-              mutationBlocked: state.isCancelling,
-              refreshOrder: () async {
-                await ref
+            onPressed: () {
+              if (GoRouter.of(context).canPop()) {
+                context.pop();
+              } else {
+                context.go('/appointments');
+              }
+            },
+          ),
+          actions: [
+            if (order.statusHistory.any(
+              (entry) => entry.toStatus == 'SAFETY_HOLD',
+            ))
+              OrderSafetyHistoryButton(
+                scope: safetyScope,
+                refreshOrder: () => ref
                     .read(
                       customerOrderDetailNotifierProvider(widget.orderId)
                           .notifier,
                     )
-                    .fetchOrder(silent: true, queueIfBusy: true);
-                if (mounted) ref.invalidate(customerOrdersListProvider);
-              },
-            ),
-            CustomerOrderAddOns(
-              order: order,
-              mutationBlocked: state.isCancelling,
-            ),
-            // Banner theo dõi trực tiếp trên bản đồ khi đơn đang active
-            if (order.isActive) _buildLiveTrackingBanner(order),
-
-            // Banner đếm ngược phản hồi khi PENDING_PROVIDER
-            if (order.isPending && order.providerResponseDeadlineAt != null)
-              _buildPendingCountdownBanner(order),
-
-            // Card xử lý khi thợ yêu cầu hủy (ở cả PENDING_CUSTOMER hoặc SUPPORT_REVIEW)
-            if (order.cancellationRequest?.status == 'PENDING_CUSTOMER' ||
-                order.cancellationRequest?.status == 'SUPPORT_REVIEW')
-              OrderCancellationDecisionCard(
-                request: order.cancellationRequest!,
-                onDecide: ({required approve, note}) async {
-                  final success = await ref
-                      .read(
-                        customerOrderDetailNotifierProvider(widget.orderId)
-                            .notifier,
-                      )
-                      .decideCancellation(approve: approve, note: note);
-                  if (success) ref.invalidate(customerOrdersListProvider);
-                  return success;
-                },
+                    .fetchOrder(silent: true),
               ),
-            if (order.cancellationRequest?.status == 'DENIED')
-              OrderCancellationStatusBanner(
-                status: order.cancellationRequest!.status,
-              ),
-
-            // Card Trạng thái hiện tại
-            _buildStatusHeaderCard(order),
-            const SizedBox(height: 12),
-
-            // Card Chuyên viên phục vụ
-            CustomerOrderProviderCard(
-              order: order,
-              onCall: (phone) =>
-                  CustomerOrderActionCoordinator.makeCall(context, phone),
-              showRating: false,
-            ),
-            const SizedBox(height: 12),
-
-            // Card Dịch vụ & Thời gian
-            CustomerOrderServiceTimeCard(order: order),
-            const SizedBox(height: 12),
-
-            // Card Địa chỉ phục vụ
-            CustomerOrderAddressCard(order: order),
-            const SizedBox(height: 12),
-
-            // Card Chi tiết thanh toán
-            CustomerOrderPricingCard(
-              order: order,
-              currencyFormatter: currencyFormatter,
-            ),
-            const SizedBox(height: 12),
-
-            // Đánh giá đã hoàn tất (nếu có)
-            if (order.review != null) ...[
-              CustomerOrderReviewSummaryCard(review: order.review!),
-              const SizedBox(height: 12),
-            ],
-
-            // Timeline trạng thái
-            OrderStatusTimeline(
-              history: order.statusHistory,
-              currentStatus: order.status,
-            ),
-            const SizedBox(height: 80),
+            if (canRaiseSafety(order.status, role: safetyScope.role))
+              OrderSafetyButton(scope: safetyScope),
           ],
         ),
+        body: GuidanceAnchor(
+          id: 'customer_order',
+          child: RefreshIndicator(
+            color: const Color(0xFF0F766E),
+            onRefresh: () => ref
+                .read(
+                  customerOrderDetailNotifierProvider(widget.orderId).notifier,
+                )
+                .fetchOrder(),
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              children: [
+                PaymentDisputeUpdates(
+                  scope: paymentScope,
+                  refreshOrder: refreshPayment,
+                ),
+                if (order.paymentDispute?.hasHistory == true)
+                  PaymentDisputeSummary(
+                    order: order.paymentDispute!,
+                    role: PaymentDisputeRole.customer,
+                  ),
+                OrderRescheduleCard(
+                  scope: RescheduleScope(
+                    widget.orderId,
+                    RescheduleRole.customer,
+                  ),
+                  snapshot: order.rescheduleSnapshot,
+                  onContact: order.provider?.phone?.isNotEmpty == true
+                      ? () => CustomerOrderActionCoordinator.makeCall(
+                          context,
+                          order.provider!.phone!,
+                        )
+                      : null,
+                  onCancel: order.canCancel
+                      ? () =>
+                            CustomerOrderActionCoordinator.openCancellationSheet(
+                              context: context,
+                              ref: ref,
+                              orderId: order.id,
+                            )
+                      : null,
+                  mutationBlocked: state.isCancelling,
+                  refreshOrder: () async {
+                    await ref
+                        .read(
+                          customerOrderDetailNotifierProvider(widget.orderId)
+                              .notifier,
+                        )
+                        .fetchOrder(silent: true, queueIfBusy: true);
+                    if (mounted) ref.invalidate(customerOrdersListProvider);
+                  },
+                ),
+                CustomerOrderAddOns(
+                  order: order,
+                  mutationBlocked: state.isCancelling,
+                ),
+                // Banner theo dõi trực tiếp trên bản đồ khi đơn đang active
+                if (order.isActive) _buildLiveTrackingBanner(order),
+
+                // Banner đếm ngược phản hồi khi PENDING_PROVIDER
+                if (order.isPending && order.providerResponseDeadlineAt != null)
+                  _buildPendingCountdownBanner(order),
+
+                // Card xử lý khi thợ yêu cầu hủy (ở cả PENDING_CUSTOMER hoặc SUPPORT_REVIEW)
+                if (order.cancellationRequest?.status == 'PENDING_CUSTOMER' ||
+                    order.cancellationRequest?.status == 'SUPPORT_REVIEW')
+                  OrderCancellationDecisionCard(
+                    request: order.cancellationRequest!,
+                    onDecide: ({required approve, note}) async {
+                      final success = await ref
+                          .read(
+                            customerOrderDetailNotifierProvider(widget.orderId)
+                                .notifier,
+                          )
+                          .decideCancellation(approve: approve, note: note);
+                      if (success) ref.invalidate(customerOrdersListProvider);
+                      return success;
+                    },
+                  ),
+                if (order.cancellationRequest?.status == 'DENIED')
+                  OrderCancellationStatusBanner(
+                    status: order.cancellationRequest!.status,
+                  ),
+
+                // Card Trạng thái hiện tại
+                _buildStatusHeaderCard(order),
+                const SizedBox(height: 12),
+
+                // Card Chuyên viên phục vụ
+                CustomerOrderProviderCard(
+                  order: order,
+                  onCall: (phone) =>
+                      CustomerOrderActionCoordinator.makeCall(context, phone),
+                  showRating: false,
+                ),
+                const SizedBox(height: 12),
+
+                // Card Dịch vụ & Thời gian
+                CustomerOrderServiceTimeCard(order: order),
+                const SizedBox(height: 12),
+
+                // Card Địa chỉ phục vụ
+                CustomerOrderAddressCard(order: order),
+                const SizedBox(height: 12),
+
+                // Ảnh thực hiện dịch vụ
+                CustomerOrderEvidenceCard(order: order),
+
+                // Card Chi tiết thanh toán
+                CustomerOrderPricingCard(
+                  order: order,
+                  currencyFormatter: currencyFormatter,
+                ),
+                const SizedBox(height: 12),
+
+                // Đánh giá đã hoàn tất (nếu có)
+                if (order.review != null) ...[
+                  CustomerOrderReviewSummaryCard(review: order.review!),
+                  const SizedBox(height: 12),
+                ],
+
+                // Timeline trạng thái
+                OrderStatusTimeline(
+                  history: order.statusHistory,
+                  currentStatus: order.status,
+                ),
+                const SizedBox(height: 80),
+              ],
+            ),
+          ),
+        ),
+        bottomNavigationBar: _buildBottomBar(order),
       ),
-      bottomNavigationBar: _buildBottomBar(order),
     );
   }
 
@@ -537,17 +533,24 @@ class _CustomerOrderDetailScreenState
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
-            'Trạng thái hiện tại',
-            style: TextStyle(
-              fontSize: 13,
-              color: Color(0xFF64748B),
-              fontWeight: FontWeight.w500,
+          const Expanded(
+            child: Text(
+              'Trạng thái hiện tại',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
-          OrderStatusBadge(
-            status: order.status,
-            cancellationStatus: order.cancellationRequest?.status,
+          const SizedBox(width: 8),
+          Flexible(
+            child: OrderStatusBadge(
+              status: order.status,
+              cancellationStatus: order.cancellationRequest?.status,
+            ),
           ),
         ],
       ),

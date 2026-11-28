@@ -20,11 +20,29 @@ class ProviderDiscoveryRepository {
   Future<List<BookingProviderCandidateEntity>> search(
     ProviderSearchRequest request, {
     CancelToken? cancelToken,
+  }) async => _postCandidates(
+    ApiEndpoints.providerDiscoverySearch,
+    request.toJson(),
+    cancelToken: cancelToken,
+  );
+
+  Future<List<BookingProviderCandidateEntity>> searchNearbyHome(
+    NearbyHomeRequest request, {
+    CancelToken? cancelToken,
+  }) async => _postCandidates(
+    ApiEndpoints.providerDiscoveryNearby,
+    request.toJson(),
+    cancelToken: cancelToken,
+  );
+
+  Future<List<BookingProviderCandidateEntity>> _postCandidates(
+    String path,
+    Map<String, dynamic> body, {
+    CancelToken? cancelToken,
   }) async {
-    final body = request.toJson();
     try {
       final response = await _dio.post(
-        ApiEndpoints.providerDiscoverySearch,
+        path,
         data: body,
         cancelToken: cancelToken,
       );
@@ -54,4 +72,16 @@ final nearbyProvidersProvider = FutureProvider.autoDispose
       return ref
           .watch(providerDiscoveryRepositoryProvider)
           .search(request, cancelToken: cancel);
+    });
+
+final nearbyHomeProvidersProvider = FutureProvider.autoDispose
+    .family<List<BookingProviderCandidateEntity>, NearbyHomeRequest>((
+      ref,
+      request,
+    ) {
+      final cancel = CancelToken();
+      ref.onDispose(() => cancel.cancel());
+      return ref
+          .watch(providerDiscoveryRepositoryProvider)
+          .searchNearbyHome(request, cancelToken: cancel);
     });

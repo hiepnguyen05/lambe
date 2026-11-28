@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CacheModule } from '../../infrastructure/cache/cache.module';
 import { PostgresModule } from '../../infrastructure/persistence/postgres/postgres.module';
 import { AuthModule } from '../auth/auth.module';
 import { CustomerOnboardingService } from './application/customer-onboarding.service';
@@ -8,7 +9,7 @@ import { CustomerRecommendationsController } from './controllers/customer-recomm
 import { OnboardingOptionsController } from './controllers/onboarding-options.controller';
 
 @Module({
-  imports: [PostgresModule, AuthModule],
+  imports: [PostgresModule, CacheModule, AuthModule],
   controllers: [
     CustomerOnboardingController,
     OnboardingOptionsController,

@@ -25,19 +25,7 @@ describe('RedisCacheService', () => {
     ]);
     await expect(service.set('key', { value: true })).resolves.toBeUndefined();
     await expect(service.delete('key')).resolves.toBeUndefined();
-    await expect(service.setMany([{ key: 'key', value: 1 }], 30)).resolves.toBe(
-      false,
-    );
     await expect(service.deleteMany(['key'])).resolves.toBe(false);
-    await expect(service.readSortedPage('index', 21)).resolves.toBeNull();
-    await expect(service.replaceSortedPage('index', [], 30)).resolves.toBe(
-      false,
-    );
-    await expect(service.setIfAbsent('lock', 'token', 5)).resolves.toBeNull();
-    await expect(service.releaseLock('lock', 'token')).resolves.toBeUndefined();
-    await expect(
-      service.advanceGeneration('generation', '1', 30),
-    ).resolves.toBe(false);
     await expect(service.publishChatUpdate('chat-id')).resolves.toBeUndefined();
     expect(service.getStatus()).toBe('disabled');
     await expect(service.isOnline('provider')).rejects.toBeInstanceOf(
@@ -86,7 +74,7 @@ describe('RedisCacheService', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce('invalid-json')
       .mockResolvedValueOnce('null');
-    const mGet = jest.fn().mockResolvedValue(['{"id":1}', null]);
+    const mGet = jest.fn().mockResolvedValue(['{"id":1}', null, null]);
     (service as unknown as { client: unknown }).client = {
       isReady: true,
       withCommandOptions: jest.fn().mockReturnValue({ get, mGet }),
@@ -97,16 +85,18 @@ describe('RedisCacheService', () => {
     await service.get('random:secret-key');
     await service.getMany([
       'lambe:feed:v1:post:private-id:revision:1',
+      'lambe:discovery:v1:onboarding:secret-user',
       'random:other-secret',
     ]);
     expect(metrics.snapshot().redis.cacheLookups).toEqual({
       categories: { hits: 1, misses: 0, errors: 0 },
       services: { hits: 0, misses: 2, errors: 0 },
       feedPosts: { hits: 1, misses: 0, errors: 0 },
+      discovery: { hits: 0, misses: 1, errors: 0 },
       other: { hits: 0, misses: 2, errors: 0 },
     });
     expect(JSON.stringify(metrics.snapshot())).not.toMatch(
-      /private-id|secret-marker|other-secret/,
+      /private-id|secret-marker|other-secret|secret-user/,
     );
   });
 
@@ -158,7 +148,7 @@ describe('RedisCacheService', () => {
     expect(JSON.stringify(metrics.snapshot())).not.toContain('private-key');
   });
 
-  it('applies the smaller Feed deadline to the Redis command itself', async () => {
+  it('applies an explicitly requested smaller command deadline', async () => {
     const service = createDisabledService();
     const evalCommand = jest.fn().mockResolvedValue([1, 1000, 0, 0]);
     const withCommandOptions = jest.fn().mockReturnValue({ eval: evalCommand });

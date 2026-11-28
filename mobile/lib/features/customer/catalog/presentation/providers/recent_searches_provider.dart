@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:mobile/core/storage/secure_storage_service.dart';
 import 'package:mobile/features/shared/auth/di/auth_providers.dart';
 
 import '../../data/repositories/recent_searches_store.dart';
@@ -12,7 +12,8 @@ class RecentSearchesNotifier extends StateNotifier<List<String>> {
   final String? userId;
   int _revision = 0;
   Future<void> _writeQueue = Future.value();
-  RecentSearchesNotifier({this.store, this.userId}) : super(kDefaultRecentSearches) {
+  RecentSearchesNotifier({this.store, this.userId})
+    : super(kDefaultRecentSearches) {
     _restore();
   }
 
@@ -81,11 +82,7 @@ final recentSearchesProvider =
         authNotifierProvider.select((state) => state.valueOrNull?.id),
       );
       return RecentSearchesNotifier(
-        store: const RecentSearchesStore(
-          FlutterSecureStorage(
-            aOptions: AndroidOptions(encryptedSharedPreferences: true),
-          ),
-        ),
+        store: RecentSearchesStore(ref.watch(flutterSecureStorageProvider)),
         userId: userId,
       );
     });

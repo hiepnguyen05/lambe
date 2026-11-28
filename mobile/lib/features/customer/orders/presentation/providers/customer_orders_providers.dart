@@ -12,6 +12,7 @@ import '../../domain/entities/customer_order_entity.dart';
 import '../../domain/repositories/customer_orders_repository.dart';
 
 import 'package:mobile/features/shared/auth/di/auth_providers.dart';
+import 'package:mobile/features/shared/order_notifications/presentation/order_notifications_provider.dart';
 
 final customerOrdersRemoteDataSourceProvider =
     Provider<CustomerOrdersRemoteDataSource>((ref) {
@@ -81,6 +82,7 @@ class CustomerOrderDetailNotifier
   bool _fetching = false;
   bool _refreshQueued = false;
   bool _isPaused = false;
+  final Set<Object> _visibleOwners = <Object>{};
 
   CustomerOrderDetailNotifier(
     this._repository,
@@ -90,12 +92,21 @@ class CustomerOrderDetailNotifier
     fetchOrder();
   }
 
-  void pausePolling() {
+  void pausePolling([Object? owner]) {
+    if (owner != null) {
+      _visibleOwners.remove(owner);
+      if (_visibleOwners.isNotEmpty) return;
+    } else {
+      _visibleOwners.clear();
+    }
     _isPaused = true;
     _stopPolling();
   }
 
-  void resumePolling() {
+  void resumePolling([Object? owner]) {
+    if (owner != null) {
+      _visibleOwners.add(owner);
+    }
     if (!_isPaused) return;
     _isPaused = false;
     if (!_fetching) _refreshQueued = false;
@@ -154,7 +165,7 @@ class CustomerOrderDetailNotifier
   void _startPollingIfNeeded(bool pending) {
     if (_isPaused) return;
     _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(Duration(seconds: pending ? 4 : 12), (_) {
+    _pollingTimer = Timer.periodic(Duration(seconds: pending ? 2 : 12), (_) {
       if (!mounted || _isPaused) {
         _stopPolling();
         return;
@@ -250,7 +261,7 @@ class CustomerOrderDetailNotifier
         return false;
       }
       await _repository.submitReview(orderId, rating: rating, comment: comment);
-      await fetchOrder(silent: true);
+      await fetchOrder(silent: true, queueIfBusy: true);
       return true;
     } catch (e) {
       if (!mounted) return false;
@@ -291,7 +302,7 @@ final customerOrderDetailNotifierProvider = StateNotifierProvider.autoDispose
       orderId,
     ) {
       final repo = ref.watch(customerOrdersRepositoryProvider);
-      return CustomerOrderDetailNotifier(
+      final notifier = CustomerOrderDetailNotifier(
         repo,
         orderId,
         isSafetyBlocked: () => ref
@@ -300,4 +311,23 @@ final customerOrderDetailNotifierProvider = StateNotifierProvider.autoDispose
             )
             .blocksOrder,
       );
+      ref.listen(orderNotificationEventsProvider, (_, next) {
+        final notice = next.valueOrNull;
+        if (notice?.orderId == orderId) {
+          if (notice!.event == 'ORDER_SAFETY_HOLD') {
+            unawaited(
+              ref
+                  .read(
+                    orderSafetyProvider(
+                      SafetyScope(orderId, SafetyRole.customer),
+                    ).notifier,
+                  )
+                  .refresh(),
+            );
+          }
+          unawaited(notifier.fetchOrder(silent: true, queueIfBusy: true));
+          ref.invalidate(customerOrdersListProvider);
+        }
+      });
+      return notifier;
     });

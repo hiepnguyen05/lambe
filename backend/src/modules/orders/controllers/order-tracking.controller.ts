@@ -158,10 +158,15 @@ export class CustomerOrderTrackingController {
         refreshing = false;
       }
     };
-    const unsubscribe = await this.tracking.subscribe(
-      params.id,
-      () => void refresh(),
-    );
+    let unsubscribe: () => Promise<void> = () => Promise.resolve();
+    try {
+      unsubscribe = await this.tracking.subscribe(
+        params.id,
+        () => void refresh(),
+      );
+    } catch {
+      unsubscribe = () => Promise.resolve();
+    }
     if (response.destroyed) {
       await unsubscribe();
       return;

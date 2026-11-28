@@ -2,8 +2,12 @@ import 'package:dio/dio.dart';
 
 import 'package:mobile/core/constants/api_endpoints.dart';
 import 'package:mobile/core/network/api_response_parser.dart';
+import 'package:mobile/core/network/network_exceptions.dart';
 
 abstract class ProviderOrdersRemoteDataSource {
+  Future<List<Map<String, dynamic>>> getUpcomingOrders({
+    CancelToken? cancelToken,
+  });
   Future<List<Map<String, dynamic>>> getPendingOrders();
   Future<List<Map<String, dynamic>>> getAllProviderOrders({String? status});
   Future<Map<String, dynamic>> getProviderOrderDetail(String orderId);
@@ -25,11 +29,13 @@ abstract class ProviderOrdersRemoteDataSource {
     required DateTime capturedAt,
   });
   Future<Map<String, dynamic>> startOrder(String orderId);
+  Future<Map<String, dynamic>> pauseWork(String orderId);
+  Future<Map<String, dynamic>> resumeWork(String orderId);
   Future<Map<String, dynamic>> completeOrder(
     String orderId, {
     required bool cashReceived,
   });
-  Future<void> uploadEvidence(
+  Future<Map<String, dynamic>> uploadEvidence(
     String orderId,
     String type,
     String filePath, {
@@ -51,17 +57,17 @@ class DioProviderOrdersRemoteDataSource
 
   DioProviderOrdersRemoteDataSource(this._dio);
 
-  String _extractError(DioException e, {required String fallback}) {
-    final resData = e.response?.data;
-    if (resData is Map<String, dynamic>) {
-      final msg = resData['message'];
-      if (msg is String && msg.isNotEmpty) {
-        return msg;
-      } else if (msg is List && msg.isNotEmpty) {
-        return msg.first.toString();
-      }
-    }
-    return e.message ?? fallback;
+  @override
+  Future<List<Map<String, dynamic>>> getUpcomingOrders({
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.get(
+      '${ApiEndpoints.meProviderOrders}/upcoming',
+      cancelToken: cancelToken,
+    );
+    return ApiResponseParser.dataList(response)
+        .whereType<Map<String, dynamic>>()
+        .toList();
   }
 
   @override
@@ -95,7 +101,10 @@ class DioProviderOrdersRemoteDataSource
       return list.whereType<Map<String, dynamic>>().toList();
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể tải danh sách đơn của thợ.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể tải danh sách đơn của thợ.',
+        ),
       );
     }
   }
@@ -107,7 +116,10 @@ class DioProviderOrdersRemoteDataSource
       return ApiResponseParser.dataMap(response);
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể tải chi tiết đơn hàng.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể tải chi tiết đơn hàng.',
+        ),
       );
     }
   }
@@ -120,7 +132,12 @@ class DioProviderOrdersRemoteDataSource
       );
       return ApiResponseParser.dataMap(response);
     } on DioException catch (e) {
-      throw Exception(_extractError(e, fallback: 'Không thể nhận đơn hàng.'));
+      throw Exception(
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể nhận đơn hàng.',
+        ),
+      );
     }
   }
 
@@ -137,7 +154,10 @@ class DioProviderOrdersRemoteDataSource
       return ApiResponseParser.dataMap(response);
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể từ chối đơn hàng.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể từ chối đơn hàng.',
+        ),
       );
     }
   }
@@ -154,7 +174,9 @@ class DioProviderOrdersRemoteDataSource
       );
       return ApiResponseParser.dataMap(response);
     } on DioException catch (e) {
-      throw Exception(_extractError(e, fallback: 'Không thể hủy đơn hàng.'));
+      throw Exception(
+        ExceptionHandler.extractMessage(e, fallback: 'Không thể hủy đơn hàng.'),
+      );
     }
   }
 
@@ -167,7 +189,10 @@ class DioProviderOrdersRemoteDataSource
       return ApiResponseParser.dataMap(response);
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể cập nhật bắt đầu di chuyển.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể cập nhật bắt đầu di chuyển.',
+        ),
       );
     }
   }
@@ -193,7 +218,10 @@ class DioProviderOrdersRemoteDataSource
       return ApiResponseParser.dataMap(response);
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể cập nhật đã đến nơi.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể cập nhật đã đến nơi.',
+        ),
       );
     }
   }
@@ -207,7 +235,44 @@ class DioProviderOrdersRemoteDataSource
       return ApiResponseParser.dataMap(response);
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể cập nhật bắt đầu dịch vụ.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể cập nhật bắt đầu dịch vụ.',
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> pauseWork(String orderId) async {
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.pauseProviderOrderWork(orderId),
+      );
+      return ApiResponseParser.dataMap(response);
+    } on DioException catch (e) {
+      throw Exception(
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể tạm dừng công việc.',
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> resumeWork(String orderId) async {
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.resumeProviderOrderWork(orderId),
+      );
+      return ApiResponseParser.dataMap(response);
+    } on DioException catch (e) {
+      throw Exception(
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể tiếp tục công việc.',
+        ),
       );
     }
   }
@@ -225,13 +290,16 @@ class DioProviderOrdersRemoteDataSource
       return ApiResponseParser.dataMap(response);
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể hoàn thành đơn hàng.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể hoàn thành đơn hàng.',
+        ),
       );
     }
   }
 
   @override
-  Future<void> uploadEvidence(
+  Future<Map<String, dynamic>> uploadEvidence(
     String orderId,
     String type,
     String filePath, {
@@ -250,14 +318,18 @@ class DioProviderOrdersRemoteDataSource
         queryParams['longitude'] = longitude;
       }
 
-      await _dio.post(
+      final response = await _dio.post(
         ApiEndpoints.providerOrderEvidence(orderId, type),
         data: formData,
         queryParameters: queryParams.isNotEmpty ? queryParams : null,
       );
+      return ApiResponseParser.dataMap(response);
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể tải ảnh bằng chứng lên.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể tải ảnh bằng chứng lên.',
+        ),
       );
     }
   }
@@ -268,7 +340,10 @@ class DioProviderOrdersRemoteDataSource
       await _dio.post(ApiEndpoints.providerOrderContactAttempt(orderId));
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể ghi nhận liên hệ khách.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể ghi nhận liên hệ khách.',
+        ),
       );
     }
   }
@@ -290,7 +365,10 @@ class DioProviderOrdersRemoteDataSource
       );
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể gửi yêu cầu hủy đơn.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể gửi yêu cầu hủy đơn.',
+        ),
       );
     }
   }
@@ -307,7 +385,10 @@ class DioProviderOrdersRemoteDataSource
       return ApiResponseParser.dataMap(response)['url']?.toString();
     } on DioException catch (e) {
       throw Exception(
-        _extractError(e, fallback: 'Không thể tải ảnh bằng chứng.'),
+        ExceptionHandler.extractMessage(
+          e,
+          fallback: 'Không thể tải ảnh bằng chứng.',
+        ),
       );
     }
   }

@@ -72,8 +72,13 @@ class FeedLocalCache {
     }
   }
 
+  bool _isCacheable(FeedScope scope) =>
+      scope.mode == FeedMode.all &&
+      (scope.categorySlug == null || scope.categorySlug!.trim().isEmpty) &&
+      (scope.search == null || scope.search!.trim().isEmpty);
+
   Future<List<FeedPost>> read(FeedScope scope) async {
-    if (scope.mode != FeedMode.all) return [];
+    if (!_isCacheable(scope)) return [];
     final generation = _generation;
     var result = <FeedPost>[];
     await _serial(() async {
@@ -93,7 +98,7 @@ class FeedLocalCache {
   }
 
   Future<void> write(FeedScope scope, List<FeedPost> posts) async {
-    if (scope.mode != FeedMode.all) return;
+    if (!_isCacheable(scope)) return;
     final generation = _generation;
     await _serial(() async {
       if (generation != _generation) return;
@@ -182,7 +187,12 @@ class FeedLocalCache {
             'status': s.status,
             'priceAmount': s.price,
             'durationMinutes': s.duration,
-            'service': {'id': s.serviceId, 'name': s.name},
+            'service': {
+              'id': s.serviceId,
+              'name': s.name,
+              if (s.categoryId != null) 'categoryId': s.categoryId,
+              if (s.categorySlug != null) 'categorySlug': s.categorySlug,
+            },
           },
         )
         .toList(),

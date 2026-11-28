@@ -21,12 +21,21 @@ class OrderSafetyRepository {
     );
   }
 
-  Future<SafetyIncident> raise(SafetyScope scope, CancelToken cancel) async {
+  Future<SafetyIncident> raise(
+    SafetyScope scope,
+    CancelToken cancel, {
+    SafetyReason? reason,
+    String? detail,
+  }) async {
+    final trimmed = detail?.trim();
     return SafetyIncident.fromJson(
       ApiResponseParser.dataMap(
         await dio.post(
           '${scope.path}/sos',
-          data: <String, dynamic>{},
+          data: <String, dynamic>{
+            if (reason != null) 'reason': reason.apiValue,
+            if (trimmed != null && trimmed.isNotEmpty) 'detail': trimmed,
+          },
           cancelToken: cancel,
         ),
       ),

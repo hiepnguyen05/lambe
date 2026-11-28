@@ -216,6 +216,7 @@ Sau 409 tải lại báo giá/lịch trống, không tự chuyển giờ đặt 
 | GET /me/orders/:id | Chi tiết đơn của khách |
 | POST /me/orders/:id/cancel | `{ "reason": "Thay đổi kế hoạch" }`, HTTP 200 |
 | GET /me/provider/orders[?status=...&limit=...&cursor=...] | Danh sách đơn thợ, 1-50 đơn/trang; mặc định 50; `meta.nextCursor` để tải tiếp |
+| GET /me/provider/orders/upcoming | Năm đơn `ACCEPTED` chờ khởi hành, theo `expectedStartAt` tăng dần; dùng cho trang chủ, gồm đơn đã đến giờ nhưng chưa khởi hành |
 | GET /me/provider/orders/:id | Chi tiết, ẩn địa chỉ khi chưa nhận |
 | POST /me/provider/orders/:id/accept | Không body, giữ hoa hồng và xác nhận lịch |
 | POST /me/provider/orders/:id/reject | reason 3-500 ký tự, chỉ khi pending |
@@ -230,6 +231,19 @@ Các action của thợ trả 200. Hủy chỉ cho phép trước EN_ROUTE. Chuy
 lặp/sai trả 409. Accept kiểm tra lại lịch, ví khả dụng, trạng thái và điều kiện
 dịch vụ trong transaction; snapshot địa chỉ vẫn dùng được sau khi xóa địa chỉ
 khỏi sổ địa chỉ. Không tự đổi giá/thời lượng nếu dịch vụ đã được chỉnh sửa.
+
+Với đơn `SCHEDULED`, phản hồi đơn có `departureAvailableAt` (giờ hẹn trừ
+60 phút); `ASAP` trả `null`. Mobile hiển thị chi tiết lịch hẹn khi đơn đặt trước
+ở `ACCEPTED`, khóa nút khởi hành đến mốc API trả về và chỉ mở bản đồ hành trình
+sau khi thợ chuyển đơn sang `EN_ROUTE`. Xác nhận nhận lịch không tự khởi hành.
+Khởi hành chỉ được phép từ `departureAvailableAt` đến trước `scheduledAt`.
+Từ giờ hẹn trở đi, API trả `409 APPOINTMENT_PASSED` và mobile khóa nút,
+yêu cầu hai bên đồng ý giờ mới trước khi khởi hành. Kiểm tra nằm trong
+transaction khóa đơn; không đổi trạng thái, giữ tiền hay thông báo khi bị chặn.
+Mốc cảnh báo vận hành `scheduleOverdueAt` sau 15 phút không phải thời gian
+gia hạn khởi hành. Đơn `ASAP` giữ nguyên khả năng khởi hành ngay.
+API đơn sắp tới trả `travelDistanceKm` của đơn tại lúc đặt để hiển thị quãng
+đường di chuyển; đây không phải khoảng cách GPS được cập nhật theo thời gian thực.
 
 Giữ tiền: `available = balance - held`; accept tạo HOLD, cancel giải phóng HOLD,
 complete chuyển HOLD thành COMMISSION và trừ balance đúng một lần. Khách không
@@ -327,21 +341,35 @@ Sau CONFIRM_PAID, khách mới có thể đánh giá nếu chưa có review.
 - `POST /me/orders/:id/reschedule`: khách đề xuất giờ mới bằng
   `{ "scheduledAt": "2026-10-25T14:00:00+07:00" }` cho đơn `SCHEDULED`
   đã `ACCEPTED` và chưa khởi hành. Giờ đề xuất giữ tối đa 30 phút, không làm
-  mất lịch cũ. `POST /me/provider/orders/:id/reschedule/decision` nhận
+  mất lịch cũ. Thợ cũng có thể đề xuất qua `POST /me/provider/orders/:id/reschedule`;
+  khách phản hồi qua `POST /me/orders/:id/reschedule/decision`.
+  `POST /me/provider/orders/:id/reschedule/decision` nhận
   `{ "requestId": "<rescheduleRequest.id>", "approve": true|false }`. Client mới
   luôn truyền `requestId` UUID v4 để không duyệt nhầm yêu cầu mới khi màn cũ chưa
   cập nhật; không khớp yêu cầu PENDING còn hạn trả 409. Trường này optional để
   giữ tương thích client cũ; body chỉ `approve` vẫn được nhận. Chấp nhận chỉ thành công nếu giờ mới còn hợp
   lệ/trống; thay giờ đơn và block lịch cùng giao dịch. Đơn chi tiết trả
   `rescheduleRequest` gần nhất để hai bên hiển thị trạng thái.
+  `requestedByRole` xác định `CUSTOMER`/`PROVIDER`; chỉ bên còn lại được duyệt.
+  Mỗi đơn có tối đa một đề xuất đang chờ, giữ cả lịch cũ và khung giờ đề xuất
+  cho đến khi phản hồi hoặc hết hạn. Không thay giá hoặc khoản hoa hồng giữ.
 
   Mobile dùng giờ Việt Nam UTC+07:00 để chọn/hiển thị, gửi ISO UTC `Z`. Khoảng
   đặt mới hợp lệ là từ 60 phút đến 30 ngày kể từ lúc gửi; không chọn trùng giờ
   hiện tại. Hạn đề xuất là min(30 phút sau tạo, 15 phút trước giờ đề xuất).
-  Hết hạn được hiển thị riêng trên mobile, không tự sửa trạng thái server.
+  Backend quét mỗi phút để chuyển yêu cầu quá hạn sang `EXPIRED` và thông báo
+  hai bên; lịch cũ vẫn giữ nguyên. Đơn rời `ACCEPTED` làm yêu cầu đang chờ
+  chuyển `CANCELLED`. Phân biệt rõ `REJECTED` với `EXPIRED` trên mobile.
   Timeout/5xx phải GET chi tiết đơn theo vai trò để đối soát; không tự lặp POST.
   Mất mạng khi đối soát khóa riêng thao tác đổi lịch cho tới khi tải lại thành
   công. GET không thay thế kiểm tra lịch/transaction/authorization ở backend.
+
+  `scheduleOverdueAt` là mốc API dùng để hiện cảnh báo lịch hẹn `SCHEDULED`:
+  `ACCEPTED` trễ 15 phút so với giờ phục vụ, `EN_ROUTE` trễ 30 phút,
+  `ARRIVED` chờ 30 phút từ lúc đến. Trạng thái khác/ASAP trả `null`.
+  Quá giờ không tự hủy đơn, giải phóng tiền hoặc tính phí. Hai bên liên hệ,
+  thống nhất giờ mới khi chưa khởi hành, hoặc dùng chức năng hủy/hỗ trợ sẵn có.
+  Lịch mới được đồng ý sẽ đóng cảnh báo cũ và vẫn được theo dõi nếu lại bị trễ.
 - `POST /me/orders/:id/review`: sau `COMPLETED`, body `{ "rating": 5,
   "comment": "..." }`. Chỉ khách của đơn đánh giá một lần, điểm 1-5. `GET
   /providers/:id/reviews` công khai điểm trung bình, số lượt và trang đánh

@@ -13,7 +13,7 @@ class SelectProviderFilterBar extends ConsumerWidget {
 
     const tabs = [
       (CandidateSortOption.nearest, 'Gần nhất', Icons.near_me_rounded),
-      (CandidateSortOption.highestRated, 'Sao', Icons.star_rounded),
+      (CandidateSortOption.highestRated, 'Đánh giá cao', Icons.star_rounded),
       (CandidateSortOption.priceAsc, 'Giá thấp', Icons.arrow_downward_rounded),
       (CandidateSortOption.priceDesc, 'Giá cao', Icons.arrow_upward_rounded),
     ];
@@ -28,7 +28,7 @@ class SelectProviderFilterBar extends ConsumerWidget {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         child: Row(
           children: tabs.map((tab) {
             final option = tab.$1;
@@ -64,12 +64,12 @@ class SelectProviderFilterBar extends ConsumerWidget {
       borderRadius: BorderRadius.circular(100),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
         decoration: BoxDecoration(
-          color: isSelected ? primaryTeal : const Color(0xFFF8FAFC),
+          color: isSelected ? primaryTeal : Colors.white,
           borderRadius: BorderRadius.circular(100),
           border: Border.all(
-            color: isSelected ? primaryTeal : const Color(0xFFCBD5E1),
+            color: isSelected ? primaryTeal : const Color(0xFFE2E8F0),
             width: isSelected ? 1.5 : 1,
           ),
           boxShadow: isSelected
@@ -80,14 +80,20 @@ class SelectProviderFilterBar extends ConsumerWidget {
                     offset: const Offset(0, 2),
                   ),
                 ]
-              : null,
+              : [
+                  BoxShadow(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.02),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
-              size: 15,
+              size: 14,
               color: isSelected
                   ? Colors.white
                   : (icon == Icons.star_rounded

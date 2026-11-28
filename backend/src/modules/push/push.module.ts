@@ -17,6 +17,6 @@ import { PushDevicesController } from './controllers/push-devices.controller';
   ],
   controllers: [PushDevicesController],
   providers: [PushDevicesService, PushOutboxService, OrderPushRelayService],
-  exports: [PushOutboxService],
+  exports: [PushOutboxService, OrderPushRelayService],
 })
 export class PushModule {}

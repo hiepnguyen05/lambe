@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,8 +16,11 @@ import '../widgets/public_profile/public_profile_portfolio_tab.dart';
 import '../widgets/public_profile/public_profile_reviews_tab.dart';
 import '../widgets/public_profile/public_profile_tabs.dart';
 import '../widgets/public_profile/public_profile_team_tab.dart';
+
 import 'package:mobile/features/customer/booking/domain/entities/public_specialist_entity.dart';
 import 'package:mobile/features/customer/booking/presentation/providers/public_members_provider.dart';
+import 'package:mobile/features/shared/beauty_feed/di/feed_providers.dart';
+import 'package:mobile/features/shared/chat/domain/entities/chat_peer_entity.dart';
 
 class PartnerPublicProfileScreen extends ConsumerStatefulWidget {
   final String providerId;
@@ -32,6 +36,45 @@ class _PartnerPublicProfileScreenState
     extends ConsumerState<PartnerPublicProfileScreen> {
   int _selectedTabIndex = 0;
   bool _startingBooking = false;
+  bool? _localFollowing;
+  bool _togglingFollow = false;
+  final CancelToken _followCancelToken = CancelToken();
+
+  @override
+  void dispose() {
+    _followCancelToken.cancel();
+    super.dispose();
+  }
+
+  Future<void> _handleToggleFollow(
+    PartnerPublicProfileEntity profile,
+    bool currentlyFollowing,
+  ) async {
+    if (_togglingFollow) return;
+    final target = !currentlyFollowing;
+    setState(() {
+      _togglingFollow = true;
+      _localFollowing = target;
+    });
+    try {
+      await ref
+          .read(feedRepositoryProvider)
+          .react(profile.id, 'follow', target, _followCancelToken);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _localFollowing = currentlyFollowing;
+      });
+      AppDialog.error(
+        context,
+        message: 'Không thể cập nhật trạng thái theo dõi. Vui lòng thử lại.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _togglingFollow = false);
+      }
+    }
+  }
 
   Future<void> _handleSelectService(
     PartnerPublicProfileEntity profile,
@@ -83,14 +126,6 @@ class _PartnerPublicProfileScreenState
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        actions: [
-          IconButton(
-            tooltip: 'Beauty Feed của chuyên viên',
-            icon: const Icon(Icons.photo_library_outlined),
-            onPressed: () =>
-                context.push('/feed?providerId=${widget.providerId}'),
-          ),
-        ],
         leading: IconButton(
           icon: const Icon(
             Icons.arrow_back_rounded,
@@ -106,9 +141,9 @@ class _PartnerPublicProfileScreenState
           tooltip: 'Quay lại',
         ),
         title: const Text(
-          'Hồ Sơ Chuyên Gia',
+          'Hồ sơ chuyên gia',
           style: TextStyle(
-            fontSize: 16,
+            fontSize: 17,
             fontWeight: FontWeight.w700,
             color: AppColors.onSurface,
           ),
@@ -189,6 +224,9 @@ class _PartnerPublicProfileScreenState
   }
 
   Widget _buildContent(PartnerPublicProfileEntity profile) {
+    final feedFollow = ref.watch(feedSignalsProvider).follows[profile.id];
+    final isFollowing = _localFollowing ?? feedFollow ?? false;
+
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640),
@@ -201,13 +239,19 @@ class _PartnerPublicProfileScreenState
               // 1. Profile Header Hero Card
               PublicProfileHeroCard(
                 profile: profile,
+                isFollowing: isFollowing,
+                onFollowTap: () => _handleToggleFollow(profile, isFollowing),
                 onChatTap: () {
-                  AppDialog.info(
-                    context,
-                    title: 'Nhắn tin tư vấn',
-                    message:
-                        'Kết nối tư vấn nhanh với chuyên viên ${profile.displayName} trước khi tiến hành dịch vụ.',
-                    buttonText: 'Đã rõ',
+                  context.push(
+                    '/chat/room',
+                    extra: {
+                      'providerId': profile.id,
+                      'peer': ChatPeerEntity(
+                        id: profile.id,
+                        displayName: profile.displayName,
+                        avatarUrl: profile.avatarUrl,
+                      ),
+                    },
                   );
                 },
               ),
@@ -217,8 +261,9 @@ class _PartnerPublicProfileScreenState
               // 2. Segmented Navigation Tabs (Giới thiệu | Nhật ký | Đánh giá | Đội ngũ)
               Consumer(
                 builder: (context, ref, _) {
-                  final membersAsync =
-                      ref.watch(publicMembersProvider(profile.id));
+                  final membersAsync = ref.watch(
+                    publicMembersProvider(profile.id),
+                  );
                   final hasMembers =
                       membersAsync.valueOrNull?.isNotEmpty == true;
 
@@ -305,11 +350,17 @@ class _PartnerPublicProfileScreenState
                     durationMinutes: first.durationMinutes,
                   ),
                 );
-                _handleSelectService(profile, pubService,
-                    assignedMember: specialist);
+                _handleSelectService(
+                  profile,
+                  pubService,
+                  assignedMember: specialist,
+                );
               } else if (profile.services.isNotEmpty) {
-                _handleSelectService(profile, profile.services.first,
-                    assignedMember: specialist);
+                _handleSelectService(
+                  profile,
+                  profile.services.first,
+                  assignedMember: specialist,
+                );
               }
             },
           ),

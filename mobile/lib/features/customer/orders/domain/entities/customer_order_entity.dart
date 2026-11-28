@@ -7,10 +7,12 @@ class CustomerOrderEntity extends Equatable {
   final String id;
   final String bookingType;
   final DateTime? scheduledAt;
+  final DateTime? scheduleOverdueAt;
   final String status;
   final String? rejectionReason;
   final String paymentMethod;
   final String serviceName;
+  final String? serviceIconUrl;
   final int servicePriceAmount;
   final int travelFeeAmount;
   final double? travelDistanceKm;
@@ -39,6 +41,9 @@ class CustomerOrderEntity extends Equatable {
   final OrderReviewEntity? review;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final DateTime? startedAt;
+  final DateTime? workPausedAt;
+  final int totalPausedSeconds;
   final RescheduleProposal? rescheduleRequest;
   final AddOnOrder? addOnSnapshot;
   final PaymentDisputeOrder? paymentDispute;
@@ -47,10 +52,12 @@ class CustomerOrderEntity extends Equatable {
     required this.id,
     required this.bookingType,
     this.scheduledAt,
+    this.scheduleOverdueAt,
     required this.status,
     this.rejectionReason,
     this.paymentMethod = 'CASH',
     required this.serviceName,
+    this.serviceIconUrl,
     required this.servicePriceAmount,
     this.travelFeeAmount = 0,
     this.travelDistanceKm,
@@ -79,6 +86,9 @@ class CustomerOrderEntity extends Equatable {
     this.review,
     this.createdAt,
     this.updatedAt,
+    this.startedAt,
+    this.workPausedAt,
+    this.totalPausedSeconds = 0,
     this.rescheduleRequest,
     this.addOnSnapshot,
     this.paymentDispute,
@@ -97,6 +107,7 @@ class CustomerOrderEntity extends Equatable {
   bool get isActive => isAccepted || isEnRoute || isArrived || isInProgress;
 
   bool get isSafetyHold => status == 'SAFETY_HOLD';
+  bool get isWorkPaused => workPausedAt != null;
 
   bool get isPaymentDispute => isPaymentDisputed(status);
   bool get needsSupport => isPaymentDispute || isSafetyHold;
@@ -112,6 +123,7 @@ class CustomerOrderEntity extends Equatable {
     startAt: scheduledAt,
     updatedAt: updatedAt,
     proposal: rescheduleRequest,
+    overdueAt: scheduleOverdueAt,
   );
 
   factory CustomerOrderEntity.fromJson(Map<String, dynamic> json) {
@@ -133,10 +145,18 @@ class CustomerOrderEntity extends Equatable {
       id: json['id']?.toString() ?? '',
       bookingType: json['bookingType']?.toString() ?? 'ASAP',
       scheduledAt: parseDate(json['scheduledAt']),
+      scheduleOverdueAt: parseDate(json['scheduleOverdueAt']),
       status: json['status']?.toString() ?? 'PENDING_PROVIDER',
       rejectionReason: json['rejectionReason']?.toString(),
       paymentMethod: json['paymentMethod']?.toString() ?? 'CASH',
       serviceName: json['serviceName']?.toString() ?? 'Dịch vụ làm đẹp',
+      serviceIconUrl:
+          json['serviceIconUrl']?.toString() ??
+          ((json['providerService'] as Map?)?['service'] as Map?)?['iconUrl']
+              ?.toString() ??
+          (((json['providerService'] as Map?)?['service'] as Map?)?['category']
+                  as Map?)?['iconUrl']
+              ?.toString(),
       servicePriceAmount: servicePrice,
       travelFeeAmount: travelFee,
       travelDistanceKm: (json['travelDistanceKm'] as num?)?.toDouble(),
@@ -181,6 +201,9 @@ class CustomerOrderEntity extends Equatable {
           : null,
       createdAt: parseDate(json['createdAt']),
       updatedAt: parseDate(json['updatedAt']),
+      startedAt: parseDate(json['startedAt']),
+      workPausedAt: parseDate(json['workPausedAt']),
+      totalPausedSeconds: (json['totalPausedSeconds'] as num?)?.toInt() ?? 0,
       paymentDispute:
           isPaymentDisputed(json['status'] as String?) ||
               json['paymentDisputeOpenedAt'] != null
@@ -202,9 +225,11 @@ class CustomerOrderEntity extends Equatable {
     id,
     bookingType,
     scheduledAt,
+    scheduleOverdueAt,
     status,
     rejectionReason,
     serviceName,
+    serviceIconUrl,
     servicePriceAmount,
     travelFeeAmount,
     travelDistanceKm,
@@ -248,7 +273,7 @@ class OrderProviderSummaryEntity extends Equatable {
       avatarUrl: json['avatarUrl']?.toString(),
       phone: json['phone']?.toString(),
       serviceRadiusKm: (json['serviceRadiusKm'] as num?)?.toDouble(),
-      rating: (json['rating'] as num?)?.toDouble() ?? 5.0,
+      rating: (json['rating'] as num?)?.toDouble(),
     );
   }
 

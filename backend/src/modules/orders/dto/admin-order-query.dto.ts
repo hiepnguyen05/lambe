@@ -4,12 +4,22 @@ import { Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsUUID,
   Max,
   Min,
 } from 'class-validator';
+
+export type AdminDashboardPeriod = 'today' | '7d' | '30d' | 'month';
+
+export class AdminOrderAnalyticsQueryDto {
+  @ApiPropertyOptional({ enum: ['today', '7d', '30d', 'month'], default: '7d' })
+  @IsOptional()
+  @IsIn(['today', '7d', '30d', 'month'])
+  period: AdminDashboardPeriod = '7d';
+}
 
 export class AdminOrderQueryDto {
   @ApiPropertyOptional({ enum: ServiceOrderStatus })

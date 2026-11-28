@@ -52,6 +52,7 @@ import { OrderAddOnsController } from './controllers/order-add-ons.controller';
 import { OrderOperationalAlertService } from './application/operations/order-operational-alert.service';
 import { SupportOrderOperationalAlertsController } from './controllers/support-order-operational-alerts.controller';
 import { MailModule } from '../../infrastructure/mail/mail.module';
+import { PushModule } from '../push/push.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { MailModule } from '../../infrastructure/mail/mail.module';
     UploadModule,
     ProviderMembersModule,
     MailModule,
+    PushModule,
   ],
   controllers: [
     CustomerOrdersController,

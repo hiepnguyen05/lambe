@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 
 import '../../di/provider_services_providers.dart';
 import '../../domain/service_change.dart';
@@ -67,12 +68,9 @@ class _ServiceChangeDetailScreenState
         ? await controller.withdraw()
         : await controller.submit();
     if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            withdraw ? 'Đã rút đề xuất.' : 'Đã gửi; đang chờ kiểm duyệt.',
-          ),
-        ),
+      await AppDialog.success(
+        context,
+        message: withdraw ? 'Đã rút đề xuất.' : 'Đã gửi; đang chờ kiểm duyệt.',
       );
     }
   }

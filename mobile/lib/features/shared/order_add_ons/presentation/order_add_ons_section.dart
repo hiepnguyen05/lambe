@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 import 'package:mobile/features/shared/order_notifications/presentation/order_notifications_provider.dart';
 import 'package:mobile/features/shared/order_safety/application/order_safety_controller.dart';
 import 'package:mobile/features/shared/order_safety/domain/order_safety.dart';
@@ -76,13 +77,15 @@ class _OrderAddOnsSectionState extends ConsumerState<OrderAddOnsSection>
     if (!mounted || _syncing) return;
     setState(() => _syncing = true);
     try {
-      await widget.refreshOrder();
+      await Future.wait([
+        ref.read(orderAddOnsProvider(widget.scope).notifier).refresh(),
+        widget.refreshOrder(),
+      ]);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Chưa tải được đơn mới. Vui lòng thử lại.'),
-          ),
+        await AppDialog.error(
+          context,
+          message: 'Chưa tải được đơn mới. Vui lòng thử lại.',
         );
       }
     } finally {
@@ -184,7 +187,10 @@ class _OrderAddOnsSectionState extends ConsumerState<OrderAddOnsSection>
         : widget.snapshot;
     _watchExpiry(order);
     final provider = widget.scope.role == AddOnRole.provider;
-    if (order.items.isEmpty && (!order.eligible || !provider)) {
+    final visibleItems = order.items
+        .where((item) => item.status != 'CANCELLED')
+        .toList();
+    if (visibleItems.isEmpty && (!order.eligible || !provider)) {
       return const SizedBox.shrink();
     }
     if (_foreground && ModalRoute.of(context)?.isCurrent == true) {
@@ -217,67 +223,125 @@ class _OrderAddOnsSectionState extends ConsumerState<OrderAddOnsSection>
         _syncing ||
         widget.mutationBlocked ||
         safety.blocksOrder;
-    final outstanding = order.items
+    final outstanding = visibleItems
         .where((item) => item.status == 'PENDING')
         .toList();
-    final closed = order.items
+    final closed = visibleItems
         .where((item) => item.status != 'PENDING' && item.status != 'ACCEPTED')
         .toList();
     final visible = [...outstanding, if (closed.isNotEmpty) closed.last];
-    return Card(
-      margin: const EdgeInsets.only(bottom: 14),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Dịch vụ phát sinh',
-              style: Theme.of(context).textTheme.titleMedium,
+    final canProposeNow = provider && order.canPropose(DateTime.now());
+    if (visibleItems.isEmpty &&
+        state.error == null &&
+        !state.needsRefresh &&
+        canProposeNow) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: SizedBox(
+          width: double.infinity,
+          height: 46,
+          child: OutlinedButton.icon(
+            onPressed: disabled ? null : () => _propose(order),
+            icon: const Icon(Icons.add_circle_outline, size: 19),
+            label: const Text(
+              'Đề nghị thêm dịch vụ',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
             ),
-            AddOnLineItems(order: order, provider: provider),
-            SizedBox(
-              height: 4,
-              child: state.busy || _syncing
-                  ? const LinearProgressIndicator()
-                  : null,
-            ),
-            if (state.error != null) ...[
-              Text(
-                state.error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF005C55),
+              backgroundColor: const Color(0xFFF0FDFA),
+              side: const BorderSide(color: Color(0xFF99F6E4)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              TextButton(
-                onPressed: state.busy || _syncing
-                    ? null
-                    : () async {
-                        await ref
-                            .read(orderAddOnsProvider(widget.scope).notifier)
-                            .refresh();
-                        await _refresh();
-                      },
-                child: const Text('Tải lại trạng thái'),
+            ),
+          ),
+        ),
+      );
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.add_task_rounded,
+                size: 18,
+                color: Color(0xFF005C55),
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Dịch vụ phát sinh',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0F172A),
+                ),
               ),
             ],
-            for (final item in visible)
-              AddOnProposalTile(
-                item: item,
-                currency: order.currencyCode,
-                provider: provider,
-                canAct: !disabled && order.eligible,
-                now: DateTime.now(),
-                onApprove: () => _decide(item, true, order.currencyCode),
-                onReject: () => _decide(item, false, order.currencyCode),
-                onWithdraw: () => _withdraw(item),
-              ),
-            if (provider && order.canPropose(DateTime.now()))
-              OutlinedButton.icon(
-                onPressed: disabled ? null : () => _propose(order),
-                icon: const Icon(Icons.add_circle_outline),
-                label: const Text('Đề nghị thêm dịch vụ'),
-              ),
+          ),
+          const SizedBox(height: 10),
+          AddOnLineItems(order: order, provider: provider),
+          if (state.busy || _syncing) ...[
+            const SizedBox(height: 8),
+            const LinearProgressIndicator(),
           ],
-        ),
+          if (state.error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              state.error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            TextButton(
+              onPressed: state.busy || _syncing
+                  ? null
+                  : () async {
+                      await ref
+                          .read(orderAddOnsProvider(widget.scope).notifier)
+                          .refresh();
+                      await _refresh();
+                    },
+              child: const Text('Tải lại trạng thái'),
+            ),
+          ],
+          for (final item in visible)
+            AddOnProposalTile(
+              item: item,
+              currency: order.currencyCode,
+              provider: provider,
+              canAct: !disabled && order.eligible,
+              now: DateTime.now(),
+              onApprove: () => _decide(item, true, order.currencyCode),
+              onReject: () => _decide(item, false, order.currencyCode),
+              onWithdraw: () => _withdraw(item),
+            ),
+          if (canProposeNow) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: disabled ? null : () => _propose(order),
+                icon: const Icon(Icons.add_circle_outline, size: 18),
+                label: const Text('Đề nghị thêm dịch vụ'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF005C55),
+                  side: const BorderSide(color: Color(0xFF99F6E4)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

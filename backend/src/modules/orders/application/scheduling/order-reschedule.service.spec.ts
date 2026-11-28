@@ -45,6 +45,9 @@ describe('order reschedule decisions', () => {
         update: jest.fn(),
       },
       providerCalendarBlock: { update: jest.fn() },
+      orderOperationalAlert: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       orderRescheduleRequest: {
         findFirst: jest
           .fn()
@@ -150,7 +153,7 @@ describe('order reschedule decisions', () => {
     expect(tx.serviceOrder.update).not.toHaveBeenCalled();
     expect(tx.providerCalendarBlock.update).not.toHaveBeenCalled();
     expect(tx.orderRescheduleRequest.update).toHaveBeenCalledWith({
-      where: { id: requestId },
+      where: { id: requestId, status: 'PENDING', expiresAt: { gt: now } },
       data: { status: 'REJECTED', respondedAt: now },
     });
   });

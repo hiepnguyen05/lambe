@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import './onboarding_icon_widget.dart';
+import 'package:mobile/core/widgets/lambe_icon_widget.dart';
 
 class SelectionTile extends StatelessWidget {
   final String title;
@@ -42,12 +41,13 @@ class SelectionTile extends StatelessWidget {
         child: Row(
           children: [
             if (iconUrl != null && iconUrl!.isNotEmpty) ...[
-              OnboardingIconWidget(
+              LambeIconWidget(
                 iconStr: iconUrl,
                 size: 24,
                 color: isSelected
                     ? const Color(0xFF005C55)
                     : const Color(0xFF72817F),
+                fallbackIcon: Icons.category,
               ),
               const SizedBox(width: 16),
             ] else if (icon != null) ...[

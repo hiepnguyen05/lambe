@@ -8,9 +8,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:mobile/core/widgets/app_dialog.dart';
 import 'package:mobile/core/widgets/order_countdown.dart';
 
-import '../../di/provider_income_providers.dart';
 import '../../domain/entities/topup_response_entity.dart';
 import '../widgets/topup/sepay_payment_cards.dart';
+import '../widgets/topup/top_up_polling_mixin.dart';
 
 class SepayPaymentScreen extends ConsumerStatefulWidget {
   final TopUpResponseEntity topUp;
@@ -27,110 +27,21 @@ class SepayPaymentScreen extends ConsumerStatefulWidget {
 }
 
 class _SepayPaymentScreenState extends ConsumerState<SepayPaymentScreen>
-    with WidgetsBindingObserver {
-  static const _pollIntervals = [
-    Duration(seconds: 3),
-    Duration(seconds: 5),
-    Duration(seconds: 10),
-  ];
-
-  late TopUpResponseEntity _currentTopUp;
-  Timer? _pollingTimer;
-  bool _isChecking = false;
-  bool _isPolling = false;
-  bool _isForeground = true;
-  int _pollIntervalIndex = 0;
-
+    with WidgetsBindingObserver, TopUpPollingMixin<SepayPaymentScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _currentTopUp = widget.topUp;
-    _schedulePoll();
+    initTopUpPolling(widget.topUp);
   }
 
   @override
   void dispose() {
-    _pollingTimer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
+    disposeTopUpPolling();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    final foreground = state == AppLifecycleState.resumed;
-    if (_isForeground == foreground) return;
-    _isForeground = foreground;
-    _pollingTimer?.cancel();
-    if (foreground && _currentTopUp.isPending) {
-      _pollIntervalIndex = 0;
-      unawaited(_refreshAfterResume());
-    }
-  }
-
-  Future<void> _refreshAfterResume() async {
-    await _checkStatus(isAuto: true);
-    _schedulePoll();
-  }
-
-  void _schedulePoll() {
-    _pollingTimer?.cancel();
-    if (!mounted || !_isForeground || !_currentTopUp.isPending) return;
-    _pollingTimer = Timer(_pollIntervals[_pollIntervalIndex], () async {
-      if (!mounted || !_isForeground || !_currentTopUp.isPending) return;
-      if (_isPolling || _isChecking) {
-        _schedulePoll();
-        return;
-      }
-      _isPolling = true;
-      try {
-        await _checkStatus(isAuto: true);
-      } finally {
-        _isPolling = false;
-      }
-      if (_pollIntervalIndex < _pollIntervals.length - 1) {
-        _pollIntervalIndex++;
-      }
-      _schedulePoll();
-    });
-  }
-
-  Future<void> _checkStatus({bool isAuto = false}) async {
-    if (!isAuto) {
-      setState(() {
-        _isChecking = true;
-      });
-    }
-
-    try {
-      final updated = await ref
-          .read(providerWalletNotifierProvider.notifier)
-          .checkTopUpStatus(_currentTopUp.id);
-
-      if (!mounted || updated == null) return;
-
-      setState(() {
-        _currentTopUp = updated;
-      });
-
-      if (updated.isSucceeded) {
-        _pollingTimer?.cancel();
-        // Tải lại số dư ví và lịch sử giao dịch
-        ref.read(providerWalletNotifierProvider.notifier).loadWalletData();
-      } else if (updated.isFailed || updated.isExpired) {
-        _pollingTimer?.cancel();
-      }
-    } finally {
-      if (mounted && !isAuto) {
-        setState(() {
-          _isChecking = false;
-        });
-      }
-    }
-  }
-
   Future<void> _openSepayCheckout() async {
-    final urlStr = _currentTopUp.payUrl;
+    final urlStr = currentTopUp.payUrl;
     if (urlStr == null || urlStr.isEmpty) {
       AppDialog.warning(
         context,
@@ -169,7 +80,7 @@ class _SepayPaymentScreenState extends ConsumerState<SepayPaymentScreen>
         centerTitle: true,
         actions: [
           IconButton(
-            icon: _isChecking
+            icon: isCheckingTopUp
                 ? SizedBox(
                     width: 18,
                     height: 18,
@@ -180,7 +91,7 @@ class _SepayPaymentScreenState extends ConsumerState<SepayPaymentScreen>
                   )
                 : const Icon(Icons.refresh),
             tooltip: 'Làm mới trạng thái',
-            onPressed: _isChecking ? null : () => _checkStatus(),
+            onPressed: isCheckingTopUp ? null : () => checkTopUpStatus(),
           ),
         ],
       ),
@@ -191,16 +102,16 @@ class _SepayPaymentScreenState extends ConsumerState<SepayPaymentScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Trạng thái thanh toán
-              SepayStatusHeader(topUp: _currentTopUp),
+              SepayStatusHeader(topUp: currentTopUp),
               const SizedBox(height: 20),
 
               // Thông tin giao dịch Card
-              if (_currentTopUp.expiresAt != null && _currentTopUp.isPending)
+              if (currentTopUp.expiresAt != null && currentTopUp.isPending)
                 OrderCountdown(
-                  deadline: _currentTopUp.expiresAt!,
-                  onExpired: () => _checkStatus(),
+                  deadline: currentTopUp.expiresAt!,
+                  onExpired: () => checkTopUpStatus(),
                   builder: (context, remaining) => SepayTransactionCard(
-                    topUp: _currentTopUp,
+                    topUp: currentTopUp,
                     amountFormatted: widget.amountFormatted,
                     remainingTime: remaining,
                     onCopy: _copyToClipboard,
@@ -208,7 +119,7 @@ class _SepayPaymentScreenState extends ConsumerState<SepayPaymentScreen>
                 )
               else
                 SepayTransactionCard(
-                  topUp: _currentTopUp,
+                  topUp: currentTopUp,
                   amountFormatted: widget.amountFormatted,
                   remainingTime: Duration.zero,
                   onCopy: _copyToClipboard,
@@ -216,7 +127,7 @@ class _SepayPaymentScreenState extends ConsumerState<SepayPaymentScreen>
               const SizedBox(height: 20),
 
               // Hành động thanh toán
-              if (_currentTopUp.isPending) ...[
+              if (currentTopUp.isPending) ...[
                 ElevatedButton.icon(
                   onPressed: _openSepayCheckout,
                   icon: const Icon(Icons.open_in_new, size: 20),
@@ -237,8 +148,8 @@ class _SepayPaymentScreenState extends ConsumerState<SepayPaymentScreen>
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
-                  onPressed: _isChecking ? null : () => _checkStatus(),
-                  icon: _isChecking
+                  onPressed: isCheckingTopUp ? null : () => checkTopUpStatus(),
+                  icon: isCheckingTopUp
                       ? SizedBox(
                           width: 18,
                           height: 18,
@@ -249,7 +160,7 @@ class _SepayPaymentScreenState extends ConsumerState<SepayPaymentScreen>
                         )
                       : const Icon(Icons.check_circle_outline, size: 20),
                   label: Text(
-                    _isChecking
+                    isCheckingTopUp
                         ? 'Đang kiểm tra...'
                         : 'TÔI ĐÃ CHUYỂN KHOẢN (KIỂM TRA NGAY)',
                   ),
@@ -265,7 +176,7 @@ class _SepayPaymentScreenState extends ConsumerState<SepayPaymentScreen>
                     ),
                   ),
                 ),
-              ] else if (_currentTopUp.isSucceeded) ...[
+              ] else if (currentTopUp.isSucceeded) ...[
                 ElevatedButton.icon(
                   onPressed: () {
                     Navigator.of(context).pop();

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/widgets/lambe_icon_widget.dart';
@@ -157,10 +156,7 @@ class _AboutCard extends StatelessWidget {
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: [
-              ...certificates.map(_CertificateChip.new),
-              const _CertificateChip('Top Thợ Yêu Thích 2024'),
-            ],
+            children: certificates.map(_CertificateChip.new).toList(),
           ),
         ],
       ),
@@ -203,7 +199,7 @@ class _ServiceCard extends StatelessWidget {
               imageSize: 44,
               imageFit: BoxFit.cover,
               color: AppColors.primary,
-              fallbackIcon: LucideIcons.sparkles,
+              fallbackIcon: Icons.auto_awesome_rounded,
             ),
           ),
           const SizedBox(width: 12),
@@ -387,8 +383,9 @@ class _ReviewSection extends StatelessWidget {
         _SectionHeader(
           icon: Icons.rate_review_rounded,
           title: 'Đánh giá thực tế nổi bật',
-          actionText: 'Xem ${profile.reviewCount} bài',
-          onAction: onViewAll,
+          actionText:
+              profile.reviewCount > 0 ? 'Xem ${profile.reviewCount} bài' : null,
+          onAction: profile.reviewCount > 0 ? onViewAll : null,
         ),
         const SizedBox(height: 10),
         if (review == null)

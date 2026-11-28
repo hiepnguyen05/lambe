@@ -17,6 +17,7 @@ import { apiRequest } from '../../../../lib/api-client'
 import { useDialog } from '../../../../components/ui/dialog-context'
 import { canAccessFeature, type AdminFeature } from '../../auth/admin-permissions'
 import { useAdminAuth } from '../../hooks/useAdminAuth'
+import { OPERATIONAL_ALERT_LABELS } from '../../utils/operational-alerts'
 
 interface ApiList<T> {
   data: T[]
@@ -113,17 +114,6 @@ const ORDER_STATUSES = [
   'PENDING_PROVIDER', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS',
   'COMPLETED', 'CANCELLED', 'REJECTED', 'PAYMENT_DISPUTE', 'DISPUTED', 'SAFETY_HOLD',
 ]
-
-const alertLabels: Record<string, string> = {
-  ACCEPTED_START_OVERDUE: 'Đã nhận nhưng chưa xuất phát',
-  EN_ROUTE_OVERDUE: 'Đang di chuyển quá lâu',
-  ARRIVAL_START_OVERDUE: 'Đã đến nhưng chưa bắt đầu',
-  SERVICE_COMPLETION_OVERDUE: 'Đang thực hiện quá giờ',
-  CANCELLATION_REVIEW_STALE: 'Yêu cầu hủy chờ quá lâu',
-  SAFETY_HOLD_STALE: 'Sự cố an toàn chưa xử lý',
-  PAYMENT_DISPUTE_STALE: 'Tranh chấp thanh toán chưa xử lý',
-  DISPUTED_STALE: 'Tranh chấp kéo dài',
-}
 
 const tabs: Array<{ id: string; label: string; feature: AdminFeature; icon: typeof ClipboardList }> = [
   { id: 'orders', label: 'Đơn hàng', feature: 'orders', icon: ClipboardList },
@@ -264,7 +254,7 @@ function AlertsTab() {
   })
   return <Panel title={`Cảnh báo đang mở (${query.data?.data.length ?? 0})`} loading={query.isLoading} onRefresh={() => query.refetch()}>
     <div className="space-y-3">{query.data?.data.map((alert) => <div key={alert.id} className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4">
-      <div className="flex flex-col justify-between gap-3 lg:flex-row"><div><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-slate-900">{alertLabels[alert.type] || alert.type}</p><Status value={alert.status} /></div><p className="mt-1 text-sm text-slate-600">{alert.order.serviceName} · {alert.order.providerDisplayName || 'Chưa rõ provider'}</p><p className="mt-1 text-xs text-slate-400">Phát hiện {formatDate(alert.detectedAt)} ({formatAge(alert.detectedAt)}) · Đơn {shortId(alert.order.id)} · {alert.order.status}</p>{alert.acknowledgedById && <p className="mt-1 text-xs text-slate-500">Đang xử lý: {shortId(alert.acknowledgedById)} từ {formatDate(alert.acknowledgedAt)}</p>}</div>
+      <div className="flex flex-col justify-between gap-3 lg:flex-row"><div><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-slate-900">{OPERATIONAL_ALERT_LABELS[alert.type] || alert.type}</p><Status value={alert.status} /></div><p className="mt-1 text-sm text-slate-600">{alert.order.serviceName} · {alert.order.providerDisplayName || 'Chưa rõ provider'}</p><p className="mt-1 text-xs text-slate-400">Phát hiện {formatDate(alert.detectedAt)} ({formatAge(alert.detectedAt)}) · Đơn {shortId(alert.order.id)} · {alert.order.status}</p>{alert.acknowledgedById && <p className="mt-1 text-xs text-slate-500">Đang xử lý: {shortId(alert.acknowledgedById)} từ {formatDate(alert.acknowledgedAt)}</p>}</div>
         <div className="flex flex-wrap items-center gap-2">{alert.status === 'OPEN' && <ActionButton onClick={async () => { try { await simpleAction(alert.id, 'acknowledge') } catch (error) { showError(showDialog, error) } }}>Nhận xử lý</ActionButton>}
           {['ACCEPTED_START_OVERDUE', 'EN_ROUTE_OVERDUE', 'ARRIVAL_START_OVERDUE'].includes(alert.type) && <ActionButton danger onClick={() => askNote(alert, 'cancel-order', 'Hủy đơn bị treo')}>Hủy đơn</ActionButton>}
           {alert.type === 'SERVICE_COMPLETION_OVERDUE' && <ActionButton danger onClick={() => askNote(alert, 'escalate-dispute', 'Chuyển sang tranh chấp')}>Chuyển tranh chấp</ActionButton>}
@@ -297,8 +287,9 @@ function DisputesTab() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
   const query = useQuery({ queryKey: ['admin-payment-disputes', status, page], queryFn: () => apiRequest<ApiList<OrderRow>>(`/admin/orders/payment-disputes?status=${status}&page=${page}&limit=20`) })
   const decide = (order: OrderRow, decision: 'CONFIRM_PAID' | 'CONFIRM_UNPAID') => showDialog({ title: decision === 'CONFIRM_PAID' ? 'Xác nhận đã thanh toán' : 'Xác nhận chưa thanh toán', message: 'Nhập kết quả đối chiếu (ít nhất 10 ký tự):', type: 'warning', withInput: true, inputRequired: true, inputMinLength: 10, inputMaxLength: 500, confirmText: 'Xác nhận', onConfirm: async (note) => { try { await apiRequest(`/admin/orders/payment-disputes/${order.id}/decision`, { method: 'POST', body: JSON.stringify({ decision, note }) }); await queryClient.invalidateQueries({ queryKey: ['admin-payment-disputes'] }) } catch (error) { showError(showDialog, error) } } })
+  const closeUnpaid = (order: OrderRow) => showDialog({ title: 'Đóng tranh chấp & hoàn giữ ví', message: 'Đơn sẽ chuyển sang ĐÃ HỦY và hoàn lại khoản hoa hồng đang tạm giữ cho đối tác. Nhập kết quả đối chiếu (ít nhất 10 ký tự):', type: 'error', withInput: true, inputRequired: true, inputMinLength: 10, inputMaxLength: 500, confirmText: 'Đóng & hoàn giữ ví', onConfirm: async (note) => { try { await apiRequest(`/admin/orders/payment-disputes/${order.id}/close-unpaid`, { method: 'POST', body: JSON.stringify({ note }) }); await queryClient.invalidateQueries({ queryKey: ['admin-payment-disputes'] }) } catch (error) { showError(showDialog, error) } } })
   return <Panel title="Tranh chấp thanh toán" loading={query.isLoading} onRefresh={() => query.refetch()}><div className="mb-4"><select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }} className="rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="PAYMENT_DISPUTE">Chờ quyết định</option><option value="DISPUTED">Đã chuyển tranh chấp</option></select></div><Table headers={['Đơn', 'Dịch vụ', 'Provider', 'Giá trị', '']}>
-    {query.data?.data.map((order) => <tr key={order.id} className="border-t border-slate-100"><td className="px-4 py-3 text-sm font-semibold">{shortId(order.id)}</td><td className="px-4 py-3 text-sm">{order.serviceName}</td><td className="px-4 py-3 text-sm text-slate-600">{order.providerDisplayName || '—'}</td><td className="px-4 py-3 text-sm">{formatMoney(order.totalAmount, order.currencyCode)}</td><td className="px-4 py-3"><div className="flex justify-end gap-2"><ActionButton onClick={() => setSelectedOrderId(order.id)}>Chi tiết</ActionButton>{status === 'PAYMENT_DISPUTE' && <><ActionButton onClick={() => decide(order, 'CONFIRM_UNPAID')}>Chưa thanh toán</ActionButton><ActionButton onClick={() => decide(order, 'CONFIRM_PAID')}>Đã thanh toán</ActionButton></>}</div></td></tr>)}
+    {query.data?.data.map((order) => <tr key={order.id} className="border-t border-slate-100"><td className="px-4 py-3 text-sm font-semibold">{shortId(order.id)}</td><td className="px-4 py-3 text-sm">{order.serviceName}</td><td className="px-4 py-3 text-sm text-slate-600">{order.providerDisplayName || '—'}</td><td className="px-4 py-3 text-sm">{formatMoney(order.totalAmount, order.currencyCode)}</td><td className="px-4 py-3"><div className="flex justify-end gap-2"><ActionButton onClick={() => setSelectedOrderId(order.id)}>Chi tiết</ActionButton>{status === 'PAYMENT_DISPUTE' && <ActionButton onClick={() => decide(order, 'CONFIRM_UNPAID')}>Chưa thanh toán</ActionButton>}<ActionButton onClick={() => decide(order, 'CONFIRM_PAID')}>Đã thanh toán</ActionButton><ActionButton danger onClick={() => closeUnpaid(order)}>Đóng & hoàn giữ ví</ActionButton></div></td></tr>)}
   </Table><Empty show={!query.isLoading && !query.data?.data.length} text="Không có tranh chấp trong bộ lọc này." /><Pagination page={page} totalPages={query.data?.meta?.totalPages ?? 1} onChange={setPage} />{selectedOrderId && <OrderDetailDrawer orderId={selectedOrderId} onClose={() => setSelectedOrderId(null)} />}</Panel>
 }
 

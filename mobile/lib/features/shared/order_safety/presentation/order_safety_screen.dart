@@ -116,12 +116,55 @@ class _OrderSafetyScreenState extends ConsumerState<OrderSafetyScreen>
               child: const Text('Kiểm tra lại trạng thái'),
             ),
             if (state.uncertain ||
-                (incident?.isOpen == true && !incident!.ownReport))
+                (incident?.isOpen == true && !incident!.ownReport)) ...[
+              const SizedBox(height: 8),
               OrderSafetyButton(scope: widget.scope),
+            ],
             if (incident != null) ...[
-              Text('Mã hồ sơ: ${incident.id}'),
-              if (incident.closedAt != null)
-                Text('Đóng lúc: ${incident.closedAt!.toLocal()}'),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Mã hồ sơ: ${incident.id}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    if (incident.reports.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Lý do: ${incident.reports.first.reason.label}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      if (incident.reports.first.detail != null &&
+                          incident.reports.first.detail!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            'Chi tiết: ${incident.reports.first.detail}',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: Color(0xFF475569),
+                            ),
+                          ),
+                        ),
+                    ],
+                    if (incident.closedAt != null) ...[
+                      const SizedBox(height: 6),
+                      Text('Đóng lúc: ${incident.closedAt!.toLocal()}'),
+                    ],
+                  ],
+                ),
+              ),
               const SizedBox(height: 16),
               OrderSafetyEvidence(scope: widget.scope),
             ],

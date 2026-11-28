@@ -14,13 +14,15 @@ import './incoming_order_service_info.dart';
 class IncomingOrderModal extends StatefulWidget {
   final IncomingOrderEntity order;
   final Future<void> Function()? onAccept;
-  final VoidCallback? onReject;
+  final Future<bool> Function()? onReject;
+  final VoidCallback? onTimeout;
 
   const IncomingOrderModal({
     super.key,
     required this.order,
     this.onAccept,
     this.onReject,
+    this.onTimeout,
   });
 
   /// Hiển thị Modal Cảnh báo Đơn hàng mới cho Chuyên viên
@@ -28,7 +30,8 @@ class IncomingOrderModal extends StatefulWidget {
     BuildContext context, {
     required IncomingOrderEntity order,
     Future<void> Function()? onAccept,
-    VoidCallback? onReject,
+    Future<bool> Function()? onReject,
+    VoidCallback? onTimeout,
   }) {
     return showDialog<bool>(
       context: context,
@@ -38,6 +41,7 @@ class IncomingOrderModal extends StatefulWidget {
         order: order,
         onAccept: onAccept,
         onReject: onReject,
+        onTimeout: onTimeout,
       ),
     );
   }
@@ -51,7 +55,8 @@ class _IncomingOrderModalState extends State<IncomingOrderModal>
   late int _remainingSeconds;
   late final int _totalSeconds;
   Timer? _timer;
-  bool _isAccepting = false;
+  bool _isSubmitting = false;
+  String? _actionError;
 
   @override
   void initState() {
@@ -92,14 +97,15 @@ class _IncomingOrderModalState extends State<IncomingOrderModal>
 
   void _handleTimeout() {
     if (!mounted) return;
-    widget.onReject?.call();
-    Navigator.of(context).pop(false);
+    widget.onTimeout?.call();
+    Navigator.of(context).pop(null);
   }
 
   Future<void> _handleAccept() async {
     _timer?.cancel();
     setState(() {
-      _isAccepting = true;
+      _isSubmitting = true;
+      _actionError = null;
     });
 
     try {
@@ -112,16 +118,31 @@ class _IncomingOrderModalState extends State<IncomingOrderModal>
     } catch (_) {
       if (mounted) {
         setState(() {
-          _isAccepting = false;
+          _isSubmitting = false;
+          _actionError = 'Không thể nhận đơn hàng. Vui lòng thử lại.';
         });
       }
     }
   }
 
-  void _handleReject() {
+  Future<void> _handleReject() async {
     _timer?.cancel();
-    widget.onReject?.call();
-    Navigator.of(context).pop(false);
+    setState(() {
+      _isSubmitting = true;
+      _actionError = null;
+    });
+
+    final rejected = widget.onReject == null ? true : await widget.onReject!();
+    if (!mounted) return;
+    if (rejected) {
+      Navigator.of(context).pop(false);
+    } else {
+      setState(() {
+        _isSubmitting = false;
+        _actionError =
+            'Không thể từ chối đơn hàng. Vui lòng kiểm tra mạng và thử lại.';
+      });
+    }
   }
 
   @override
@@ -191,6 +212,19 @@ class _IncomingOrderModalState extends State<IncomingOrderModal>
                     customerNote: widget.order.customerNote,
                   ),
 
+                  if (_actionError != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _actionError!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFDC2626),
+                      ),
+                    ),
+                  ],
+
                   const SizedBox(height: 16),
 
                   // 5. Nút Từ chối & Nhận đơn
@@ -198,7 +232,7 @@ class _IncomingOrderModalState extends State<IncomingOrderModal>
                     remainingSeconds: _remainingSeconds,
                     onReject: _handleReject,
                     onAccept: _handleAccept,
-                    isAccepting: _isAccepting,
+                    isAccepting: _isSubmitting,
                   ),
                 ],
               ),

@@ -16,7 +16,7 @@ import {
   createServicesTestContext,
 } from '../testing/services-test.factory';
 
-describe('ServicesCommandService', () => {
+describe('Service command use cases', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('creates a normalized inactive service with a VND price range', async () => {

@@ -31,9 +31,21 @@ function context() {
     },
   };
   const transaction = {
-    $queryRaw: jest.fn().mockResolvedValue([{ id: current.id }]),
+    $queryRaw: jest
+      .fn()
+      .mockResolvedValue([
+        { id: current.id, status: ProviderProfileStatus.SETUP_REQUIRED },
+      ]),
     providerProfile: {
       findUnique: jest.fn().mockResolvedValue(current),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({
+        serviceAreaName: null,
+        serviceAreaLatitude: null,
+        serviceAreaLongitude: null,
+        serviceRadiusKm: null,
+        workingHours: [],
+        services: [],
+      }),
       update: jest.fn().mockResolvedValue({
         id: current.id,
         status: ProviderProfileStatus.ACTIVE,
@@ -72,6 +84,104 @@ function context() {
 }
 
 describe('Provider setup', () => {
+  it('updates the fixed service area without replacing working hours or service selections', async () => {
+    const { service, transaction, audit } = context();
+    const area = {
+      serviceAreaName: 'Khu vực mới',
+      serviceAreaLatitude: 21.1,
+      serviceAreaLongitude: 106.1,
+      serviceRadiusKm: 10,
+    };
+    await service.updateServiceArea('owner', area, {});
+    expect(transaction.providerProfile.update).toHaveBeenCalledWith({
+      where: { id: 'provider' },
+      data: area,
+    });
+    expect(transaction.providerWorkingHour.deleteMany).not.toHaveBeenCalled();
+    expect(transaction.providerService.updateMany).not.toHaveBeenCalled();
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'PROVIDER_SERVICE_AREA_UPDATED' }),
+      {},
+      transaction,
+    );
+  });
+  it('saves radius without requiring working hours or changing setup status', async () => {
+    const { service, transaction, audit } = context();
+    await service.updateRadius('owner', 12, {});
+    expect(transaction.providerProfile.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { serviceRadiusKm: 12 },
+      }),
+    );
+    expect(transaction.providerWorkingHour.deleteMany).not.toHaveBeenCalled();
+    expect(transaction.providerService.updateMany).not.toHaveBeenCalled();
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'PROVIDER_RADIUS_UPDATED' }),
+      {},
+      transaction,
+    );
+  });
+
+  it('saves working hours without requiring enabled services or changing radius', async () => {
+    const { service, transaction, dto } = context();
+    await service.updateWorkingHours('owner', dto.workingHours, {});
+    expect(transaction.providerWorkingHour.createMany).toHaveBeenCalledWith({
+      data: [{ providerId: 'provider', ...dto.workingHours[0] }],
+    });
+    expect(transaction.providerProfile.update).not.toHaveBeenCalled();
+    expect(transaction.providerService.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('completes first setup and activates eligible services after the last required setting is saved', async () => {
+    const { service, transaction, dto, selected } = context();
+    transaction.providerProfile.findUniqueOrThrow.mockResolvedValue({
+      serviceAreaName: 'Quận 1',
+      serviceAreaLatitude: 10.77,
+      serviceAreaLongitude: 106.7,
+      serviceRadiusKm: 10,
+      workingHours: [{ id: 'hour-id' }],
+      services: [
+        selected,
+        { ...selected, id: 'invalid-price', priceAmount: 1 },
+      ],
+    });
+
+    await service.updateWorkingHours('owner', dto.workingHours, {});
+
+    expect(transaction.providerService.updateMany).toHaveBeenCalledWith({
+      where: {
+        providerId: 'provider',
+        id: { in: ['provider-service'] },
+        status: ProviderServiceStatus.INACTIVE,
+      },
+      data: { status: ProviderServiceStatus.ACTIVE },
+    });
+    const updates = transaction.providerProfile.update.mock
+      .calls as unknown as Array<
+      [
+        {
+          where: { id: string };
+          data: { status?: ProviderProfileStatus; setupCompletedAt?: Date };
+        },
+      ]
+    >;
+    const activation = updates.find(
+      ([args]) => args.data.status === ProviderProfileStatus.ACTIVE,
+    );
+    expect(activation?.[0].where.id).toBe('provider');
+    expect(activation?.[0].data.setupCompletedAt).toBeInstanceOf(Date);
+  });
+
+  it('does not allow partial edits for a suspended provider', async () => {
+    const { service, transaction } = context();
+    transaction.$queryRaw.mockResolvedValueOnce([
+      { id: 'provider', status: ProviderProfileStatus.SUSPENDED },
+    ]);
+    await expect(service.updateRadius('owner', 12, {})).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(transaction.providerProfile.update).not.toHaveBeenCalled();
+  });
   it('only allows an approved provider to configure services', async () => {
     const { service, transaction, dto } = context();
     transaction.$queryRaw.mockResolvedValue([]);

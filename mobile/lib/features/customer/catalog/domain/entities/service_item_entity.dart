@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:mobile/features/shared/profile/domain/entities/partner_public_profile_entity.dart';
 
 class ServiceCategorySummaryEntity extends Equatable {
   final String id;
@@ -48,6 +49,9 @@ class ServiceItemEntity extends Equatable {
   final String targetAudience;
   final bool requiresCertificate;
   final int minExperienceYears;
+  final double? rating;
+  final int reviewCount;
+  final List<PublicReviewItemEntity> reviews;
   final ServiceCategorySummaryEntity category;
 
   const ServiceItemEntity({
@@ -65,6 +69,9 @@ class ServiceItemEntity extends Equatable {
     this.targetAudience = 'ALL',
     this.requiresCertificate = false,
     this.minExperienceYears = 0,
+    this.rating,
+    this.reviewCount = 0,
+    this.reviews = const [],
     required this.category,
   });
 
@@ -78,6 +85,16 @@ class ServiceItemEntity extends Equatable {
             name: '',
             slug: '',
           );
+    final summary = json['reviewSummary'] is Map
+        ? Map<String, dynamic>.from(json['reviewSummary'] as Map)
+        : null;
+    final rawCount = summary != null ? summary['count'] : json['reviewCount'];
+    final reviewCount = (rawCount as num?)?.toInt() ?? 0;
+    final rawRating = summary != null
+        ? summary['averageRating']
+        : json['rating'];
+    final rating = (rawRating as num?)?.toDouble();
+    final rawReviews = json['reviews'] is List ? json['reviews'] as List : [];
 
     return ServiceItemEntity(
       id: json['id'] as String? ?? '',
@@ -95,6 +112,15 @@ class ServiceItemEntity extends Equatable {
       targetAudience: json['targetAudience'] as String? ?? 'ALL',
       requiresCertificate: json['requiresCertificate'] as bool? ?? false,
       minExperienceYears: (json['minExperienceYears'] as num?)?.toInt() ?? 0,
+      rating: rating,
+      reviewCount: reviewCount,
+      reviews: rawReviews
+          .whereType<Map>()
+          .map(
+            (e) =>
+                PublicReviewItemEntity.fromJson(Map<String, dynamic>.from(e)),
+          )
+          .toList(),
       category: category,
     );
   }
@@ -132,6 +158,39 @@ class ServiceItemEntity extends Equatable {
     targetAudience,
     requiresCertificate,
     minExperienceYears,
+    rating,
+    reviewCount,
+    reviews,
     category,
   ];
+}
+
+class ServiceReviewsPage {
+  final int count;
+  final double? averageRating;
+  final List<PublicReviewItemEntity> reviews;
+  final String? nextCursor;
+
+  const ServiceReviewsPage({
+    required this.count,
+    this.averageRating,
+    required this.reviews,
+    this.nextCursor,
+  });
+
+  factory ServiceReviewsPage.fromJson(Map<String, dynamic> json) {
+    final rawReviews = json['reviews'] is List ? json['reviews'] as List : [];
+    return ServiceReviewsPage(
+      count: (json['count'] as num?)?.toInt() ?? 0,
+      averageRating: (json['averageRating'] as num?)?.toDouble(),
+      reviews: rawReviews
+          .whereType<Map>()
+          .map(
+            (e) =>
+                PublicReviewItemEntity.fromJson(Map<String, dynamic>.from(e)),
+          )
+          .toList(),
+      nextCursor: json['nextCursor'] as String?,
+    );
+  }
 }

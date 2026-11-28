@@ -211,29 +211,14 @@ export class RedisCacheService
   ) {
     const domain: CacheDomain = key.startsWith('lambe:feed:v1:post:')
       ? 'feedPosts'
-      : key === MARKETPLACE_CACHE_KEYS.activeCategories
-        ? 'categories'
-        : key === MARKETPLACE_CACHE_KEYS.activeServices
-          ? 'services'
-          : 'other';
+      : key.startsWith('lambe:discovery:v1:')
+        ? 'discovery'
+        : key === MARKETPLACE_CACHE_KEYS.activeCategories
+          ? 'categories'
+          : key === MARKETPLACE_CACHE_KEYS.activeServices
+            ? 'services'
+            : 'other';
     this.metrics?.recordCacheLookup(domain, outcome);
-  }
-
-  async setMany<T>(
-    entries: { key: string; value: T }[],
-    ttlSeconds: number,
-  ): Promise<boolean> {
-    if (!this.client?.isReady) return false;
-    try {
-      const batch = this.client.multi();
-      for (const entry of entries)
-        batch.set(entry.key, JSON.stringify(entry.value), { EX: ttlSeconds });
-      await this.observeCommand('write', () => batch.exec());
-      return true;
-    } catch {
-      this.logOperationFailure('batch_write');
-      return false;
-    }
   }
 
   async deleteMany(keys: string[]): Promise<boolean> {
@@ -245,125 +230,6 @@ export class RedisCacheService
       return true;
     } catch {
       this.logOperationFailure('batch_delete');
-      return false;
-    }
-  }
-
-  async setIfAbsent(
-    key: string,
-    token: string,
-    ttlSeconds: number,
-  ): Promise<boolean | null> {
-    const client = this.client;
-    if (!client?.isReady) return null;
-    try {
-      return (
-        (await this.observeCommand('write', () =>
-          client.set(key, token, { NX: true, EX: ttlSeconds }),
-        )) === 'OK'
-      );
-    } catch {
-      this.logOperationFailure('lock');
-      return null;
-    }
-  }
-
-  async releaseLock(key: string, token: string): Promise<void> {
-    const client = this.client;
-    if (!client?.isReady) return;
-    try {
-      await this.observeCommand('write', () =>
-        client.eval(
-          "if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0",
-          { keys: [key], arguments: [token] },
-        ),
-      );
-    } catch {
-      this.logOperationFailure('unlock');
-    }
-  }
-
-  async replaceSortedPage(
-    key: string,
-    members: string[],
-    ttlSeconds: number,
-  ): Promise<boolean> {
-    const client = this.client;
-    if (!client?.isReady) return false;
-    try {
-      await this.observeCommand('write', () =>
-        client.eval(
-          `
-        redis.call('DEL',KEYS[1])
-        for i=2,#ARGV do redis.call('ZADD',KEYS[1],0,ARGV[i]) end
-        redis.call('EXPIRE',KEYS[1],ARGV[1])
-        redis.call('SET',KEYS[2],#ARGV-1,'EX',ARGV[1])
-        return 1
-      `,
-          {
-            keys: [key, `${key}:count`],
-            arguments: [String(ttlSeconds), ...members],
-          },
-        ),
-      );
-      return true;
-    } catch {
-      this.logOperationFailure('index_write');
-      return false;
-    }
-  }
-
-  async readSortedPage(key: string, limit: number): Promise<string[] | null> {
-    const client = this.client;
-    if (!client?.isReady) return null;
-    try {
-      const result: unknown = await this.observeCommand('read', () =>
-        client.eval(
-          `
-        local n=redis.call('GET',KEYS[2])
-        if not n then return false end
-        if tonumber(n)>tonumber(ARGV[1]) then return false end
-        local values=redis.call('ZREVRANGE',KEYS[1],0,tonumber(ARGV[1])-1)
-        if #values~=tonumber(n) then return false end
-        return values
-      `,
-          { keys: [key, `${key}:count`], arguments: [String(limit)] },
-        ),
-      );
-      return Array.isArray(result) &&
-        result.every((value) => typeof value === 'string')
-        ? result
-        : null;
-    } catch {
-      this.logOperationFailure('index_read');
-      return null;
-    }
-  }
-
-  async advanceGeneration(
-    key: string,
-    sequence: string,
-    ttlSeconds: number,
-  ): Promise<boolean> {
-    const client = this.client;
-    if (!client?.isReady) return false;
-    try {
-      await this.observeCommand('write', () =>
-        client.eval(
-          `
-        local previous=redis.call('GET',KEYS[1])
-        if not previous or previous<ARGV[1] then redis.call('SET',KEYS[1],ARGV[1],'EX',ARGV[2]) end
-        return 1
-      `,
-          {
-            keys: [key],
-            arguments: [sequence.padStart(20, '0'), String(ttlSeconds)],
-          },
-        ),
-      );
-      return true;
-    } catch {
-      this.logOperationFailure('generation');
       return false;
     }
   }

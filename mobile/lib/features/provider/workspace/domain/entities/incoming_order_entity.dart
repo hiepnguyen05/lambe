@@ -6,18 +6,21 @@ class IncomingOrderEntity {
   final String serviceName;
   final String serviceDescription;
   final int earningsAmount;
+  final int platformFundedAmount;
   final int durationMinutes;
   final int arrivalMinutes;
   final String timeWindow;
   final String customerName;
   final String? customerAvatarUrl;
   final bool isVip;
-  final double rating;
+  final double? rating;
   final int bookingCount;
   final String address;
   final double? distanceKm;
   final String? customerNote;
   final int countdownSeconds;
+
+  bool get isExpired => countdownSeconds <= 0;
 
   const IncomingOrderEntity({
     required this.id,
@@ -25,13 +28,14 @@ class IncomingOrderEntity {
     required this.serviceName,
     required this.serviceDescription,
     required this.earningsAmount,
+    this.platformFundedAmount = 0,
     this.durationMinutes = 60,
     this.arrivalMinutes = 20,
     required this.timeWindow,
     required this.customerName,
     this.customerAvatarUrl,
     this.isVip = false,
-    this.rating = 5.0,
+    this.rating,
     this.bookingCount = 1,
     required this.address,
     required this.distanceKm,
@@ -45,10 +49,13 @@ class IncomingOrderEntity {
         (json['bookingType']?.toString().toUpperCase() ?? 'ASAP') == 'ASAP';
     final serviceName = json['serviceName']?.toString() ?? 'Dịch vụ làm đẹp';
 
-    // Thu nhập thực nhận = Tổng tiền khách trả - Hoa hồng nền tảng
+    // Thu nhập thực nhận = Tiền khách trả + Trợ giá sàn - Hoa hồng nền tảng
     final totalAmount = (json['totalAmount'] as num?)?.toInt() ?? 0;
+    final platformFundedAmount =
+        (json['platformFundedAmount'] as num?)?.toInt() ?? 0;
     final commission = (json['commissionAmount'] as num?)?.toInt() ?? 0;
-    final earningsAmount = (totalAmount - commission).clamp(0, totalAmount);
+    final grossEarnings = totalAmount + platformFundedAmount;
+    final earningsAmount = (grossEarnings - commission).clamp(0, grossEarnings);
 
     final durationMinutes = (json['durationMinutes'] as num?)?.toInt() ?? 60;
 
@@ -100,12 +107,12 @@ class IncomingOrderEntity {
       )?.toLocal();
       if (deadline != null) {
         final remainingSec = deadline.difference(DateTime.now()).inSeconds;
-        countdown = remainingSec > 0 ? remainingSec : 30;
+        countdown = remainingSec > 0 ? remainingSec : 0;
       }
     }
 
     final rawCount = (json['customerOrderCount'] as num?)?.toInt() ?? 1;
-    final rawRating = (json['customerRating'] as num?)?.toDouble() ?? 5.0;
+    final rawRating = (json['customerRating'] as num?)?.toDouble();
 
     return IncomingOrderEntity(
       id: json['id']?.toString() ?? '',
@@ -115,6 +122,7 @@ class IncomingOrderEntity {
           json['serviceDescription']?.toString() ??
           'Thời lượng $durationMinutes phút • Thực hiện tại địa chỉ khách hàng',
       earningsAmount: earningsAmount,
+      platformFundedAmount: platformFundedAmount,
       durationMinutes: durationMinutes,
       arrivalMinutes: arrivalMinutes,
       timeWindow: timeWindow,

@@ -65,7 +65,13 @@ export function UserGrowthChart({ data, isLoading }: UserGrowthChartProps) {
 
       <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
         <span>Tỷ lệ Cung / Cầu bình quân</span>
-        <span className="font-bold text-slate-800">1 : 4.5</span>
+        <span className="font-bold text-slate-800">
+          {(() => {
+            const customers = data.reduce((sum, item) => sum + item.newCustomers, 0);
+            const providers = data.reduce((sum, item) => sum + item.newProviders, 0);
+            return providers > 0 ? `1 : ${(customers / providers).toFixed(1)}` : '—';
+          })()}
+        </span>
       </div>
     </div>
   );

@@ -141,27 +141,30 @@ export class ProviderAvailabilityService {
           },
           select: { id: true, startedAt: true, lastHeartbeatAt: true },
         });
-        locationPublished = await this.locations.upsert({
-          providerId: provider.id,
-          sessionId: created.id,
-          latitude: dto.latitude,
-          longitude: dto.longitude,
-          accuracyMeters: dto.accuracyMeters,
-          capturedAtMs: capturedAt.getTime(),
-          sequence: dto.sequence,
-        });
+        const [published] = await Promise.all([
+          this.locations.upsert({
+            providerId: provider.id,
+            sessionId: created.id,
+            latitude: dto.latitude,
+            longitude: dto.longitude,
+            accuracyMeters: dto.accuracyMeters,
+            capturedAtMs: capturedAt.getTime(),
+            sequence: dto.sequence,
+          }),
+          this.audit.record(
+            {
+              actorUserId: userId,
+              action: 'PROVIDER_WENT_ONLINE',
+              resourceType: 'ProviderAvailabilitySession',
+              resourceId: created.id,
+              result: 'SUCCESS',
+            },
+            request,
+            transaction,
+          ),
+        ]);
+        locationPublished = published;
         if (!locationPublished) throw this.staleLocationException();
-        await this.audit.record(
-          {
-            actorUserId: userId,
-            action: 'PROVIDER_WENT_ONLINE',
-            resourceType: 'ProviderAvailabilitySession',
-            resourceId: created.id,
-            result: 'SUCCESS',
-          },
-          request,
-          transaction,
-        );
         return { provider, blocker: null, session: created };
       });
       if (result.blocker) {
@@ -401,6 +404,31 @@ export class ProviderAvailabilityService {
       blockerCode: blocker?.code ?? null,
       availableBalance: availableWalletBalance(provider.wallet),
       minimumBalance: this.minimumReceivingBalance,
+      checks: [
+        {
+          code: 'AREA',
+          ready:
+            provider.serviceAreaLatitude !== null &&
+            provider.serviceAreaLongitude !== null &&
+            provider.serviceRadiusKm !== null,
+        },
+        { code: 'WORKING_HOURS', ready: provider._count.workingHours > 0 },
+        {
+          code: 'SERVICES',
+          ready: provider.services.some(
+            (item) =>
+              item.priceAmount >= item.service.minPriceAmount &&
+              item.priceAmount <= item.service.maxPriceAmount,
+          ),
+        },
+        {
+          code: 'WALLET',
+          ready:
+            availableWalletBalance(provider.wallet) >=
+            this.minimumReceivingBalance,
+        },
+      ],
+      blockerMessage: blocker?.message ?? null,
     };
   }
 

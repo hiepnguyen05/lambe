@@ -1,17 +1,17 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "../../../../lib/api-client";
-import { useAdminAuth } from "../../hooks/useAdminAuth";
-import type { AdminFeedReportItem } from './types';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Ban, CheckCircle2, MessageSquareWarning, Unlock } from 'lucide-react';
+import { apiRequest } from '../../../../lib/api-client';
+import { useAdminAuth } from '../../hooks/useAdminAuth';
 
-export function FeedModerationOperations({postReports=[]}:{postReports?:AdminFeedReportItem[]}) {
+export function FeedModerationOperations() {
   const { account } = useAdminAuth();
   const client = useQueryClient();
-  const [providerId, setProviderId] = useState(""),
-    [note, setNote] = useState("");
-  const [policyCode,setPolicyCode]=useState('OTHER');
+  const [providerId, setProviderId] = useState('');
+  const [note, setNote] = useState('');
+
   const metrics = useQuery({
-    queryKey: ["feed-operations", account?.id],
+    queryKey: ['feed-operations', account?.id],
     queryFn: () =>
       apiRequest<{
         data: {
@@ -22,10 +22,11 @@ export function FeedModerationOperations({postReports=[]}:{postReports?:AdminFee
           reversalRate: number;
           averageInitialReviewSeconds: number;
         };
-      }>("/internal/feed/operations"),
+      }>('/internal/feed/operations'),
   });
-  const reports = useQuery({
-    queryKey: ["feed-comment-reports", account?.id],
+
+  const commentReports = useQuery({
+    queryKey: ['feed-comment-reports', account?.id],
     queryFn: () =>
       apiRequest<{
         data: {
@@ -36,126 +37,217 @@ export function FeedModerationOperations({postReports=[]}:{postReports?:AdminFee
             comment: { text: string; postId: string };
           }[];
         };
-      }>("/internal/feed/comment-reports"),
+      }>('/internal/feed/comment-reports'),
   });
+
   const mutation = useMutation({
     mutationFn: ({ url, body }: { url: string; body: unknown }) =>
-      apiRequest(url, { method: "PATCH", body: JSON.stringify(body) }),
+      apiRequest(url, { method: 'PATCH', body: JSON.stringify(body) }),
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ["feed-comment-reports"] });
-      void client.invalidateQueries({ queryKey: ["feed-operations"] });
-      void client.invalidateQueries({queryKey:['admin-feed-reports']});
-      void client.invalidateQueries({queryKey:['admin-feed-posts']});
-      void client.invalidateQueries({queryKey:['admin-feed-stats']});
+      setNote('');
+      void client.invalidateQueries({ queryKey: ['feed-comment-reports'] });
+      void client.invalidateQueries({ queryKey: ['feed-operations'] });
+      void client.invalidateQueries({ queryKey: ['admin-feed-reports'] });
+      void client.invalidateQueries({ queryKey: ['admin-feed-posts'] });
+      void client.invalidateQueries({ queryKey: ['admin-feed-stats'] });
     },
   });
+
+  const ops = metrics.data?.data;
+  const commentReportItems = commentReports.data?.data?.data ?? [];
+  const noteReady = note.trim().length >= 5;
+
   return (
-    <section className="space-y-3 rounded-xl bg-white p-5">
-      <h2 className="text-lg font-semibold">Vận hành kiểm duyệt</h2>
-      {metrics.data && (
-        <p>
-          Chờ duyệt: {metrics.data.data.pending} · Chờ lâu nhất:{" "}
-          {Math.floor(metrics.data.data.oldestAgeSeconds / 60)} phút · Đã duyệt:{" "}
-          {metrics.data.data.manualDecisions} · Khiếu nại được chấp nhận:{" "}
-          {metrics.data.data.reversedAppeals}
-          {" · Tỷ lệ đảo quyết định: "}
-          {Math.round(metrics.data.data.reversalRate * 100)}%
-          {" · Duyệt lần đầu trung bình: "}
-          {Math.round(metrics.data.data.averageInitialReviewSeconds / 60)} phút
-        </p>
+    <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-base font-bold text-slate-900">Vận hành kiểm duyệt & Báo cáo bình luận</h2>
+          <p className="text-xs text-slate-500">
+            Theo dõi tốc độ xử lý, giải quyết báo cáo bình luận và giới hạn quyền đăng Feed của đối tác vi phạm.
+          </p>
+        </div>
+      </div>
+
+      {ops && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-[11px] text-slate-500">Chờ duyệt</div>
+            <div className="text-lg font-extrabold text-slate-900">{ops.pending}</div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-[11px] text-slate-500">Chờ lâu nhất</div>
+            <div className="text-lg font-extrabold text-slate-900">
+              {Math.floor(ops.oldestAgeSeconds / 60)} phút
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-[11px] text-slate-500">Đã kiểm duyệt</div>
+            <div className="text-lg font-extrabold text-teal-700">{ops.manualDecisions}</div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-[11px] text-slate-500">Đảo khiếu nại</div>
+            <div className="text-lg font-extrabold text-slate-900">{ops.reversedAppeals}</div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-[11px] text-slate-500">Tỷ lệ đảo</div>
+            <div className="text-lg font-extrabold text-slate-900">
+              {Math.round(ops.reversalRate * 100)}%
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-[11px] text-slate-500">Duyệt TB</div>
+            <div className="text-lg font-extrabold text-slate-900">
+              {Math.round(ops.averageInitialReviewSeconds / 60)} phút
+            </div>
+          </div>
+        </div>
       )}
-      {(metrics.isError || reports.isError) && (
-        <p role="alert">
-          Không tải được dữ liệu vận hành.{" "}
+
+      {(metrics.isError || commentReports.isError) && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">
+          Không tải được dữ liệu vận hành.{' '}
           <button
+            type="button"
             onClick={() => {
               void metrics.refetch();
-              void reports.refetch();
+              void commentReports.refetch();
             }}
+            className="font-bold underline"
           >
             Thử lại
           </button>
-        </p>
+        </div>
       )}
+
       {mutation.isError && (
-        <p role="alert">
-          {mutation.error instanceof Error
-            ? mutation.error.message
-            : "Không lưu được quyết định."}
-        </p>
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-700">
+          {mutation.error instanceof Error ? mutation.error.message : 'Không lưu được quyết định.'}
+        </div>
       )}
-      {mutation.isSuccess && <p role="status">Đã lưu quyết định.</p>}
-      <label className="block">
-        Lý do xử lý (5–500 ký tự)
+
+      {mutation.isSuccess && (
+        <div role="status" className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700">
+          <CheckCircle2 className="h-4 w-4" />
+          <span>Đã lưu quyết định thành công.</span>
+        </div>
+      )}
+
+      <label className="block text-xs font-semibold text-slate-700">
+        Lý do xử lý bình luận / hạn chế đăng Feed (tối thiểu 5 ký tự)
         <textarea
-          className="block w-full border p-2"
+          className="mt-1 block w-full rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 text-xs text-slate-800 focus:border-teal-600 focus:bg-white focus:outline-none"
+          rows={2}
           value={note}
           maxLength={500}
+          placeholder="Nhập lý do chi tiết từ 5 đến 500 ký tự..."
           onChange={(e) => setNote(e.target.value)}
         />
       </label>
-      <h3 className="font-semibold">Báo cáo bình luận</h3>
-      <details className="rounded border p-3"><summary>Quyết định có lý do cho báo cáo bài đăng</summary><label>Chính sách <select value={policyCode} onChange={e=>setPolicyCode(e.target.value)}>{[['SEXUAL_OR_NUDITY','Nội dung tình dục/khỏa thân'],['PRIVACY_OR_NO_CONSENT','Quyền riêng tư/consent'],['MISLEADING_OR_MEDICAL_CLAIM','Thông tin sai lệch'],['SPAM_OR_SCAM','Spam/lừa đảo'],['VIOLENCE_OR_GRAPHIC','Nội dung ghê rợn'],['COPYRIGHT_OR_REUPLOAD','Bản quyền/đăng lại'],['OTHER','Khác']].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{postReports.map(r=><div key={r.id} className="my-2 rounded border p-3"><p>{r.post.caption} · {r.reason}</p><p>Xem đầy đủ media trong bảng báo cáo bên dưới trước khi quyết định.</p>{([['NO_VIOLATION','Không vi phạm'],['CONTENT_RESTRICTED','Hạn chế gợi ý'],['CONTENT_REMOVED','Gỡ khỏi Feed']] as const).map(([resolution,label])=><button key={resolution} className="mr-3" disabled={mutation.isPending||note.trim().length<5} onClick={()=>mutation.mutate({url:`/internal/feed/reports/${r.id}`,body:{resolution,policyCode,note:note.trim()}})}>{label}</button>)}</div>)}</details>
-      {reports.data?.data.data.length === 0 && (
-        <p>Không có báo cáo chờ xử lý.</p>
-      )}
-      {reports.data?.data.data.map((r) => (
-        <div className="rounded border p-3" key={r.id}>
-          <p>{r.comment.text}</p>
-          <p>
-            {r.reason} · {r.detail}
+
+      <div className="space-y-2">
+        <h3 className="flex items-center gap-1.5 text-sm font-bold text-slate-900">
+          <MessageSquareWarning className="h-4 w-4 text-amber-600" />
+          <span>Báo cáo bình luận chờ xử lý ({commentReportItems.length})</span>
+        </h3>
+        {commentReportItems.length === 0 ? (
+          <p className="text-xs text-slate-500 italic">Không có báo cáo bình luận nào chờ xử lý.</p>
+        ) : (
+          <div className="space-y-2">
+            {commentReportItems.map((r) => (
+              <div
+                className="flex flex-col justify-between gap-3 rounded-xl border border-slate-200 p-3.5 sm:flex-row sm:items-center"
+                key={r.id}
+              >
+                <div className="space-y-1 text-xs">
+                  <p className="font-semibold text-slate-900">"{r.comment.text}"</p>
+                  <p className="text-slate-500">
+                    Lý do: <strong>{r.reason}</strong>
+                    {r.detail ? ` · ${r.detail}` : ''}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {[false, true].map((hide) => (
+                    <button
+                      type="button"
+                      key={String(hide)}
+                      disabled={mutation.isPending || !noteReady}
+                      onClick={() =>
+                        mutation.mutate({
+                          url: `/internal/feed/comment-reports/${r.id}`,
+                          body: { hide, note: note.trim() },
+                        })
+                      }
+                      className={`rounded-xl px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
+                        hide
+                          ? 'bg-rose-600 text-white hover:bg-rose-700'
+                          : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {hide ? 'Ẩn bình luận' : 'Không vi phạm'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {account?.roles.includes('ADMIN') && (
+        <fieldset className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+          <legend className="px-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">
+            Quyền đăng Feed của đối tác (Admin)
+          </legend>
+          <p className="text-xs text-slate-500">
+            Chỉ áp dụng cho quyền đăng/sửa bài trên Feed; hoạt động đặt lịch và đơn hàng vẫn giữ nguyên.
           </p>
-          {[true, false].map((hide) => (
-            <button
-              className="mr-4"
-              key={String(hide)}
-              disabled={mutation.isPending || note.trim().length < 5}
-              onClick={() =>
-                mutation.mutate({
-                  url: `/internal/feed/comment-reports/${r.id}`,
-                  body: { hide, note: note.trim() },
-                })
-              }
-            >
-              {hide ? "Ẩn bình luận" : "Không vi phạm"}
-            </button>
-          ))}
-        </div>
-      ))}
-      {account?.roles.includes("ADMIN") && (
-        <fieldset className="space-y-2 border p-3">
-          <legend>Quyền đăng Feed của đối tác</legend>
-          <label>
-            ID đối tác
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
-              className="block w-full border p-2"
+              type="text"
+              placeholder="Nhập UUID đối tác..."
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-800 focus:border-teal-600 focus:outline-none"
               value={providerId}
               onChange={(e) => setProviderId(e.target.value.trim())}
             />
-          </label>
-          <p>
-            Thay đổi chỉ áp dụng cho đăng/sửa Feed. Hoạt động đặt lịch và đơn
-            hàng tiếp tục theo quyền hiện tại.
-          </p>
-          {[true, false].map((blocked) => (
-            <button
-              className="mr-4"
-              key={String(blocked)}
-              disabled={
-                mutation.isPending ||
-                note.trim().length < 5 ||
-                !/^[a-f0-9-]{36}$/i.test(providerId)
-              }
-              onClick={() =>
-                mutation.mutate({
-                  url: `/internal/feed/providers/${providerId}/posting-restriction`,
-                  body: { blocked, note: note.trim() },
-                })
-              }
-            >
-              {blocked ? "Khóa đăng Feed" : "Mở lại đăng Feed"}
-            </button>
-          ))}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={
+                  mutation.isPending ||
+                  !noteReady ||
+                  !/^[a-f0-9-]{36}$/i.test(providerId)
+                }
+                onClick={() =>
+                  mutation.mutate({
+                    url: `/internal/feed/providers/${providerId}/posting-restriction`,
+                    body: { blocked: true, note: note.trim() },
+                  })
+                }
+                className="inline-flex items-center gap-1 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-40"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                <span>Khóa đăng Feed</span>
+              </button>
+              <button
+                type="button"
+                disabled={
+                  mutation.isPending ||
+                  !noteReady ||
+                  !/^[a-f0-9-]{36}$/i.test(providerId)
+                }
+                onClick={() =>
+                  mutation.mutate({
+                    url: `/internal/feed/providers/${providerId}/posting-restriction`,
+                    body: { blocked: false, note: note.trim() },
+                  })
+                }
+                className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
+              >
+                <Unlock className="h-3.5 w-3.5" />
+                <span>Mở lại đăng Feed</span>
+              </button>
+            </div>
+          </div>
         </fieldset>
       )}
     </section>

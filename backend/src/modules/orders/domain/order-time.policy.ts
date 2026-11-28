@@ -3,6 +3,31 @@ import { BookingType } from '@prisma/client';
 
 export const MIN_SCHEDULE_LEAD_MS = 60 * 60 * 1000;
 export const MAX_SCHEDULE_AHEAD_MS = 30 * 24 * 60 * 60 * 1000;
+export const ACCEPTED_OVERDUE_MINUTES = 15;
+export const EN_ROUTE_OVERDUE_MINUTES = 30;
+export const ARRIVED_OVERDUE_MINUTES = 30;
+
+export function scheduledOrderOverdueAt(order: {
+  bookingType: string;
+  status: string;
+  expectedStartAt?: Date | null;
+  arrivedAt?: Date | null;
+}): Date | null {
+  if (order.bookingType !== 'SCHEDULED') return null;
+  const minutes =
+    order.status === 'ACCEPTED'
+      ? ACCEPTED_OVERDUE_MINUTES
+      : order.status === 'EN_ROUTE'
+        ? EN_ROUTE_OVERDUE_MINUTES
+        : order.status === 'ARRIVED'
+          ? ARRIVED_OVERDUE_MINUTES
+          : null;
+  const start =
+    order.status === 'ARRIVED' ? order.arrivedAt : order.expectedStartAt;
+  return minutes !== null && start
+    ? new Date(start.getTime() + minutes * 60_000)
+    : null;
+}
 
 const DAY_BY_NAME: Record<string, number> = {
   Sun: 0,

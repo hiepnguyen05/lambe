@@ -1,8 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:mobile/core/utils/currency_utils.dart';
 
-import 'package:mobile/core/theme/app_colors.dart';
 import '../../../domain/entities/booking_provider_candidate_entity.dart';
 
 class SelectProviderBottomBar extends StatelessWidget {
@@ -17,31 +16,27 @@ class SelectProviderBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormatter = NumberFormat.currency(
-      locale: 'vi_VN',
-      symbol: 'đ',
-      decimalDigits: 0,
-    );
+    final currencyFormatter = CurrencyUtils.vndCurrency;
 
     final isSelected = selectedCandidate != null;
 
     return Container(
       padding: EdgeInsets.fromLTRB(
-        20,
-        14,
-        20,
-        MediaQuery.of(context).padding.bottom + 14,
+        16,
+        12,
+        16,
+        MediaQuery.of(context).padding.bottom + 12,
       ),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: Colors.white,
         border: const Border(
-          top: BorderSide(color: AppColors.surfaceContainerHigh, width: 1),
+          top: BorderSide(color: Color(0xFFE2E8F0), width: 1),
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.onBackground.withValues(alpha: 0.05),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, -3),
           ),
         ],
       ),
@@ -50,82 +45,79 @@ class SelectProviderBottomBar extends StatelessWidget {
           // Hiển thị chuyên viên & giá đã chọn (nếu có)
           if (isSelected) ...[
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               child: Container(
                 width: 42,
                 height: 42,
-                color: AppColors.surfaceContainerLow,
+                color: const Color(0xFFEFF6F5),
                 child: selectedCandidate!.avatarUrl != null &&
                         selectedCandidate!.avatarUrl!.startsWith('http')
                     ? CachedNetworkImage(
                         imageUrl: selectedCandidate!.avatarUrl!,
                         fit: BoxFit.cover,
-                        placeholder: (_, __) => Container(
-                          color: AppColors.surfaceContainerLow,
-                          child: const Icon(
-                            Icons.person_rounded,
-                            size: 20,
-                            color: AppColors.textMuted,
-                          ),
+                        placeholder: (_, __) => const Icon(
+                          Icons.person_rounded,
+                          size: 20,
+                          color: Color(0xFF0F766E),
                         ),
                         errorWidget: (_, __, ___) => const Icon(
                           Icons.person_rounded,
                           size: 20,
-                          color: AppColors.textMuted,
+                          color: Color(0xFF0F766E),
                         ),
                       )
                     : const Icon(
                         Icons.person_rounded,
                         size: 20,
-                        color: AppColors.textMuted,
+                        color: Color(0xFF0F766E),
                       ),
               ),
             ),
             const SizedBox(width: 10),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 105),
-                  child: Text(
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 120),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
                     selectedCandidate!.displayName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.onBackground,
+                      color: Color(0xFF0B1C30),
                     ),
                   ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  currencyFormatter.format(selectedCandidate!.priceAmount),
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primary,
-                    letterSpacing: -0.3,
+                  const SizedBox(height: 1),
+                  Text(
+                    currencyFormatter.format(selectedCandidate!.priceAmount),
+                    style: const TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF0F766E),
+                      letterSpacing: -0.3,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
           ],
 
           // Nút bấm Tiếp tục sang Bước 3: Xác nhận đơn
           Expanded(
             child: SizedBox(
-              height: 52,
+              height: 48,
               child: ElevatedButton(
                 onPressed: isSelected ? onContinue : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.onPrimary,
-                  disabledBackgroundColor: AppColors.surfaceContainerHigh,
-                  disabledForegroundColor: AppColors.textMuted,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  backgroundColor: const Color(0xFF0F766E),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: const Color(0xFFE2E8F0),
+                  disabledForegroundColor: const Color(0xFF94A3B8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(100),
@@ -137,13 +129,11 @@ class SelectProviderBottomBar extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        isSelected
-                            ? 'Tiếp tục'
-                            : 'Chọn chuyên viên',
+                        isSelected ? 'Tiếp tục' : 'Chọn chuyên viên',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 14,
+                          fontSize: 14.5,
                           fontWeight: FontWeight.w700,
                         ),
                       ),

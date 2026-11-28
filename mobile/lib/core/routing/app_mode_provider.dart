@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/storage/secure_storage_service.dart';
 import 'package:mobile/features/shared/auth/di/auth_providers.dart';
@@ -25,7 +26,9 @@ final appModeProvider = FutureProvider.family<AppMode, String>((
   if (user != null && user.id == userId && user.roles.contains('PROVIDER')) {
     try {
       await storage.saveAppMode(userId, AppMode.provider.name);
-    } catch (_) {}
+    } catch (error) {
+      debugPrint('[AppMode] Unable to persist initial provider mode: $error');
+    }
     return AppMode.provider;
   }
 
@@ -33,7 +36,9 @@ final appModeProvider = FutureProvider.family<AppMode, String>((
   if (savedRoles.contains('PROVIDER')) {
     try {
       await storage.saveAppMode(userId, AppMode.provider.name);
-    } catch (_) {}
+    } catch (error) {
+      debugPrint('[AppMode] Unable to persist role-based provider mode: $error');
+    }
     return AppMode.provider;
   }
 

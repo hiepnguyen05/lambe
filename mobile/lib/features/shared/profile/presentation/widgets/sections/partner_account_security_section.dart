@@ -68,7 +68,7 @@ class PartnerAccountSecuritySection extends StatelessWidget {
                 iconBackgroundColor: AppColors.surfaceContainer,
                 iconColor: AppColors.primary,
                 title: 'Ví nhận đơn & Thanh toán',
-                subtitle: 'Rút về Techcombank ***829',
+                subtitle: 'Xem số dư, nạp tiền & lịch sử giao dịch',
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -104,20 +104,21 @@ class PartnerAccountSecuritySection extends StatelessWidget {
                 subtitle: 'Thông tin tài khoản đối tác',
                 onTap: onIdentityTap,
               ),
-              const Divider(
-                height: 1,
-                indent: 56,
-                color: AppColors.surfaceContainer,
-              ),
-              // Notification Sounds Tile
-              PartnerAccountTile(
-                icon: Icons.notifications_active_rounded,
-                iconBackgroundColor: AppColors.surfaceContainer,
-                iconColor: AppColors.tertiary,
-                title: 'Chuông báo & Âm thanh nhận đơn',
-                subtitle: 'Cài đặt đang phát triển',
-                onTap: onNotificationSoundTap,
-              ),
+              if (onNotificationSoundTap != null) ...[
+                const Divider(
+                  height: 1,
+                  indent: 56,
+                  color: AppColors.surfaceContainer,
+                ),
+                PartnerAccountTile(
+                  icon: Icons.notifications_active_rounded,
+                  iconBackgroundColor: AppColors.surfaceContainer,
+                  iconColor: AppColors.tertiary,
+                  title: 'Chuông báo & Âm thanh nhận đơn',
+                  subtitle: 'Cấu hình thông báo đơn hàng mới',
+                  onTap: onNotificationSoundTap,
+                ),
+              ],
               const Divider(
                 height: 1,
                 indent: 56,
@@ -144,7 +145,7 @@ class PartnerAccountSecuritySection extends StatelessWidget {
                 iconBackgroundColor: AppColors.surfaceContainer,
                 iconColor: AppColors.tertiary,
                 title: 'Trung tâm trợ giúp đối tác',
-                subtitle: 'Kênh hỗ trợ trong ứng dụng đang phát triển',
+                subtitle: 'Liên hệ hỗ trợ qua email partner@lambe.vn',
                 onTap: onSupportCenterTap,
               ),
             ],

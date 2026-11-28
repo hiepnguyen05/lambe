@@ -1,15 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { createClient } from 'redis';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../src/infrastructure/persistence/postgres/prisma.service';
 import { RedisCacheService } from '../src/infrastructure/cache/redis-cache.service';
 import type { CacheStore } from '../src/infrastructure/cache/cache-store';
 import { FeedCacheService } from '../src/modules/social-feed/application/feed-cache.service';
-import {
-  FeedTimelineService,
-  timelineMember,
-} from '../src/modules/social-feed/application/feed-timeline.service';
 import { FeedQueryService } from '../src/modules/social-feed/application/feed-query.service';
 import { FeedAccessService } from '../src/modules/social-feed/application/organization/feed-access.service';
 import { FeedLiveReadService } from '../src/modules/social-feed/application/feed-live-read.service';
@@ -31,7 +26,6 @@ describe('Feed cache with isolated PostgreSQL and real Redis', () => {
     'cache.enabled': true,
     'cache.url': process.env.REDIS_URL,
     'cache.feedEnabled': true,
-    'cache.feedIndexEnabled': true,
     'cache.feedWorkerIntervalMs': 1,
     'cache.feedBatchSize': 200,
     'cache.feedTimeoutMs': 1000,
@@ -52,31 +46,15 @@ describe('Feed cache with isolated PostgreSQL and real Redis', () => {
     getMany: <T>(keys: string[]) => redis.getMany<T>(keys.map(key)),
     set: <T>(k: string, value: T, ttl?: number) =>
       redis.set(key(k), value, ttl),
-    setMany: <T>(entries: { key: string; value: T }[], ttl: number) =>
-      redis.setMany(
-        entries.map((entry) => ({ ...entry, key: key(entry.key) })),
-        ttl,
-      ),
     delete: (k) => redis.delete(key(k)),
     deleteMany: (keys) => redis.deleteMany(keys.map(key)),
     getStatus: () => redis.getStatus(),
-    setIfAbsent: (k, token, ttl) => redis.setIfAbsent(key(k), token, ttl),
-    releaseLock: (k, token) => redis.releaseLock(key(k), token),
-    readSortedPage: (k, limit) => redis.readSortedPage(key(k), limit),
-    replaceSortedPage: (k, members, ttl) => {
-      key(`${k}:count`);
-      return redis.replaceSortedPage(key(k), members, ttl);
-    },
-    advanceGeneration: (k, sequence, ttl) =>
-      redis.advanceGeneration(key(k), sequence, ttl),
   };
   const cache = new FeedCacheService(store, config);
-  const timeline = new FeedTimelineService(prisma, store, config);
   const queries = new FeedQueryService(
     prisma,
     new FeedAccessService(prisma),
     cache,
-    timeline,
     new FeedLiveReadService(prisma),
   );
   const worker = new FeedCacheWorkerService(prisma, store, config);
@@ -565,42 +543,6 @@ describe('Feed cache with isolated PostgreSQL and real Redis', () => {
     await expect(queries.detail(post.id)).rejects.toThrow();
   });
 
-  it('recovers from index eviction and rejects partially lost pages', async () => {
-    const keyName = 'partial-page';
-    const sample = { id: randomUUID(), createdAt: new Date() };
-    await store.replaceSortedPage(keyName, [timelineMember(sample)], 60);
-    expect(await store.readSortedPage(keyName, 2)).toEqual([
-      timelineMember(sample),
-    ]);
-    await redis.delete(key(keyName));
-    expect(await store.readSortedPage(keyName, 2)).toBeNull();
-    expect(
-      (await queries.list({ providerId, limit: 20 })).data.length,
-    ).toBeGreaterThan(0);
-  });
-
-  it('preserves batch values and releases only locks owned by the same token', async () => {
-    expect(
-      await store.setMany(
-        [
-          { key: 'batch-a', value: { a: 1 } },
-          { key: 'batch-b', value: { b: 2 } },
-        ],
-        60,
-      ),
-    ).toBe(true);
-    expect(await store.getMany(['batch-a', 'missing', 'batch-b'])).toEqual([
-      { a: 1 },
-      null,
-      { b: 2 },
-    ]);
-    expect(await store.setIfAbsent('owned-lock', 'first', 10)).toBe(true);
-    await store.releaseLock('owned-lock', 'wrong');
-    expect(await store.setIfAbsent('owned-lock', 'second', 10)).toBe(false);
-    await store.releaseLock('owned-lock', 'first');
-    expect(await store.setIfAbsent('owned-lock', 'second', 10)).toBe(true);
-  });
-
   it('deduplicates real engagement events per user and rechecks recommended visibility', async () => {
     settings['cache.feedRecommendationsEnabled'] = true;
     const service = new FeedRecommendationService(prisma, queries, config);
@@ -642,14 +584,7 @@ describe('Feed cache with isolated PostgreSQL and real Redis', () => {
         lockedUntil: new Date(Date.now() - 1000),
       },
     });
-    const originalAdvance = store.advanceGeneration.bind(store);
-    const fail = jest
-      .spyOn(store, 'advanceGeneration')
-      .mockImplementation((key, sequence, ttl) =>
-        sequence === event.sequence.toString()
-          ? Promise.resolve(false)
-          : originalAdvance(key, sequence, ttl),
-      );
+    const fail = jest.spyOn(store, 'deleteMany').mockResolvedValueOnce(false);
     await worker.tick();
     fail.mockRestore();
     const retry = await prisma.feedCacheEvent.findUniqueOrThrow({
@@ -670,20 +605,5 @@ describe('Feed cache with isolated PostgreSQL and real Redis', () => {
         })
       ).processedAt,
     ).not.toBeNull();
-  });
-
-  it('never moves Redis generation backwards with out-of-order events', async () => {
-    await store.advanceGeneration('generation-test', '9007199254740993', 60);
-    await store.advanceGeneration('generation-test', '9007199254740992', 60);
-    // String, not Lua floating point, preserves bigint ordering beyond 2^53.
-    const raw = createClient({ url: requireIsolatedTestRedis(process.env) });
-    await raw.connect();
-    try {
-      expect(await raw.get(key('generation-test'))).toBe(
-        '00009007199254740993',
-      );
-    } finally {
-      await raw.close();
-    }
   });
 });

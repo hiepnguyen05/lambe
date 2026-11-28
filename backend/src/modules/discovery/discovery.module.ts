@@ -8,6 +8,7 @@ import { PostgresModule } from '../../infrastructure/persistence/postgres/postgr
 import { AuthModule } from '../auth/auth.module';
 import { OrdersModule } from '../orders/orders.module';
 import { ScheduledProviderCandidatesService } from './application/scheduled-provider-candidates.service';
+import { DiscoveryCacheService } from './application/discovery-cache.service';
 import { ProviderDiscoveryService } from './application/provider-discovery.service';
 import { ProviderDiscoveryController } from './controllers/provider-discovery.controller';
 
@@ -23,6 +24,7 @@ import { ProviderDiscoveryController } from './controllers/provider-discovery.co
   controllers: [ProviderDiscoveryController, PublicMembersController],
   providers: [
     ProviderDiscoveryService,
+    DiscoveryCacheService,
     ScheduledProviderCandidatesService,
     MemberDiscoveryService,
   ],

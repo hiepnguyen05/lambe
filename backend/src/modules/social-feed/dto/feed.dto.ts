@@ -122,6 +122,34 @@ export class FeedListQueryDto {
   @IsUUID('4')
   serviceId?: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Lọc bài viết gắn dịch vụ thuộc danh mục theo ID',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  categoryId?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 120,
+    description: 'Lọc bài viết gắn dịch vụ thuộc danh mục theo slug',
+  })
+  @Transform(trim)
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  categorySlug?: string;
+
+  @ApiPropertyOptional({
+    maxLength: 100,
+    description: 'Tìm kiếm theo nội dung bài viết, tên chuyên viên hoặc dịch vụ',
+  })
+  @Transform(trim)
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
   @ApiPropertyOptional({ format: 'uuid', description: 'ID cuối trang trước' })
   @IsOptional()
   @IsUUID('4')
@@ -260,6 +288,11 @@ export class AdminFeedPostsQueryDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @ApiPropertyOptional({ enum: ['ALL', 'PENDING', 'APPROVED', 'REJECTED'] })
+  @IsOptional()
+  @IsIn(['ALL', 'PENDING', 'APPROVED', 'REJECTED'])
+  moderationStatus?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

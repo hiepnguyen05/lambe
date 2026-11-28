@@ -158,11 +158,29 @@ export class InternalAuthenticationService {
       return account;
     }
 
-    return this.prisma.internalAccount.update({
-      where: { id: account.id },
+    const now = new Date();
+    const unlocked = await this.prisma.internalAccount.updateMany({
+      where: {
+        id: account.id,
+        status: 'LOCKED',
+        lockedUntil: { lte: now },
+      },
       data: { status: 'ACTIVE', failedLoginCount: 0, lockedUntil: null },
-      include: activeInternalAccountInclude,
     });
+    if (unlocked.count === 0) {
+      return (
+        (await this.prisma.internalAccount.findUnique({
+          where: { id: account.id },
+          include: activeInternalAccountInclude,
+        })) ?? account
+      );
+    }
+    return {
+      ...account,
+      status: 'ACTIVE',
+      failedLoginCount: 0,
+      lockedUntil: null,
+    };
   }
 
   private async registerFailedLogin(

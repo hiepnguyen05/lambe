@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
@@ -35,12 +37,53 @@ class FeedScreen extends ConsumerStatefulWidget {
 class _FeedScreenState extends ConsumerState<FeedScreen> {
   late FeedMode _currentMode;
   String? _selectedCategorySlug;
+  String? _searchQuery;
+  bool _searchExpanded = false;
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
 
   @override
   void initState() {
     super.initState();
     _currentMode = widget.initialMode;
     if (widget.showNotices) _openNotices();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String raw) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      final trimmed = raw.trim();
+      final next = trimmed.isEmpty ? null : trimmed;
+      if (_searchQuery != next) {
+        setState(() => _searchQuery = next);
+      }
+    });
+  }
+
+  void _onSearchSubmitted(String raw) {
+    _searchDebounce?.cancel();
+    final trimmed = raw.trim();
+    final next = trimmed.isEmpty ? null : trimmed;
+    if (_searchQuery != next) {
+      setState(() => _searchQuery = next);
+    }
+  }
+
+  void _closeSearch() {
+    _searchDebounce?.cancel();
+    _searchController.clear();
+    setState(() {
+      _searchExpanded = false;
+      _searchQuery = null;
+    });
   }
 
   void _openNotices() {
@@ -62,11 +105,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = ref.watch(
-      authNotifierProvider.select(
-        (v) => v.valueOrNull?.roles.contains('PROVIDER') == true,
-      ),
-    );
+    final user = ref.watch(authNotifierProvider.select((v) => v.valueOrNull));
+    final signedIn = user != null;
+    final provider = user?.roles.contains('PROVIDER') == true;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -74,7 +115,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
         bottom: false,
         child: Column(
           children: [
-            // Pinned Tabs & Category Filter at Top of Page
+            // Pinned Tabs, Inline Search & Category Filter at Top of Page
             FeedSubNavHeader(
               selectedMode: _currentMode,
               onModeChanged: (mode) {
@@ -84,10 +125,16 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
               onCategoryChanged: (slug) {
                 setState(() => _selectedCategorySlug = slug);
               },
-              showSavedAndMine: provider,
+              showSaved: signedIn,
+              showMine: provider,
               showBackButton: widget.providerId != null,
               onBackTap: () => context.pop(),
-              onSearchTap: () => context.push('/services'),
+              onSearchTap: () => setState(() => _searchExpanded = true),
+              searchExpanded: _searchExpanded,
+              searchController: _searchController,
+              onSearchChanged: _onSearchChanged,
+              onSearchSubmitted: _onSearchSubmitted,
+              onSearchClosed: _closeSearch,
               onComposeTap: provider
                   ? () => context.push('/feed/compose')
                   : null,
@@ -98,14 +145,15 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
             Expanded(
               child: _FeedPane(
                 key: ValueKey(
-                  '${_currentMode.name}_${widget.providerId}_${widget.serviceId}',
+                  '${_currentMode.name}_${widget.providerId}_${widget.serviceId}_${_selectedCategorySlug ?? ''}_${_searchQuery ?? ''}',
                 ),
                 scope: FeedScope(
                   mode: _currentMode,
                   providerId: widget.providerId,
                   serviceId: widget.serviceId,
+                  categorySlug: _selectedCategorySlug,
+                  search: _searchQuery,
                 ),
-                categorySlug: _selectedCategorySlug,
               ),
             ),
           ],
@@ -117,9 +165,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
 
 class _FeedPane extends ConsumerStatefulWidget {
   final FeedScope scope;
-  final String? categorySlug;
 
-  const _FeedPane({super.key, required this.scope, this.categorySlug});
+  const _FeedPane({super.key, required this.scope});
 
   @override
   ConsumerState<_FeedPane> createState() => _FeedPaneState();
@@ -173,22 +220,9 @@ class _FeedPaneState extends ConsumerState<_FeedPane>
       ),
     );
 
-    final rawItems = state.items
+    final items = state.items
         .where((post) => !hidden.contains(post.id))
         .toList(growable: false);
-
-    // Apply category filter if active
-    final items = widget.categorySlug == null
-        ? rawItems
-        : rawItems
-              .where((post) {
-                final query = widget.categorySlug!.toLowerCase();
-                return post.services.any(
-                      (s) => s.name.toLowerCase().contains(query),
-                    ) ||
-                    post.caption.toLowerCase().contains(query);
-              })
-              .toList(growable: false);
 
     return Column(
       children: [
@@ -263,8 +297,13 @@ class _FeedPaneState extends ConsumerState<_FeedPane>
                 }
 
                 if (!state.loading && items.isEmpty && state.error == null) {
-                  return const FeedFeedback(
-                    'Chưa có bài đăng trong danh sách này.',
+                  final hasFilter =
+                      widget.scope.categorySlug != null ||
+                      (widget.scope.search?.isNotEmpty == true);
+                  return FeedFeedback(
+                    hasFilter
+                        ? 'Không tìm thấy bài đăng phù hợp.'
+                        : 'Chưa có bài đăng trong danh sách này.',
                   );
                 }
 

@@ -21,7 +21,6 @@ import {
 } from './feed-media-storage.port';
 import { feedMediaUrl } from './feed-media-url';
 import { publicFeedWhere } from '../domain/feed-visibility.policy';
-import { FeedTimelineService } from './feed-timeline.service';
 import {
   FeedLiveReadService,
   type LivePublicPost,
@@ -51,7 +50,14 @@ const postInclude = {
           priceAmount: true,
           durationMinutes: true,
           status: true,
-          service: { select: { id: true, name: true, categoryId: true } },
+          service: {
+            select: {
+              id: true,
+              name: true,
+              categoryId: true,
+              category: { select: { slug: true } },
+            },
+          },
         },
       },
     },
@@ -77,7 +83,6 @@ export class FeedQueryService {
     private readonly prisma: PrismaService,
     private readonly access: FeedAccessService,
     private readonly cache: FeedCacheService,
-    private readonly timeline: FeedTimelineService,
     private readonly liveRead: FeedLiveReadService,
   ) {}
 
@@ -92,8 +97,62 @@ export class FeedQueryService {
         ? await this.access.managedScope(userId!)
         : publicFeedWhere;
     const managed = query as ManagedFeedQueryDto;
+    const andFilters: Prisma.FeedPostWhereInput[] = [scope];
+    if (query.serviceId) {
+      andFilters.push({
+        services: { some: { providerService: { serviceId: query.serviceId } } },
+      });
+    }
+    const categorySlug = query.categorySlug?.trim();
+    if (query.categoryId || categorySlug) {
+      andFilters.push({
+        services: {
+          some: {
+            providerService: {
+              ...(mode !== 'mine' && { status: ProviderServiceStatus.ACTIVE }),
+              service: {
+                ...(mode !== 'mine' && { status: ServiceStatus.ACTIVE }),
+                category: {
+                  ...(mode !== 'mine' && { status: 'ACTIVE' }),
+                  ...(query.categoryId && { id: query.categoryId }),
+                  ...(categorySlug && { slug: categorySlug }),
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+    const searchTerm = query.search?.trim();
+    if (searchTerm) {
+      andFilters.push({
+        OR: [
+          { caption: { contains: searchTerm, mode: 'insensitive' } },
+          {
+            provider: {
+              displayName: { contains: searchTerm, mode: 'insensitive' },
+            },
+          },
+          { authorDisplayName: { contains: searchTerm, mode: 'insensitive' } },
+          {
+            services: {
+              some: {
+                providerService: {
+                  ...(mode !== 'mine' && {
+                    status: ProviderServiceStatus.ACTIVE,
+                  }),
+                  service: {
+                    name: { contains: searchTerm, mode: 'insensitive' },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      });
+    }
     const where: Prisma.FeedPostWhereInput = {
-      AND: [scope],
+      AND: andFilters,
       ...(mode === 'mine' && {
         status: { not: FeedPostStatus.DELETED },
         ...(managed.organizationReviewStatus && {
@@ -104,9 +163,6 @@ export class FeedQueryService {
         }),
       }),
       ...(query.providerId && { providerId: query.providerId }),
-      ...(query.serviceId && {
-        services: { some: { providerService: { serviceId: query.serviceId } } },
-      }),
       ...(mode === 'following' &&
         userId && {
           provider: {
@@ -128,18 +184,22 @@ export class FeedQueryService {
       ];
     }
     if (mode === 'all' && this.cache.isEnabled()) {
-      const rows = await this.timeline.read(query, async (ids) => {
-        const identities = await this.prisma.feedPost.findMany({
-          where: ids ? { AND: [where, { id: { in: ids } }] } : where,
-          select: publicLiveSelect,
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-          take: limit + 1,
-        });
-        return this.liveRead.load(identities.map((post) => post.id));
+      const identities = await this.prisma.feedPost.findMany({
+        where,
+        select: publicLiveSelect,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
       });
+      const pageIdentities = identities.slice(0, limit);
+      const rows = await this.liveRead.load(
+        pageIdentities.map((post) => post.id),
+      );
       return {
-        data: await this.hydratePublic(rows.slice(0, limit), userId),
-        nextCursor: rows.length > limit ? rows[limit - 1]?.id : null,
+        data: await this.hydratePublic(rows, userId),
+        nextCursor:
+          identities.length > limit
+            ? (pageIdentities.at(-1)?.id ?? null)
+            : null,
       };
     }
     const rows = await this.prisma.feedPost.findMany({

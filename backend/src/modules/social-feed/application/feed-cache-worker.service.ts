@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Interval } from '@nestjs/schedule';
 import { Prisma, type FeedCacheEvent } from '@prisma/client';
+import { raceWithTimeout } from '../../../common/async/race-with-timeout';
 import {
   CACHE_STORE,
   type CacheStore,
@@ -82,14 +83,7 @@ export class FeedCacheWorkerService {
       const deleted = await this.deadline(
         this.cache.deleteMany(event.oldCacheKey ? [event.oldCacheKey] : []),
       );
-      const advanced = await this.deadline(
-        this.cache.advanceGeneration(
-          'lambe:feed:v1:generation',
-          event.sequence.toString(),
-          30 * 86400,
-        ),
-      );
-      if (!deleted || !advanced) throw new Error('cache unavailable');
+      if (!deleted) throw new Error('cache unavailable');
       await this.prisma.feedCacheEvent.updateMany({
         where: lease,
         data: { processedAt: new Date(), lockedUntil: null },
@@ -112,17 +106,9 @@ export class FeedCacheWorkerService {
   }
 
   private async deadline<T>(promise: Promise<T>): Promise<T> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      return await Promise.race([
-        promise,
-        new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(() => reject(new Error('cache deadline')), 1000);
-        }),
-      ]);
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
+    return raceWithTimeout(promise, 1000, () => {
+      throw new Error('cache deadline');
+    });
   }
 
   async status() {
@@ -147,7 +133,6 @@ export class FeedCacheWorkerService {
       alerts.push('feed_cache_redis_unavailable');
     return {
       enabled: this.config.get<boolean>('cache.feedEnabled', false),
-      indexEnabled: this.config.get<boolean>('cache.feedIndexEnabled', false),
       ...this.metrics,
       pending,
       pendingIsLowerBound: rows.length > 10000,

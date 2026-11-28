@@ -6,47 +6,70 @@ import 'add_on_format.dart';
 class AddOnLineItems extends StatelessWidget {
   final AddOnOrder order;
   final bool provider;
+
   const AddOnLineItems({super.key, required this.order, this.provider = false});
+
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text('Dịch vụ gốc', style: Theme.of(context).textTheme.labelLarge),
-      _line(
-        '${order.serviceName} · giá gốc',
-        addOnMoney(order.servicePriceAmount, order.currencyCode),
-      ),
-      for (final item in order.accepted)
-        _line(
-          '${item.serviceName} · ${item.durationMinutes} phút · đã chấp nhận',
-          addOnMoney(item.priceAmount, order.currencyCode),
-        ),
-      const Divider(),
-      _line(
-        'Tổng đơn hiện tại',
-        addOnMoney(order.totalAmount, order.currencyCode),
-      ),
-      Text('Tổng thời lượng: ${order.durationMinutes} phút'),
-      if (order.expectedEndAt != null)
-        Text(
-          'Kết thúc dự kiến: ${addOnTime(order.expectedEndAt!)} (giờ Việt Nam)',
-        ),
-      if (provider && order.commissionAmount != null)
-        Text(
-          'Tổng hoa hồng của đơn: ${addOnMoney(order.commissionAmount!, order.currencyCode)}',
-        ),
-      const Text('Tổng đơn đã bao gồm phí và ưu đãi theo thông tin máy chủ.'),
-    ],
-  );
-  Widget _line(String name, String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
+  Widget build(BuildContext context) {
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: Text(name)),
-        const SizedBox(width: 12),
-        Flexible(child: Text(value, textAlign: TextAlign.end)),
+        for (final item in order.accepted)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${item.serviceName} · ${item.durationMinutes} phút · đã chấp nhận',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF334155),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '+${addOnMoney(item.priceAmount, order.currencyCode)}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF005C55),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              Text(
+                'Tổng đơn (${order.durationMinutes} phút)',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: Color(0xFF64748B),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                addOnMoney(order.totalAmount, order.currencyCode),
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
-    ),
-  );
+    );
+  }
 }

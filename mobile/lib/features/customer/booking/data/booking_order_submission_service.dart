@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/constants/api_endpoints.dart';
 import 'package:mobile/core/network/api_response_parser.dart';
 import 'package:mobile/core/network/dio_client.dart';
+import 'package:mobile/core/network/network_exceptions.dart';
 import 'package:mobile/core/utils/uuid_utils.dart';
 
 import '../domain/entities/booking_draft_entity.dart';
@@ -80,25 +81,6 @@ class BookingOrderSubmissionService implements BookingOrderRepository {
     return body;
   }
 
-  String _parseErrorMessage(DioException e, {required String fallback}) {
-    final resData = e.response?.data;
-    if (resData is Map<String, dynamic>) {
-      final msg = resData['message'];
-      if (msg is String && msg.isNotEmpty) {
-        return msg;
-      } else if (msg is List && msg.isNotEmpty) {
-        return msg.first.toString();
-      }
-    } else if (e.type == DioExceptionType.connectionTimeout ||
-        e.type == DioExceptionType.receiveTimeout ||
-        e.type == DioExceptionType.connectionError) {
-      return 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại mạng.';
-    } else if (e.message != null && e.message!.isNotEmpty) {
-      return e.message!;
-    }
-    return fallback;
-  }
-
   /// Lấy danh sách voucher hợp lệ cho dịch vụ của thợ: GET /api/me/vouchers?providerServiceId=...
   @override
   Future<List<VoucherEntity>> getEligibleVouchers(
@@ -115,7 +97,7 @@ class BookingOrderSubmissionService implements BookingOrderRepository {
           .toList();
     } on DioException catch (e) {
       throw Exception(
-        _parseErrorMessage(
+        ExceptionHandler.extractMessage(
           e,
           fallback: 'Không thể lấy danh sách ưu đãi khả dụng.',
         ),
@@ -128,6 +110,7 @@ class BookingOrderSubmissionService implements BookingOrderRepository {
   Future<OrderQuoteEntity> getQuote({
     required BookingDraftEntity draft,
     String? voucherCode,
+    CancelToken? cancelToken,
   }) async {
     final body = _buildBaseOrderPayload(draft);
     if (voucherCode != null && voucherCode.trim().isNotEmpty) {
@@ -135,7 +118,11 @@ class BookingOrderSubmissionService implements BookingOrderRepository {
     }
 
     try {
-      final response = await _dio.post(ApiEndpoints.ordersQuote, data: body);
+      final response = await _dio.post(
+        ApiEndpoints.ordersQuote,
+        data: body,
+        cancelToken: cancelToken,
+      );
 
       final data = ApiResponseParser.dataMap(response);
       return OrderQuoteEntity.fromJson(data);
@@ -162,7 +149,7 @@ class BookingOrderSubmissionService implements BookingOrderRepository {
         );
       }
       throw Exception(
-        _parseErrorMessage(
+        ExceptionHandler.extractMessage(
           e,
           fallback: 'Không thể lấy báo giá dịch vụ, vui lòng thử lại.',
         ),
@@ -228,7 +215,7 @@ class BookingOrderSubmissionService implements BookingOrderRepository {
     } on DioException catch (e) {
       if (e.response?.statusCode == 409) resetIdempotencyKey();
       throw Exception(
-        _parseErrorMessage(
+        ExceptionHandler.extractMessage(
           e,
           fallback: 'Không thể đặt lịch, vui lòng thử lại.',
         ),

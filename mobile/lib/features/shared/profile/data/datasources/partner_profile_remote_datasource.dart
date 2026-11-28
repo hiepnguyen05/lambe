@@ -32,12 +32,21 @@ class DioPartnerProfileRemoteDataSource
       final id = data['id']?.toString() ?? '';
       final displayName =
           data['displayName']?.toString() ?? 'Chuyên viên đối tác';
+      final avatarUrl = data['avatarUrl']?.toString();
       final biography = data['biography']?.toString() ?? '';
       final serviceAreaName =
           data['serviceAreaName']?.toString() ?? 'Chưa thiết lập';
       final serviceRadiusKm = (data['serviceRadiusKm'] as num?)?.toInt() ?? 0;
       final providerType = data['providerType']?.toString() ?? 'INDIVIDUAL';
       final acceptingMemberOrders = data['acceptingMemberOrders'] != false;
+      final isVerified = data['status']?.toString() == 'ACTIVE';
+      final stats = data['stats'] is Map
+          ? Map<String, dynamic>.from(data['stats'] as Map)
+          : null;
+      final rating = (stats?['rating'] as num?)?.toDouble();
+      final reviewCount = (stats?['reviewCount'] as num?)?.toInt();
+      final completedBookings =
+          (stats?['completedOrdersCount'] as num?)?.toInt();
 
       // Parse services
       final servicesList = (data['services'] as List<dynamic>?) ?? [];
@@ -65,12 +74,17 @@ class DioPartnerProfileRemoteDataSource
       return PartnerProfileEntity(
         id: id,
         displayName: displayName,
+        avatarUrl: avatarUrl,
         biography: biography,
         serviceAreaName: serviceAreaName,
         serviceRadiusKm: serviceRadiusKm,
         activeServicesCount: activeCount,
         servicesSummary: summary,
         workingHoursSummary: workingHoursSummary,
+        completedBookings: completedBookings,
+        rating: rating,
+        reviewCount: reviewCount,
+        isVerified: isVerified,
         providerType: providerType,
         acceptingMemberOrders: acceptingMemberOrders,
       );

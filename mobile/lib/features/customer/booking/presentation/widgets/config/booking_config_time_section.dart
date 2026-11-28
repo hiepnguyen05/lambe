@@ -21,6 +21,7 @@ class _BookingConfigTimeSectionState
   late DateTime _selectedDay;
   late int _selectedHour;
   late int _selectedMinute;
+  int _activePeriod = 0; // 0: Sáng, 1: Chiều, 2: Tối
 
   @override
   void initState() {
@@ -33,7 +34,6 @@ class _BookingConfigTimeSectionState
     if (widget.draft.scheduledAt != null) {
       initialDate = widget.draft.scheduledAt!;
     } else if (minLeadTime.isAfter(todayEnd)) {
-      // Hết khung giờ hôm nay -> mặc định chuyển sang ngày mai 07:00
       final tomorrow = now.add(const Duration(days: 1));
       initialDate = DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 7, 0);
     } else {
@@ -55,6 +55,18 @@ class _BookingConfigTimeSectionState
       _selectedHour = 22;
       _selectedMinute = 0;
     }
+
+    _syncPeriodWithSelectedHour();
+  }
+
+  void _syncPeriodWithSelectedHour() {
+    if (_selectedHour < 12) {
+      _activePeriod = 0;
+    } else if (_selectedHour < 18) {
+      _activePeriod = 1;
+    } else {
+      _activePeriod = 2;
+    }
   }
 
   @override
@@ -66,6 +78,7 @@ class _BookingConfigTimeSectionState
       _selectedDay = DateTime(dt.year, dt.month, dt.day);
       _selectedHour = dt.hour;
       _selectedMinute = (dt.minute ~/ 30) * 30;
+      _syncPeriodWithSelectedHour();
     }
   }
 
@@ -99,7 +112,6 @@ class _BookingConfigTimeSectionState
 
     if (BookingDayPicker.isSameDay(_selectedDay, now)) {
       if (minLeadTime.isAfter(todayEnd)) {
-        // Hôm nay không còn khung giờ khả dụng: tự động chọn ngày mai lúc 07:00
         final tomorrow = now.add(const Duration(days: 1));
         _selectedDay = DateTime(tomorrow.year, tomorrow.month, tomorrow.day);
         _selectedHour = 7;
@@ -117,7 +129,6 @@ class _BookingConfigTimeSectionState
           nextHour = 7;
           targetMin = 0;
         } else if (nextHour > 22 || (nextHour == 22 && targetMin > 0)) {
-          // Vượt quá giờ làm việc tối -> chuyển sang sáng mai
           final tomorrow = now.add(const Duration(days: 1));
           _selectedDay = DateTime(tomorrow.year, tomorrow.month, tomorrow.day);
           nextHour = 7;
@@ -136,6 +147,7 @@ class _BookingConfigTimeSectionState
       }
     }
 
+    _syncPeriodWithSelectedHour();
     ref.read(bookingDraftProvider.notifier).setScheduledAt(scheduled);
   }
 
@@ -181,21 +193,229 @@ class _BookingConfigTimeSectionState
     return '$h:$m';
   }
 
+  Widget _buildPeriodTabs() {
+    const periods = [
+      {'label': 'Sáng', 'time': '07:00 - 11:30', 'icon': Icons.wb_sunny_rounded},
+      {'label': 'Chiều', 'time': '12:00 - 17:30', 'icon': Icons.wb_twilight_rounded},
+      {'label': 'Tối', 'time': '18:00 - 22:00', 'icon': Icons.nightlight_round},
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: List.generate(periods.length, (index) {
+          final isSelected = _activePeriod == index;
+          final item = periods[index];
+          return Expanded(
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  _activePeriod = index;
+                });
+              },
+              borderRadius: BorderRadius.circular(9),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.white : Colors.transparent,
+                  borderRadius: BorderRadius.circular(9),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          item['icon'] as IconData,
+                          size: 13,
+                          color: isSelected
+                              ? const Color(0xFF0F766E)
+                              : const Color(0xFF64748B),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          item['label'] as String,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                            color: isSelected
+                                ? const Color(0xFF0F766E)
+                                : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      item['time'] as String,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isSelected
+                            ? const Color(0xFF0F766E).withValues(alpha: 0.8)
+                            : const Color(0xFF94A3B8),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildSlotsGrid(List<BookingTimeSlot> slots) {
+    if (slots.isEmpty) return const SizedBox.shrink();
+
+    final hasAvailable = slots.any((s) => s.isAvailable);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final itemWidth = (constraints.maxWidth - 24) / 4; // 4 columns with 8px spacing
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: slots.map((slot) {
+                final isSelected =
+                    slot.hour == _selectedHour &&
+                    slot.minute == _selectedMinute &&
+                    slot.isAvailable;
+
+                return SizedBox(
+                  width: itemWidth,
+                  child: InkWell(
+                    onTap: slot.isAvailable
+                        ? () => _onTimeSelected(slot.hour, slot.minute)
+                        : null,
+                    borderRadius: BorderRadius.circular(10),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFF0F766E)
+                            : (slot.isAvailable
+                                ? const Color(0xFFF8FAFC)
+                                : const Color(0xFFF1F5F9)),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected
+                              ? const Color(0xFF0F766E)
+                              : (slot.isAvailable
+                                  ? const Color(0xFFE2E8F0)
+                                  : const Color(0xFFE2E8F0).withValues(alpha: 0.5)),
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: const Color(0xFF0F766E).withValues(alpha: 0.2),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        slot.formatted,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight:
+                              isSelected ? FontWeight.w700 : FontWeight.w600,
+                          color: isSelected
+                              ? Colors.white
+                              : (slot.isAvailable
+                                  ? const Color(0xFF0B1C30)
+                                  : const Color(0xFF94A3B8)),
+                          decoration: slot.isAvailable
+                              ? null
+                              : TextDecoration.lineThrough,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            if (!hasAvailable) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 14,
+                      color: Color(0xFFD97706),
+                    ),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Các khung giờ buổi này đã qua, vui lòng chọn buổi khác hoặc ngày tiếp theo.',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: Color(0xFF92400E),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAsap = widget.draft.bookingType == BookingType.asap;
 
+    final activeSlots = switch (_activePeriod) {
+      0 => _generateSlotsForRange(7, 0, 11, 30),
+      1 => _generateSlotsForRange(12, 0, 17, 30),
+      _ => _generateSlotsForRange(18, 0, 22, 0),
+    };
+
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF0F172A).withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -221,7 +441,7 @@ class _BookingConfigTimeSectionState
               const Text(
                 'Thời gian thực hiện',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 15.5,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF0B1C30),
                   letterSpacing: -0.2,
@@ -229,14 +449,14 @@ class _BookingConfigTimeSectionState
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
           // ASAP vs SCHEDULED Toggle
           Container(
-            padding: const EdgeInsets.all(4),
+            padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
               color: const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
@@ -247,18 +467,18 @@ class _BookingConfigTimeSectionState
                           .read(bookingDraftProvider.notifier)
                           .setBookingType(BookingType.asap);
                     },
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(9),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
                       decoration: BoxDecoration(
                         color: isAsap ? Colors.white : Colors.transparent,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(9),
                         boxShadow: isAsap
                             ? [
                                 BoxShadow(
                                   color: Colors.black.withValues(alpha: 0.06),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
                                 ),
                               ]
                             : null,
@@ -268,16 +488,16 @@ class _BookingConfigTimeSectionState
                         children: [
                           Icon(
                             Icons.bolt_rounded,
-                            size: 18,
+                            size: 17,
                             color: isAsap
                                 ? const Color(0xFF0F766E)
                                 : const Color(0xFF64748B),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 5),
                           Text(
                             'Đặt ngay',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: 13.5,
                               fontWeight: isAsap
                                   ? FontWeight.w700
                                   : FontWeight.w600,
@@ -299,18 +519,18 @@ class _BookingConfigTimeSectionState
                           .setBookingType(BookingType.scheduled);
                       _recalculateScheduledDateTime();
                     },
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(9),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
                       decoration: BoxDecoration(
                         color: !isAsap ? Colors.white : Colors.transparent,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(9),
                         boxShadow: !isAsap
                             ? [
                                 BoxShadow(
                                   color: Colors.black.withValues(alpha: 0.06),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
                                 ),
                               ]
                             : null,
@@ -320,16 +540,16 @@ class _BookingConfigTimeSectionState
                         children: [
                           Icon(
                             Icons.calendar_month_rounded,
-                            size: 18,
+                            size: 17,
                             color: !isAsap
                                 ? const Color(0xFF0F766E)
                                 : const Color(0xFF64748B),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 5),
                           Text(
                             'Đặt lịch hẹn',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: 13.5,
                               fontWeight: !isAsap
                                   ? FontWeight.w700
                                   : FontWeight.w600,
@@ -350,71 +570,50 @@ class _BookingConfigTimeSectionState
 
           if (isAsap)
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
+                color: const Color(0xFFEFF6F5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF99F6E4).withValues(alpha: 0.6),
+                ),
               ),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: Color(0xFFEFF6F5),
-                      borderRadius: BorderRadius.circular(10),
+                      color: const Color(0xFF0F766E),
+                      borderRadius: BorderRadius.circular(9),
                     ),
-                    child: Icon(
+                    child: const Icon(
                       Icons.bolt_rounded,
-                      color: Color(0xFF0F766E),
+                      color: Colors.white,
                       size: 20,
                     ),
                   ),
-                  SizedBox(width: 12),
-                  Expanded(
+                  const SizedBox(width: 10),
+                  const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Phục vụ ngay tức thì',
                           style: TextStyle(
-                            fontSize: 14.5,
+                            fontSize: 13.5,
                             fontWeight: FontWeight.w700,
                             color: Color(0xFF0B1C30),
                           ),
                         ),
-                        SizedBox(height: 3),
+                        SizedBox(height: 2),
                         Text(
-                          'Chuyên viên sẵn sàng tiếp nhận và xuất phát ngay đến địa chỉ của bạn. Làm đẹp tại nhà tức thì, không cần chờ đợi.',
+                          'Chuyên viên gần nhất tiếp nhận và có mặt sau 15 – 30 phút.',
                           style: TextStyle(
-                            fontSize: 12.5,
-                            color: Color(0xFF64748B),
-                            height: 1.4,
+                            fontSize: 12,
+                            color: Color(0xFF475569),
+                            height: 1.3,
                           ),
-                        ),
-                        SizedBox(height: 8),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: const [
-                            Icon(
-                              Icons.bolt_rounded,
-                              size: 15,
-                              color: Color(0xFF0F766E),
-                            ),
-                            SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                'Xuất phát ngay • Có mặt sau 15 – 30 phút',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF0F766E),
-                                ),
-                              ),
-                            ),
-                          ],
                         ),
                       ],
                     ),
@@ -426,25 +625,25 @@ class _BookingConfigTimeSectionState
             const Text(
               'Chọn ngày',
               style: TextStyle(
-                fontSize: 13.5,
+                fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF334155),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
 
             BookingDayPicker(
               selectedDay: _selectedDay,
               onDaySelected: _onDaySelected,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
             Row(
               children: [
                 const Text(
                   'Chọn khung giờ',
                   style: TextStyle(
-                    fontSize: 13.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF334155),
                   ),
@@ -462,7 +661,7 @@ class _BookingConfigTimeSectionState
                   child: Text(
                     'Đã chọn: ${_formatHourMinute(_selectedHour, _selectedMinute)}',
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF0F766E),
                     ),
@@ -470,45 +669,12 @@ class _BookingConfigTimeSectionState
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
 
-            // Sáng: 07:00 - 11:30
-            BookingTimePeriodSection(
-              title: 'Buổi Sáng',
-              timeRange: '07:00 - 11:30',
-              icon: Icons.wb_sunny_rounded,
-              iconColor: const Color(0xFFF59E0B),
-              slots: _generateSlotsForRange(7, 0, 11, 30),
-              selectedHour: _selectedHour,
-              selectedMinute: _selectedMinute,
-              onSelect: _onTimeSelected,
-            ),
-            const SizedBox(height: 16),
+            _buildPeriodTabs(),
+            const SizedBox(height: 12),
 
-            // Chiều: 12:00 - 17:30
-            BookingTimePeriodSection(
-              title: 'Buổi Chiều',
-              timeRange: '12:00 - 17:30',
-              icon: Icons.wb_twilight_rounded,
-              iconColor: const Color(0xFF0F766E),
-              slots: _generateSlotsForRange(12, 0, 17, 30),
-              selectedHour: _selectedHour,
-              selectedMinute: _selectedMinute,
-              onSelect: _onTimeSelected,
-            ),
-            const SizedBox(height: 16),
-
-            // Tối: 18:00 - 22:00
-            BookingTimePeriodSection(
-              title: 'Buổi Tối',
-              timeRange: '18:00 - 22:00',
-              icon: Icons.nightlight_round,
-              iconColor: const Color(0xFF6366F1),
-              slots: _generateSlotsForRange(18, 0, 22, 0),
-              selectedHour: _selectedHour,
-              selectedMinute: _selectedMinute,
-              onSelect: _onTimeSelected,
-            ),
+            _buildSlotsGrid(activeSlots),
           ],
         ],
       ),

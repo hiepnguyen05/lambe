@@ -21,6 +21,7 @@ class _FeedMediaGalleryState extends State<FeedMediaGallery> {
   int _index = 0;
   double? _dynamicRatio;
   double _maxLoadedDominance = 0;
+  final List<(ImageStream, ImageStreamListener)> _ratioSubscriptions = [];
 
   @override
   void initState() {
@@ -37,7 +38,21 @@ class _FeedMediaGalleryState extends State<FeedMediaGallery> {
     }
   }
 
+  @override
+  void dispose() {
+    _clearRatioSubscriptions();
+    super.dispose();
+  }
+
+  void _clearRatioSubscriptions() {
+    for (final (stream, listener) in _ratioSubscriptions) {
+      stream.removeListener(listener);
+    }
+    _ratioSubscriptions.clear();
+  }
+
   void _resolveRatio() {
+    _clearRatioSubscriptions();
     final items = widget.post.media;
     if (items.isEmpty) return;
 
@@ -70,30 +85,46 @@ class _FeedMediaGalleryState extends State<FeedMediaGallery> {
       return;
     }
 
-    // Resolve from network image for items without server dimensions
+    // Resolve from downscaled image for items without server dimensions
     for (final item in items) {
       if (item.video) continue;
       try {
-        final provider = CachedNetworkImageProvider(item.url);
+        final provider = ResizeImage(
+          CachedNetworkImageProvider(item.url),
+          width: 256,
+        );
         final stream = provider.resolve(ImageConfiguration.empty);
-        late ImageStreamListener listener;
-        listener = ImageStreamListener((imageInfo, _) {
-          if (mounted) {
-            final w = imageInfo.image.width;
-            final h = imageInfo.image.height;
-            if (h > 0 && w > 0) {
-              final d = (w * h).toDouble() * (h / w);
-              if (d > _maxLoadedDominance) {
-                _maxLoadedDominance = d;
-                setState(() {
-                  _dynamicRatio = (w / h).clamp(0.5625, 1.91);
-                });
+        late final (ImageStream, ImageStreamListener) subscription;
+        void detach() {
+          stream.removeListener(subscription.$2);
+          _ratioSubscriptions.remove(subscription);
+        }
+
+        final listener = ImageStreamListener(
+          (imageInfo, _) {
+            detach();
+            if (mounted) {
+              final w = imageInfo.image.width;
+              final h = imageInfo.image.height;
+              if (h > 0 && w > 0) {
+                final d = (w * h).toDouble() * (h / w);
+                if (d > _maxLoadedDominance) {
+                  _maxLoadedDominance = d;
+                  setState(() {
+                    _dynamicRatio = (w / h).clamp(0.5625, 1.91);
+                  });
+                }
               }
             }
-          }
-        }, onError: (_, __) {});
+          },
+          onError: (_, __) => detach(),
+        );
+        subscription = (stream, listener);
+        _ratioSubscriptions.add(subscription);
         stream.addListener(listener);
-      } catch (_) {}
+      } catch (error) {
+        debugPrint('[FeedMediaGallery] Aspect ratio probe failed: $error');
+      }
     }
   }
 
@@ -250,6 +281,7 @@ class _FeedMediaGalleryState extends State<FeedMediaGallery> {
                   key: ValueKey('video_${media.id}'),
                   url: media.url,
                   duration: media.duration,
+                  isSlideActive: index == _index,
                   onFullscreen: () => context.push(
                     '/feed/posts/${widget.post.id}/media/${media.id}${widget.managed ? '?manage=true' : ''}',
                   ),

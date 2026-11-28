@@ -21,7 +21,9 @@ class RescheduleProposalDetails extends StatelessWidget {
       if (proposal.isPending(now))
         Text('Phản hồi trước: ${rescheduleTimeLabel(proposal.expiresAt)}'),
       if (proposal.isPending(now))
-        const Text('Lịch hiện tại vẫn được giữ cho đến khi thợ chấp nhận.'),
+        const Text(
+          'Lịch hiện tại vẫn được giữ cho đến khi bên còn lại chấp nhận.',
+        ),
     ],
   );
 }

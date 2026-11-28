@@ -6,11 +6,8 @@ export default registerAs('cache', () => ({
   feedEnabled: process.env.FEED_CACHE_ENABLED === 'true',
   feedPostTtlSeconds: Number(process.env.FEED_CACHE_POST_TTL_SECONDS ?? 120),
   feedTimeoutMs: Number(process.env.FEED_CACHE_TIMEOUT_MS ?? 100),
-  feedIndexEnabled: process.env.FEED_CACHE_INDEX_ENABLED === 'true',
   feedRecommendationsEnabled:
     process.env.FEED_RECOMMENDATIONS_ENABLED === 'true',
-  feedIndexTtlSeconds: Number(process.env.FEED_CACHE_INDEX_TTL_SECONDS ?? 300),
-  feedLockTtlSeconds: Number(process.env.FEED_CACHE_LOCK_TTL_SECONDS ?? 5),
   feedBatchSize: Number(process.env.FEED_CACHE_BATCH_SIZE ?? 50),
   feedWorkerIntervalMs: Number(
     process.env.FEED_CACHE_WORKER_INTERVAL_MS ?? 5000,

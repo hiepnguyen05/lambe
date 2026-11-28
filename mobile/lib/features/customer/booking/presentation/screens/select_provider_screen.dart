@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import 'package:mobile/core/widgets/app_dialog.dart';
+import 'package:mobile/core/widgets/lambe_icon_widget.dart';
 
 import '../../domain/entities/booking_draft_entity.dart';
 import '../../domain/entities/booking_provider_candidate_entity.dart';
@@ -32,7 +33,13 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
 
     if (draft == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Chọn chuyên viên')),
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          title: const Text('Chọn chuyên viên'),
+          centerTitle: true,
+          elevation: 0,
+          backgroundColor: Colors.white,
+        ),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -58,13 +65,14 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
             allCandidates.any((c) => c.id == _selectedCandidate?.id)
         ? _selectedCandidate
         : allCandidates.where((c) => c.available).firstOrNull;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FF),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: const Text(
           'Chọn chuyên viên',
           style: TextStyle(
-            fontSize: 18,
+            fontSize: 17,
             fontWeight: FontWeight.w700,
             color: Color(0xFF0B1C30),
           ),
@@ -72,10 +80,11 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(
             Icons.arrow_back_ios_new_rounded,
-            size: 20,
+            size: 19,
             color: Color(0xFF0B1C30),
           ),
           onPressed: () => context.pop(),
@@ -87,7 +96,7 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
           // Tóm tắt dịch vụ & địa chỉ đang chọn
           _buildServiceSummaryCard(context, draft),
 
-          // Thanh bộ lọc chuyên viên (Sẵn sàng ngay, Gần nhất, 4.8+ sao, Giá)
+          // Thanh bộ lọc chuyên viên (Gần nhất, Đánh giá cao, Giá thấp, Giá cao)
           const SelectProviderFilterBar(),
 
           // Danh sách chuyên viên
@@ -98,7 +107,7 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     CircularProgressIndicator(color: Color(0xFF0F766E)),
-                    SizedBox(height: 16),
+                    SizedBox(height: 14),
                     Text(
                       'Đang tìm chuyên viên phù hợp quanh bạn...',
                       style: TextStyle(
@@ -176,89 +185,56 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
                     physics: const AlwaysScrollableScrollPhysics(
                       parent: BouncingScrollPhysics(),
                     ),
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 20),
                     children: [
-                      // Số lượng chuyên viên phù hợp
-                      Row(
-                        children: [
-                          Text(
-                            '${candidates.length} chuyên viên phù hợp',
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1E293B),
-                            ),
-                          ),
-                          const Spacer(),
-                          if (filterState.hasActiveFilters)
-                            TextButton.icon(
-                              onPressed: () => ref
-                                  .read(candidateFilterProvider.notifier)
-                                  .reset(),
-                              icon: const Icon(
-                                Icons.refresh_rounded,
-                                size: 14,
-                                color: Color(0xFF0F766E),
-                              ),
-                              label: const Text(
-                                'Xem tất cả',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF0F766E),
-                                ),
-                              ),
-                              style: TextButton.styleFrom(
-                                padding: EdgeInsets.zero,
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
-                        ],
-                      ),
-                      // Hướng dẫn thân thiện
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFF6F5),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: const Color(0xFF0F766E)
-                                .withValues(alpha: 0.15),
-                          ),
-                        ),
-                        child: const Row(
+                      // Tiêu đề số lượng chuyên viên & nút Xem tất cả
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10, left: 2, right: 2),
+                        child: Row(
                           children: [
-                            Icon(
-                              Icons.chat_bubble_outline_rounded,
-                              size: 15,
-                              color: Color(0xFF0F766E),
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Bấm vào biểu tượng tin nhắn trên thẻ chuyên viên để hỏi trước về lịch hẹn và dịch vụ.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF0F766E),
-                                  fontWeight: FontWeight.w500,
-                                ),
+                            Text(
+                              '${candidates.length} chuyên viên phù hợp quanh bạn',
+                              style: const TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1E293B),
                               ),
                             ),
+                            const Spacer(),
+                            if (filterState.hasActiveFilters)
+                              TextButton.icon(
+                                onPressed: () => ref
+                                    .read(candidateFilterProvider.notifier)
+                                    .reset(),
+                                icon: const Icon(
+                                  Icons.refresh_rounded,
+                                  size: 14,
+                                  color: Color(0xFF0F766E),
+                                ),
+                                label: const Text(
+                                  'Xem tất cả',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF0F766E),
+                                  ),
+                                ),
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
                           ],
                         ),
                       ),
 
-                      // Danh sách thẻ chuyên viên kèm giá chi tiết
+                      // Danh sách thẻ chuyên viên
                       ListView.separated(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: candidates.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
                         itemBuilder: (context, index) {
                           final candidate = candidates[index];
                           final isSelected =
@@ -324,8 +300,8 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 76,
-              height: 76,
+              width: 72,
+              height: 72,
               decoration: BoxDecoration(
                 color: const Color(0xFFEFF6F5),
                 shape: BoxShape.circle,
@@ -335,11 +311,11 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
               ),
               child: const Icon(
                 Icons.person_search_rounded,
-                size: 38,
+                size: 36,
                 color: Color(0xFF0F766E),
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
             Text(
               hasActiveFilters
                   ? 'Không có chuyên viên khớp bộ lọc'
@@ -364,7 +340,7 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
                 height: 1.45,
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             if (hasActiveFilters)
               ElevatedButton.icon(
                 onPressed: () =>
@@ -412,7 +388,6 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
     BookingDraftEntity draft,
     BookingProviderCandidateEntity candidate,
   ) {
-    // Lưu chuyên viên đã chọn vào draft provider
     ref
         .read(bookingDraftProvider.notifier)
         .selectProvider(
@@ -424,7 +399,6 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
           providerDistanceKm: candidate.distanceKm,
         );
 
-    // Chuyển sang Màn hình Step 3: Báo giá & Xác nhận đơn
     context.push('/booking/confirm');
   }
 
@@ -439,37 +413,47 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
 
     final isAsap = draft.bookingType == BookingType.asap;
     final timeText = isAsap
-        ? '⚡ Phục vụ làm ngay'
-        : '📅 ${draft.scheduledAt != null ? DateFormat('HH:mm - dd/MM/yyyy').format(draft.scheduledAt!) : 'Hẹn trước'}';
+        ? 'Phục vụ ngay'
+        : (draft.scheduledAt != null
+            ? DateFormat('HH:mm - dd/MM/yyyy').format(draft.scheduledAt!)
+            : 'Hẹn trước');
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 6, 16, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      margin: const EdgeInsets.fromLTRB(14, 8, 14, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.02),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 38,
+            height: 38,
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: const Color(0xFFEFF6F5),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
-              Icons.content_cut_rounded,
-              color: Color(0xFF0F766E),
-              size: 18,
+            child: Center(
+              child: LambeIconWidget(
+                iconStr: draft.service.iconUrl?.isNotEmpty == true
+                    ? draft.service.iconUrl
+                    : draft.service.category.code,
+                size: 20,
+                imageSize: 38,
+                imageFit: BoxFit.cover,
+                color: const Color(0xFF0F766E),
+                fallbackIcon: Icons.auto_awesome_rounded,
+              ),
             ),
           ),
           const SizedBox(width: 10),
@@ -482,7 +466,7 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
                   style: const TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF0F172A),
+                    color: Color(0xFF0B1C30),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -490,11 +474,19 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
                 const SizedBox(height: 2),
                 Row(
                   children: [
+                    Icon(
+                      isAsap ? Icons.bolt_rounded : Icons.access_time_rounded,
+                      size: 13,
+                      color: isAsap
+                          ? const Color(0xFFD97706)
+                          : const Color(0xFF0F766E),
+                    ),
+                    const SizedBox(width: 3),
                     Flexible(
                       child: Text(
                         timeText,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w600,
                           color: isAsap
                               ? const Color(0xFFD97706)
@@ -506,13 +498,19 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
                     ),
                     const Text(
                       ' • ',
-                      style: TextStyle(color: Color(0xFFCBD5E1)),
+                      style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11),
                     ),
-                    Flexible(
+                    const Icon(
+                      Icons.location_on_outlined,
+                      size: 12,
+                      color: Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 2),
+                    Expanded(
                       child: Text(
                         address,
                         style: const TextStyle(
-                          fontSize: 11,
+                          fontSize: 11.5,
                           color: Color(0xFF64748B),
                         ),
                         maxLines: 1,
@@ -530,18 +528,30 @@ class _SelectProviderScreenState extends ConsumerState<SelectProviderScreen> {
               onTap: () => context.pop(),
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
-                child: const Text(
-                  'Đổi',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF475569),
-                  ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Đổi',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0F766E),
+                      ),
+                    ),
+                    SizedBox(width: 2),
+                    Icon(
+                      Icons.edit_outlined,
+                      size: 12,
+                      color: Color(0xFF0F766E),
+                    ),
+                  ],
                 ),
               ),
             ),

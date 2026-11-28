@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile/core/network/network_exceptions.dart';
 import 'package:mobile/features/provider/location/di/provider_location_providers.dart';
+import 'package:mobile/features/shared/auth/di/auth_providers.dart';
 
 import '../domain/entities/provider_dashboard_entity.dart';
 import '../di/provider_workspace_providers.dart';
@@ -23,6 +26,12 @@ class ProviderDashboardNotifier extends AsyncNotifier<ProviderDashboardEntity> {
       _disposed = true;
       cancel.cancel();
     });
+    final userId = ref.watch(
+      authNotifierProvider.select((auth) => auth.valueOrNull?.id),
+    );
+    if (userId == null && ref.read(authNotifierProvider) is AsyncData) {
+      return const ProviderDashboardEntity();
+    }
     final repository = ref.watch(providerDashboardRepositoryProvider);
     final locations = ref.watch(providerLocationCoordinatorProvider.notifier);
     ref.listen(
@@ -71,20 +80,25 @@ class ProviderDashboardNotifier extends AsyncNotifier<ProviderDashboardEntity> {
           sequence: position.timestamp.millisecondsSinceEpoch,
         ), cancelToken: token);
         if (!_current(generation)) return null;
-        await locations.confirmedOnline(true, seed: position);
-      } else {
-        await repository.goOffline(cancelToken: token);
-        if (!_current(generation)) return null;
-        await locations.confirmedOnline(false);
-      }
-      if (_current(generation)) {
         state = AsyncData(
           (state.valueOrNull ?? previous).copyWith(
-            isOnline: online,
+            isOnline: true,
             availabilityVerified: true,
             isUpdating: false,
           ),
         );
+        await locations.confirmedOnline(true, seed: position);
+      } else {
+        await repository.goOffline(cancelToken: token);
+        if (!_current(generation)) return null;
+        state = AsyncData(
+          (state.valueOrNull ?? previous).copyWith(
+            isOnline: false,
+            availabilityVerified: true,
+            isUpdating: false,
+          ),
+        );
+        await locations.confirmedOnline(false);
       }
       return null;
     } catch (error) {
@@ -135,11 +149,21 @@ class ProviderDashboardNotifier extends AsyncNotifier<ProviderDashboardEntity> {
 
   String _message(Object error) {
     if (error is StateError) return error.message.toString();
-    if (error is DioException && error.response?.data is Map) {
-      final data = error.response!.data as Map;
-      final message = data['message'];
-      if (message is String) return message;
-      if (message is List) return message.join('\n');
+    if (error is TimeoutException) {
+      return 'Quá thời gian chờ GPS hoặc kết nối. Vui lòng thử lại.';
+    }
+    if (error is PlatformException && error.message?.isNotEmpty == true) {
+      return error.message!;
+    }
+    if (error is FormatException && error.message.isNotEmpty) {
+      return error.message;
+    }
+    if (error is DioException) {
+      return ExceptionHandler.extractMessage(
+        error,
+        fallback:
+            'Chưa xác nhận được thao tác. Kiểm tra kết nối và tải lại trạng thái.',
+      );
     }
     return 'Chưa xác nhận được thao tác. Kiểm tra kết nối và tải lại trạng thái.';
   }

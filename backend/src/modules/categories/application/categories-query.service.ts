@@ -31,7 +31,7 @@ export class CategoriesQueryService {
       ];
     }
 
-    const [categories, total] = await this.prisma.$transaction([
+    const [categories, total] = await Promise.all([
       this.prisma.serviceCategory.findMany({
         where,
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],

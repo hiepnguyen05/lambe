@@ -4,8 +4,13 @@ import '../../../domain/entities/topup_response_entity.dart';
 
 class SepayStatusHeader extends StatelessWidget {
   final TopUpResponseEntity topUp;
+  final String pendingTitle;
 
-  const SepayStatusHeader({super.key, required this.topUp});
+  const SepayStatusHeader({
+    super.key,
+    required this.topUp,
+    this.pendingTitle = 'Đang chờ chuyển khoản...',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -116,7 +121,7 @@ class SepayStatusHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Đang chờ chuyển khoản...',
+                  pendingTitle,
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: colorScheme.primary,

@@ -8,6 +8,7 @@ import '../providers/notifications_providers.dart';
 
 import 'package:mobile/features/shared/auth/di/auth_providers.dart';
 import 'package:mobile/core/error/app_failure.dart';
+import 'package:mobile/core/widgets/app_dialog.dart';
 
 class NotificationCard extends ConsumerWidget {
   final AppNotificationEntity notification;
@@ -49,14 +50,11 @@ class NotificationCard extends ConsumerWidget {
       if (destination != null) context.push(destination);
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              error is AppFailure
-                  ? error.message
-                  : 'Chưa mở được thông báo. Vui lòng thử lại.',
-            ),
-          ),
+        await AppDialog.error(
+          context,
+          message: error is AppFailure
+              ? error.message
+              : 'Chưa mở được thông báo. Vui lòng thử lại.',
         );
       }
     }

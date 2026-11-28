@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:mobile/core/theme/app_colors.dart';
 
 class ProviderOrderDestinationCard extends StatelessWidget {
   final Map<String, dynamic> order;
+  final VoidCallback? onNavigate;
 
-  const ProviderOrderDestinationCard({super.key, required this.order});
+  const ProviderOrderDestinationCard({
+    super.key,
+    required this.order,
+    this.onNavigate,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +74,30 @@ class ProviderOrderDestinationCard extends StatelessWidget {
                 fontSize: 12.5,
                 color: Color(0xFF64748B),
                 fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+
+          if (onNavigate != null) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onNavigate,
+                icon: const Icon(Icons.directions_rounded, size: 18),
+                label: const Text(
+                  'Chỉ đường Google Maps',
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: Color(0xFF99F6E4)),
+                  backgroundColor: const Color(0xFFF0FDFA),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
               ),
             ),
           ],

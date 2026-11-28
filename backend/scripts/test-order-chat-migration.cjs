@@ -1,20 +1,12 @@
 // Rehearse room separation without touching application data or copying private messages.
-const { spawnSync } = require('node:child_process');
-const { readFileSync } = require('node:fs');
-const { join } = require('node:path');
-const { randomUUID } = require('node:crypto');
-const database = new URL(
-  process.env.TEST_DATABASE_URL || 'postgresql://localhost/',
-).pathname.slice(1);
-if (!/^lambe_booking_test_[a-z0-9_]+$/.test(database))
-  throw new Error('An isolated lambe_booking_test_* database is required.');
-const schema = `chat_rehearsal_${randomUUID().replaceAll('-', '')}`;
-const migration = readFileSync(
-  join(
-    __dirname,
-    '../prisma/migrations/20261029100000_order_member_chat/migration.sql',
-  ),
-  'utf8',
+const {
+  readMigration,
+  runRehearsal,
+  temporarySchema,
+} = require('./migration-rehearsal.cjs');
+const schema = temporarySchema('chat_rehearsal');
+const migration = readMigration(
+  '../prisma/migrations/20261029100000_order_member_chat/migration.sql',
 );
 const sql = `
 CREATE SCHEMA "${schema}";
@@ -64,27 +56,7 @@ BEGIN
 END $verify$;
 DROP SCHEMA "${schema}" CASCADE;
 `;
-const result = spawnSync(
-  'docker',
-  [
-    'exec',
-    '-i',
-    'lambe-postgres',
-    'psql',
-    '-U',
-    'postgres',
-    '-d',
-    database,
-    '-v',
-    'ON_ERROR_STOP=1',
-  ],
-  { input: sql, encoding: 'utf8' },
-);
-if (result.error) throw result.error;
-if (result.status !== 0) {
-  process.stderr.write(result.stderr || result.stdout);
-  process.exit(result.status || 1);
-}
-console.log(
+runRehearsal(
+  sql,
   'PASS: consultation preserved, separate order rooms, exact worker grants/audit, legacy links retained, immutable context and wrong-order link rejection.',
 );

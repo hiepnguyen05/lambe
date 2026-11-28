@@ -1,7 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:mobile/core/network/dio_client.dart';
+import 'package:mobile/core/storage/secure_storage_service.dart';
+import 'package:mobile/features/shared/auth/di/auth_providers.dart';
 
 import '../application/partner_notifier.dart';
 import '../data/datasources/dio_partner_remote_datasource.dart';
@@ -28,8 +29,9 @@ final partnerNotifierProvider =
       PartnerNotifier,
       AsyncValue<ProviderApplicationEntity?>
     >((ref) {
+      ref.watch(authNotifierProvider.select((s) => s.valueOrNull?.id));
       return PartnerNotifier(
         ref.watch(partnerRepositoryProvider),
-        const SecurePartnerDraftRepository(FlutterSecureStorage()),
+        SecurePartnerDraftRepository(ref.watch(flutterSecureStorageProvider)),
       );
     });

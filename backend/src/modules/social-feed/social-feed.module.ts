@@ -19,7 +19,6 @@ import { OrganizationFeedController } from './controllers/organization-feed.cont
 import { FeedMediaCleanupService } from './application/feed-media-cleanup.service';
 import { CacheModule } from '../../infrastructure/cache/cache.module';
 import { FeedCacheService } from './application/feed-cache.service';
-import { FeedTimelineService } from './application/feed-timeline.service';
 import { FeedCacheWorkerService } from './application/feed-cache-worker.service';
 import { FeedCacheOperationsController } from './controllers/feed-cache-operations.controller';
 import { FeedCacheAlertsService } from './application/feed-cache-alerts.service';
@@ -59,7 +58,6 @@ import { FeedOperationsService } from './application/feed-operations.service';
     FeedQueryService,
     FeedLiveReadService,
     FeedCacheService,
-    FeedTimelineService,
     FeedCacheWorkerService,
     FeedCacheAlertsService,
     FeedRecommendationService,

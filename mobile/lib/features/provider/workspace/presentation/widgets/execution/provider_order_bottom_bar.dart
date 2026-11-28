@@ -1,29 +1,47 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/core/widgets/order_countdown.dart';
 
 class ProviderOrderBottomBar extends StatelessWidget {
   final String status;
+  final String bookingType;
+  final DateTime? departureAvailableAt;
+  final DateTime? scheduledAt;
   final bool hasBefore;
+  final bool hasAfter;
   final String? cancellationStatus;
   final bool isActionLoading;
+  final bool canMarkArrived;
+  final int? distanceMetersToCustomer;
   final VoidCallback onReject;
   final VoidCallback onAccept;
   final VoidCallback onStartTravel;
+  final VoidCallback? onCancelOrder;
   final VoidCallback onMarkArrived;
   final VoidCallback onStartOrder;
+  final VoidCallback? onFinishService;
 
   const ProviderOrderBottomBar({
     super.key,
     required this.status,
+    this.bookingType = 'ASAP',
+    this.departureAvailableAt,
+    this.scheduledAt,
     required this.hasBefore,
+    this.hasAfter = false,
     required this.cancellationStatus,
     required this.isActionLoading,
+    this.canMarkArrived = true,
+    this.distanceMetersToCustomer,
     required this.onReject,
     required this.onAccept,
     required this.onStartTravel,
+    this.onCancelOrder,
     required this.onMarkArrived,
     required this.onStartOrder,
+    this.onFinishService,
   });
 
   @override
@@ -158,109 +176,106 @@ class ProviderOrderBottomBar extends StatelessWidget {
     }
 
     if (status == 'ACCEPTED') {
-      return Container(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          12,
-          16,
-          MediaQuery.of(context).padding.bottom + 12,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x0A000000),
-              blurRadius: 10,
-              offset: Offset(0, -4),
+      Widget departure(bool waiting, {bool expired = false}) => _buildBar(
+        context,
+        hint: expired
+            ? 'Thống nhất giờ hẹn mới với khách trước khi khởi hành.'
+            : waiting
+            ? departureAvailableAt == null || scheduledAt == null
+                  ? 'Tải lại đơn để kiểm tra thời điểm được khởi hành.'
+                  : 'Có thể khởi hành từ ${DateFormat('HH:mm · dd/MM').format(departureAvailableAt!.toLocal())}'
+            : null,
+        primary: ElevatedButton.icon(
+          onPressed: isActionLoading || waiting || expired
+              ? null
+              : onStartTravel,
+          icon: isActionLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.two_wheeler_rounded, size: 22),
+          label: Text(
+            isActionLoading
+                ? 'Đang cập nhật...'
+                : expired
+                ? 'Lịch hẹn đã quá giờ'
+                : waiting
+                ? 'Chưa đến giờ khởi hành'
+                : 'Bắt đầu di chuyển',
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0,
             ),
-          ],
-        ),
-        child: SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton.icon(
-            onPressed: isActionLoading ? null : onStartTravel,
-            icon: isActionLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.two_wheeler_rounded, size: 22),
-            label: Text(
-              isActionLoading ? 'Đang cập nhật...' : 'Bắt đầu di chuyển',
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0,
-              ),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryContainer,
-              foregroundColor: Colors.white,
-              elevation: 3,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryContainer,
+            foregroundColor: Colors.white,
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
         ),
       );
+      if (bookingType == 'SCHEDULED' &&
+          departureAvailableAt != null &&
+          scheduledAt != null) {
+        return OrderCountdown(
+          deadline: scheduledAt!,
+          builder: (_, remaining) => departure(
+            DateTime.now().isBefore(departureAvailableAt!),
+            expired: remaining == Duration.zero,
+          ),
+        );
+      }
+      return departure(bookingType == 'SCHEDULED');
     }
 
     if (status == 'EN_ROUTE') {
-      return Container(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          12,
-          16,
-          MediaQuery.of(context).padding.bottom + 12,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x0A000000),
-              blurRadius: 10,
-              offset: Offset(0, -4),
+      final distanceLabel = distanceMetersToCustomer == null
+          ? 'Đang kiểm tra vị trí của bạn...'
+          : distanceMetersToCustomer! >= 1000
+          ? 'Cách khách ${(distanceMetersToCustomer! / 1000).toStringAsFixed(1)} km · cần đến trong 300 m'
+          : 'Cách khách $distanceMetersToCustomer m · cần đến trong 300 m';
+      return _buildBar(
+        context,
+        hint: canMarkArrived ? null : distanceLabel,
+        primary: ElevatedButton.icon(
+          onPressed: (isActionLoading || !canMarkArrived)
+              ? null
+              : onMarkArrived,
+          icon: isActionLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.check_circle_rounded, size: 22),
+          label: Text(
+            isActionLoading ? 'Đang xác nhận...' : 'Xác nhận đã đến nơi',
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0,
             ),
-          ],
-        ),
-        child: SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton.icon(
-            onPressed: isActionLoading ? null : onMarkArrived,
-            icon: isActionLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.check_circle_rounded, size: 22),
-            label: Text(
-              isActionLoading ? 'Đang xác nhận...' : 'Xác nhận đã đến nơi',
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0,
-              ),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: const Color(0xFFCBD5E1),
+            disabledForegroundColor: const Color(0xFF64748B),
+            elevation: canMarkArrived ? 2 : 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
         ),
@@ -268,58 +283,85 @@ class ProviderOrderBottomBar extends StatelessWidget {
     }
 
     if (status == 'ARRIVED') {
-      return Container(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          12,
-          16,
-          MediaQuery.of(context).padding.bottom + 12,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x0A000000),
-              blurRadius: 10,
-              offset: Offset(0, -4),
+      return _buildBar(
+        context,
+        primary: ElevatedButton.icon(
+          onPressed: isActionLoading ? null : onStartOrder,
+          icon: isActionLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Icon(
+                  hasBefore
+                      ? Icons.play_arrow_rounded
+                      : Icons.camera_alt_rounded,
+                  size: 22,
+                ),
+          label: Text(
+            isActionLoading
+                ? (hasBefore ? 'Đang bắt đầu...' : 'Đang tải ảnh...')
+                : (hasBefore ? 'Bắt đầu làm việc' : 'Chụp ảnh trước khi làm'),
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0,
             ),
-          ],
-        ),
-        child: SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton.icon(
-            onPressed: isActionLoading ? null : onStartOrder,
-            icon: isActionLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.play_arrow_rounded, size: 22),
-            label: Text(
-              isActionLoading
-                  ? 'Đang bắt đầu...'
-                  : (hasBefore
-                        ? 'Bắt đầu dịch vụ'
-                        : 'Chụp ảnh trước và bắt đầu'),
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0,
-              ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              elevation: 3,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+          ),
+        ),
+      );
+    }
+
+    if (status == 'IN_PROGRESS' && onFinishService != null) {
+      return _buildBar(
+        context,
+        primary: ElevatedButton.icon(
+          onPressed: isActionLoading ? null : onFinishService,
+          icon: isActionLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Icon(
+                  hasAfter
+                      ? Icons.receipt_long_rounded
+                      : Icons.camera_alt_rounded,
+                  size: 22,
+                ),
+          label: Text(
+            isActionLoading
+                ? (hasAfter ? 'Đang xử lý...' : 'Đang tải ảnh...')
+                : (hasAfter
+                      ? 'Thanh toán & Hoàn tất'
+                      : 'Hoàn tất & Chụp ảnh kết quả'),
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0,
+            ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
         ),
@@ -327,5 +369,69 @@ class ProviderOrderBottomBar extends StatelessWidget {
     }
 
     return const SizedBox.shrink();
+  }
+
+  Widget _buildBar(
+    BuildContext context, {
+    required Widget primary,
+    String? hint,
+  }) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        10,
+        16,
+        MediaQuery.of(context).padding.bottom + 12,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 10,
+            offset: Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (hint != null) ...[
+            Text(
+              hint,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFD97706),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+          ],
+          SizedBox(width: double.infinity, height: 52, child: primary),
+          if (onCancelOrder != null) ...[
+            const SizedBox(height: 4),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: isActionLoading ? null : onCancelOrder,
+                icon: const Icon(Icons.cancel_outlined, size: 18),
+                label: Text(
+                  status == 'ACCEPTED'
+                      ? bookingType == 'SCHEDULED'
+                            ? 'Hủy lịch hẹn'
+                            : 'Hủy đơn'
+                      : 'Yêu cầu hủy đơn',
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }

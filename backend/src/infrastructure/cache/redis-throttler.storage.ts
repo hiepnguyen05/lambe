@@ -4,7 +4,7 @@ import {
   type ThrottlerStorage,
 } from '@nestjs/throttler';
 import { RedisCacheService, type RateLimitRecord } from './redis-cache.service';
-import { allowsFeedReadFallback } from '../../common/http/request-context';
+import { allowsPublicReadFallback } from '../../common/http/request-context';
 
 @Injectable()
 export class RedisThrottlerStorage implements ThrottlerStorage {
@@ -31,7 +31,7 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
       );
     }
     if (status !== 'up') {
-      if (allowsFeedReadFallback())
+      if (allowsPublicReadFallback())
         return this.fallback.increment(
           key,
           ttl,
@@ -43,18 +43,20 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
         'Dịch vụ bảo vệ giới hạn truy cập đang tạm thời không khả dụng.',
       );
     }
-    const feedRead = allowsFeedReadFallback();
+    const publicRead = allowsPublicReadFallback();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
+      // Keep the shared socket's recovery deadline independent of the 100 ms
+      // public-read fallback. A slow read must not disconnect other routes.
       const operation = this.redis.incrementRateLimit(
         key,
         ttl,
         limit,
         blockDuration,
         throttlerName,
-        feedRead ? 100 : undefined,
+        undefined,
       );
-      return feedRead
+      return publicRead
         ? await Promise.race([
             operation,
             new Promise<never>((_resolve, reject) => {
@@ -66,7 +68,7 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
           ])
         : await operation;
     } catch (error) {
-      if (feedRead)
+      if (publicRead)
         return this.fallback.increment(
           key,
           ttl,

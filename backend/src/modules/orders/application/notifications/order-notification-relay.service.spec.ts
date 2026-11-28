@@ -54,8 +54,7 @@ describe('OrderNotificationRelayService observability', () => {
       expect(currentRequestId()).toMatch(/^[0-9a-f-]{36}$/);
       return [{ id: 'private-notice', userId: 'private-user' }];
     });
-    await jest.advanceTimersByTimeAsync(1000);
-    service.onModuleDestroy();
+    await service.tick();
     expect(metrics.snapshot().workers['order-notice-relay']).toMatchObject({
       runs: 2,
       errors: 0,
@@ -81,7 +80,6 @@ describe('OrderNotificationRelayService observability', () => {
     );
     service.onModuleInit();
     await jest.advanceTimersByTimeAsync(0);
-    service.onModuleDestroy();
     expect(prisma.orderNotification.updateMany).not.toHaveBeenCalled();
     expect(metrics.snapshot().workers['order-notice-relay']).toMatchObject({
       runs: 1,
@@ -111,8 +109,7 @@ describe('OrderNotificationRelayService observability', () => {
     prisma.orderNotification.updateMany.mockRejectedValue(
       new Error('private-db-error'),
     );
-    await jest.advanceTimersByTimeAsync(1000);
-    service.onModuleDestroy();
+    await service.tick();
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({ counts: { published: 0, errors: 1 } }),
     );

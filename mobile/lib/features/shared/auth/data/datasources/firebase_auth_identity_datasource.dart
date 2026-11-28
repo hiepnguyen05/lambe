@@ -74,8 +74,16 @@ class FirebaseAuthIdentityDataSource implements AuthIdentityDataSource {
       );
       await _firebaseAuth.signInWithCredential(credential);
       return await _requiredIdToken();
-    } on GoogleSignInException {
-      return null;
+    } on GoogleSignInException catch (error) {
+      if (error.code == GoogleSignInExceptionCode.canceled) {
+        return null;
+      }
+      final detail = error.description?.trim();
+      throw AuthenticationFailure(
+        detail != null && detail.isNotEmpty
+            ? detail
+            : 'Không thể đăng nhập bằng Google (${error.code.name}).',
+      );
     }
   }
 
